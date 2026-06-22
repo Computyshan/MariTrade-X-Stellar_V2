@@ -1,0 +1,6 @@
+{
+  "name": "MariTrade V2",
+  "description": "A digital shipping tracker platform powered by Stellar blockchain escrow for Filipino SME importers and logistics chains.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
