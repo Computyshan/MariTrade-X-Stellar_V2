@@ -22,9 +22,13 @@ import {
   ExternalLink,
   CheckCircle2,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  FolderLock,
+  ExternalLink as LinkOut,
+  Eye
 } from 'lucide-react';
 import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument } from '@/types';
+import { canAccessBOCDocuments } from '@/lib/permissions/documents';
 
 type PageParams = {
   id: string;
@@ -50,11 +54,6 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   } | null>(null);
 
   const [errorText, setErrorText] = useState('');
-  
-  // Document upload form
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadFileName, setUploadFileName] = useState('');
-  const [uploadFileUrl, setUploadFileUrl] = useState('');
 
   // Escrow release form
   const [releaseOpen, setReleaseOpen] = useState(false);
@@ -63,6 +62,9 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   // Stellar Simulation Status
   const [stellarWorking, setStellarWorking] = useState(false);
   const [stellarHash, setStellarHash] = useState('');
+
+  // BOC Vault auth gate
+  const [bocAuthOpen, setBocAuthOpen] = useState(false);
 
   const fetchDetails = async () => {
     try {
@@ -95,12 +97,11 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     if (!data) return;
     try {
       setStellarWorking(true);
-      // Simulate multi-sig Stellar trust fund loading
       setTimeout(async () => {
         const res = await fetch(`/api/shipments/${data.shipment.id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'EXPORTER_ACCEPT' }) // Confirms it
+          body: JSON.stringify({ action: 'EXPORTER_ACCEPT' })
         });
         await res.json();
         setStellarHash('tx_lock_active_' + Math.random().toString(36).substring(2, 9));
@@ -109,33 +110,6 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       }, 1500);
     } catch {
       setStellarWorking(false);
-    }
-  };
-
-  const handleDocumentUploadSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!data || !uploadFileName || !uploadFileUrl) return;
-
-    try {
-      const res = await fetch(`/api/shipments/${data.shipment.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'UPLOAD_DOCUMENT',
-          fileName: uploadFileName,
-          fileUrl: uploadFileUrl,
-          uploadedById: currentUser.id
-        })
-      });
-      const resJson = await res.json();
-      if (resJson.success) {
-        setUploadOpen(false);
-        setUploadFileName('');
-        setUploadFileUrl('');
-        fetchDetails();
-      }
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -182,6 +156,16 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // Handle "Upload BOC Document" — check authorization first, then navigate
+  const handleUploadBOCClick = () => {
+    const hasAccess = canAccessBOCDocuments(currentUser.jobRole);
+    if (!hasAccess) {
+      setBocAuthOpen(true);
+      return;
+    }
+    router.push(`/documents?folder=${shipmentId}`);
   };
 
   if (loading) {
@@ -439,7 +423,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
       </div>
 
-      {/* Bureau of Customs Shipments Document Grid */}
+      {/* BOC Vault Documents Centre — Preview */}
       <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-sand-100 pb-3">
           <div>
@@ -447,109 +431,127 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
               <FileText className="w-5 h-5 text-coral-400" />
               <span>BOC Vault Documents Centre</span>
             </h3>
-            <p className="text-[10px] text-gray-400 mt-0.5">Encrypted compliance files. Only authentic Trade Parties & Customs Brokers hold decryption keys.</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              Encrypted compliance files attached to this shipment. Full access and uploads are managed in the BOC Document Vault.
+            </p>
           </div>
 
+          {/* Upload BOC Document — navigates to the vault folder with auth check */}
           <button
-            onClick={() => setUploadOpen(true)}
-            className="bg-maritime-50 hover:bg-maritime-900 border border-maritime-200 text-maritime-900 hover:text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+            onClick={handleUploadBOCClick}
+            className="bg-maritime-50 hover:bg-maritime-900 border border-maritime-200 text-maritime-900 hover:text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
           >
-            <Upload className="w-4 h-4" />
+            <FolderLock className="w-4 h-4" />
             <span>Upload BOC Document</span>
+            <ExternalLink className="w-3 h-3 opacity-60" />
           </button>
         </div>
 
+        {/* Document Preview Grid — read-only */}
         {documents.length === 0 ? (
           <div className="text-center py-12 text-gray-400 text-xs font-mono">
             NO ENCRYPTED CARGO FILES IN THE BOC HUB.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {documents.map((doc) => (
-              <div key={doc.id} className="border border-sand-200 p-4 rounded-xl space-y-4 bg-sand-50/50 flex flex-col justify-between">
-                <div className="space-y-1 text-xs">
-                  <FileText className="w-8 h-8 text-maritime-400 block mb-1" />
-                  <strong className="font-bold text-maritime-900 block truncate" title={doc.fileName}>{doc.fileName}</strong>
-                  <span className="text-[10px] text-gray-400 block font-mono">UPLOADED: {new Date(doc.createdAt).toLocaleDateString()}</span>
-                  <div className="flex items-center gap-2 pt-1 text-[10px]">
-                    <span className="bg-sand-200 text-gray-600 px-1.5 rounded font-mono">v{doc.version}</span>
-                    {doc.version > 1 && (
-                      <span className="bg-amber-100 text-amber-700 font-bold px-1.5 rounded uppercase text-[8px]">Amended</span>
-                    )}
+            {documents.map((doc) => {
+              const ext = doc.fileName.split('.').pop()?.toUpperCase() ?? 'FILE';
+              const extColorMap: Record<string, string> = {
+                PDF: 'bg-red-100 text-red-600',
+                XLSX: 'bg-green-100 text-green-700',
+                XLS: 'bg-green-100 text-green-700',
+                DOCX: 'bg-blue-100 text-blue-700',
+              };
+              const extClass = extColorMap[ext] ?? 'bg-gray-100 text-gray-500';
+
+              return (
+                <div
+                  key={doc.id}
+                  className="border border-sand-200 p-4 rounded-xl space-y-3 bg-sand-50/50 flex flex-col justify-between"
+                >
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <FileText className="w-7 h-7 text-maritime-300 shrink-0 mt-0.5" />
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${extClass}`}>{ext}</span>
+                    </div>
+                    <strong className="font-bold text-maritime-900 block truncate text-[11px]" title={doc.fileName}>
+                      {doc.fileName}
+                    </strong>
+                    <span className="text-[10px] text-gray-400 block font-mono">
+                      {new Date(doc.createdAt).toLocaleDateString()}
+                    </span>
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className="bg-sand-200 text-gray-600 px-1.5 rounded font-mono">v{doc.version}</span>
+                      {doc.version > 1 && (
+                        <span className="bg-amber-100 text-amber-700 font-bold px-1.5 rounded uppercase text-[8px]">Amended</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Preview-only footer — no download, directs to vault */}
+                  <div className="pt-2 border-t border-sand-200">
+                    <button
+                      onClick={handleUploadBOCClick}
+                      className="w-full flex items-center justify-center gap-1 text-[10px] font-bold text-maritime-400 hover:text-maritime-900 transition-colors"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>View in Vault</span>
+                    </button>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
 
-                <div className="pt-2 border-t border-sand-200 flex justify-between items-center text-[10px] font-bold">
-                  <span className="text-gray-400">ID: {doc.uploadedById.substring(0,6)}</span>
-                  <a
-                    href={doc.fileUrl}
-                    download
-                    className="text-maritime-400 hover:text-maritime-900 flex items-center gap-0.5 cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download</span>
-                  </a>
-                </div>
-              </div>
-            ))}
+        {/* Footer hint */}
+        {documents.length > 0 && (
+          <div className="flex items-center justify-between pt-1 border-t border-sand-100">
+            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              Downloads and full document access require BOC Vault authorization.
+            </p>
+            <button
+              onClick={handleUploadBOCClick}
+              className="text-[10px] text-maritime-400 hover:text-maritime-900 font-bold flex items-center gap-1 transition-colors"
+            >
+              <FolderLock className="w-3 h-3" />
+              Open Vault Folder
+            </button>
           </div>
         )}
       </div>
 
-      {/* POPUP DOCUMENT UPLOAD MODAL */}
-      {uploadOpen && (
+      {/* BOC AUTHORIZATION GATE MODAL */}
+      {bocAuthOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-sand-200 rounded-2xl max-w-sm w-full p-6 space-y-4">
-            <h3 className="font-extrabold text-sm text-maritime-900 uppercase tracking-tight">Upload Entry Declaration</h3>
-            
-            <form onSubmit={handleDocumentUploadSubmit} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Document File Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="BOC_Single_Admin_Declaration.pdf"
-                  className="w-full border border-sand-200 rounded p-2 text-xs outline-none"
-                  value={uploadFileName}
-                  onChange={(e) => setUploadFileName(e.target.value)}
-                />
+          <div className="bg-white border border-sand-200 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
+                <Lock className="w-5 h-5 text-red-500" />
               </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-maritime-900">BOC Vault Access Denied</h3>
+                <p className="text-[10px] text-gray-400 font-mono uppercase">{currentUser.jobRole}</p>
+              </div>
+            </div>
 
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">File Path / URL</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="https://mock_doc_bucket_maritrade.lh/sad_signed.pdf"
-                  className="w-full border border-sand-200 rounded p-2 text-xs outline-none font-mono"
-                  value={uploadFileUrl}
-                  onChange={(e) => setUploadFileUrl(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setUploadFileUrl('https://picsum.photos/seed/dockyc/800/600')}
-                  className="text-[10px] text-ocean-600 underline"
-                >
-                  Generate Mock File URL
-                </button>
-              </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Your current role (<strong className="uppercase text-maritime-900">{currentUser.jobRole}</strong>) does not have clearance to access the Bureau of Customs Document Vault. Only Trade Party members and Customs Brokers may upload or view vault documents.
+            </p>
 
-              <div className="flex gap-2 justify-end pt-2 text-xs">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 border border-sand-200 rounded-lg text-gray-500 hover:text-gray-900"
-                  onClick={() => setUploadOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-maritime-400 hover:bg-maritime-900 text-white rounded-lg font-bold"
-                >
-                  Submit Document
-                </button>
-              </div>
-            </form>
+            <div className="text-[11px] bg-sand-50 border border-sand-100 rounded-lg p-3 text-gray-500 leading-relaxed">
+              💡 Switch to an <strong>Importer</strong>, <strong>Exporter</strong>, or <strong>Customs Broker</strong> profile via the toolbar to access the vault.
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={() => setBocAuthOpen(false)}
+                className="px-4 py-2 bg-maritime-400 hover:bg-maritime-900 text-white rounded-lg font-bold text-xs transition-all"
+              >
+                Understood
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -565,7 +567,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
             <form onSubmit={handleEscrowReleaseSubmit} className="space-y-4 text-xs">
               <div className="space-y-2">
-                <label className="block font-bold text-gray-700">Signed Handoff Receipt Receipt (URL)</label>
+                <label className="block font-bold text-gray-700">Signed Handoff Receipt (URL)</label>
                 <input
                   type="text"
                   required
