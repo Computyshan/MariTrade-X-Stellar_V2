@@ -1,40 +1,23 @@
 import { JobRole } from '../../types';
 
-export function canAccessBOCDocuments(jobRole: JobRole): boolean {
-  if (
-    jobRole === 'IMPORTER' ||
-    jobRole === 'EXPORTER' ||
-    jobRole === 'COMPANY_OWNER' ||
-    jobRole === 'TRADER' ||
-    jobRole === 'CUSTOMS_BROKER'
-  ) {
-    return true;
-  }
-  return false;
+/**
+ * All roles can access the BOC Document Vault.
+ * Access is secured at the folder level via vault password authorization.
+ */
+export function canAccessBOCDocuments(_jobRole: JobRole): boolean {
+  return true;
 }
 
-export function canDownloadDocuments(jobRole: JobRole): boolean {
-  if (
-    jobRole === 'IMPORTER' ||
-    jobRole === 'EXPORTER' ||
-    jobRole === 'COMPANY_OWNER' ||
-    jobRole === 'TRADER' ||
-    jobRole === 'CUSTOMS_BROKER'
-  ) {
-    return true;
-  }
-  return false;
+/**
+ * All roles can download documents once they have unlocked a vault folder.
+ */
+export function canDownloadDocuments(_jobRole: JobRole): boolean {
+  return true;
 }
 
-export function canUploadDocuments(jobRole: JobRole): boolean {
-  if (
-    jobRole === 'IMPORTER' ||
-    jobRole === 'EXPORTER' ||
-    jobRole === 'COMPANY_OWNER' ||
-    jobRole === 'TRADER' ||
-    jobRole === 'CUSTOMS_BROKER'
-  ) {
-    return true;
-  }
-  return false;
+/**
+ * All roles can upload documents to the vault.
+ */
+export function canUploadDocuments(_jobRole: JobRole): boolean {
+  return true;
 }
