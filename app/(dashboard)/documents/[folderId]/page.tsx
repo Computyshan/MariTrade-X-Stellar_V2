@@ -1,0 +1,499 @@
+'use client';
+
+import React, { use, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import DashboardLayout from '@/components/DashboardLayout';
+import { useUserSession } from '@/hooks/use-user-session';
+import {
+  FolderLock,
+  FolderOpen,
+  FileText,
+  Lock,
+  Unlock,
+  Download,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+  CheckCircle2,
+  Globe,
+  Clock,
+  Key,
+  ChevronLeft,
+  AlertCircle,
+} from 'lucide-react';
+import { ShipmentDocument, ShipmentScope, ShipmentStatus } from '@/types';
+import { canAccessBOCDocuments, canDownloadDocuments } from '@/lib/permissions/documents';
+import { motion } from 'motion/react';
+
+// ── MOCK VAULT DATA (mirrors documents/page.tsx) ────────────────────────────────
+
+interface VaultFolder {
+  id: string;
+  referenceCode: string;
+  description: string;
+  originCountry: string;
+  destinationPort: string;
+  scope: ShipmentScope;
+  status: ShipmentStatus;
+  vaultPassword: string;
+  documents: ShipmentDocument[];
+  createdAt: string;
+}
+
+const MOCK_VAULT_FOLDERS: VaultFolder[] = [
+  {
+    id: 'folder-001',
+    referenceCode: 'MT-2026-00001',
+    description: 'Industrial Steel Coils & Fabricated Parts — Q1 Batch',
+    originCountry: 'Japan',
+    destinationPort: 'Manila South Harbor',
+    scope: 'OVERSEAS',
+    status: 'CUSTOMS_CLEARANCE',
+    vaultPassword: 'TKY2026',
+    createdAt: '2026-01-15T08:00:00Z',
+    documents: [
+      { id: 'doc-001-a', shipmentId: 'folder-001', fileName: 'BOC_Customs_Entry_Declaration_Signed.pdf', fileUrl: 'https://picsum.photos/seed/doc1a/800/600', version: 2, isLatest: true, uploadedById: 'charles-broker-id', createdAt: new Date(Date.now() - 36 * 3600000).toISOString() },
+      { id: 'doc-001-b', shipmentId: 'folder-001', fileName: 'Cargo_Manifest_Packing_List_Osaka.xlsx', fileUrl: 'https://picsum.photos/seed/doc1b/800/600', version: 1, isLatest: true, uploadedById: 'dav4d-exporter-id', createdAt: new Date(Date.now() - 72 * 3600000).toISOString() },
+      { id: 'doc-001-c', shipmentId: 'folder-001', fileName: 'Bill_of_Lading_Pacific_Ocean_Lines.pdf', fileUrl: 'https://picsum.photos/seed/doc1c/800/600', version: 1, isLatest: true, uploadedById: 'von-captain-id', createdAt: new Date(Date.now() - 48 * 3600000).toISOString() },
+      { id: 'doc-001-d', shipmentId: 'folder-001', fileName: 'Duties_Taxes_Official_Receipt_BOC.pdf', fileUrl: 'https://picsum.photos/seed/doc1d/800/600', version: 1, isLatest: true, uploadedById: 'charles-broker-id', createdAt: new Date(Date.now() - 12 * 3600000).toISOString() },
+    ],
+  },
+  {
+    id: 'folder-002',
+    referenceCode: 'MT-2026-00002',
+    description: 'Automotive Parts & Engine Components — Subic Batch',
+    originCountry: 'South Korea',
+    destinationPort: 'Subic Bay Freeport',
+    scope: 'OVERSEAS',
+    status: 'AT_PORT',
+    vaultPassword: 'SEL2026',
+    createdAt: '2026-02-03T10:30:00Z',
+    documents: [
+      { id: 'doc-002-a', shipmentId: 'folder-002', fileName: 'Subic_Dry_Harbour_Gated_Release_Permit.pdf', fileUrl: 'https://picsum.photos/seed/doc2a/800/600', version: 1, isLatest: true, uploadedById: 'jed-port-id', createdAt: new Date(Date.now() - 12 * 3600000).toISOString() },
+      { id: 'doc-002-b', shipmentId: 'folder-002', fileName: 'Commercial_Invoice_Hyundai_Parts_USD.pdf', fileUrl: 'https://picsum.photos/seed/doc2b/800/600', version: 1, isLatest: true, uploadedById: 'shaun-importer-id', createdAt: new Date(Date.now() - 96 * 3600000).toISOString() },
+    ],
+  },
+  {
+    id: 'folder-003',
+    referenceCode: 'MT-2026-00003',
+    description: 'Fresh Produce — Nationwide Cold Chain (Davao-Cebu)',
+    originCountry: 'Philippines',
+    destinationPort: 'Cebu Baseport',
+    scope: 'NATIONWIDE',
+    status: 'IN_TRANSIT',
+    vaultPassword: 'DAV2026',
+    createdAt: '2026-02-20T14:00:00Z',
+    documents: [
+      { id: 'doc-003-a', shipmentId: 'folder-003', fileName: 'Phytosanitary_Certificate_DA_Davao.pdf', fileUrl: 'https://picsum.photos/seed/doc3a/800/600', version: 1, isLatest: true, uploadedById: 'shaun-importer-id', createdAt: new Date(Date.now() - 18 * 3600000).toISOString() },
+      { id: 'doc-003-b', shipmentId: 'folder-003', fileName: 'Trucking_Waybill_Manila_Heavy_Movers.pdf', fileUrl: 'https://picsum.photos/seed/doc3b/800/600', version: 1, isLatest: true, uploadedById: 'reginald-trucker-id', createdAt: new Date(Date.now() - 6 * 3600000).toISOString() },
+      { id: 'doc-003-c', shipmentId: 'folder-003', fileName: 'Delivery_Receipt_Cold_Chain_Manifest.xlsx', fileUrl: 'https://picsum.photos/seed/doc3c/800/600', version: 2, isLatest: true, uploadedById: 'quinn-warehouse-id', createdAt: new Date(Date.now() - 3 * 3600000).toISOString() },
+    ],
+  },
+];
+
+// ── STATUS CONFIG ───────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<ShipmentStatus, { label: string; className: string }> = {
+  PENDING_EXPORTER:  { label: 'Pending Exporter', className: 'bg-gray-100 text-gray-600' },
+  COUNTER_OFFER:     { label: 'Counter Offer',    className: 'bg-amber-100 text-amber-700' },
+  CONFIRMED:         { label: 'Confirmed',         className: 'bg-maritime-100 text-maritime-700' },
+  ESCROW_FUNDED:     { label: 'Escrow Funded',     className: 'bg-maritime-100 text-maritime-400' },
+  IN_TRANSIT:        { label: 'In Transit',         className: 'bg-ocean-100 text-ocean-600' },
+  AT_PORT:           { label: 'At Port',            className: 'bg-sky-100 text-sky-700' },
+  CUSTOMS_CLEARANCE: { label: 'Customs Clearance', className: 'bg-maritime-50 text-maritime-700' },
+  OUT_FOR_DELIVERY:  { label: 'Out for Delivery',  className: 'bg-amber-100 text-amber-700' },
+  DELIVERED:         { label: 'Delivered',          className: 'bg-green-100 text-green-700' },
+  DISPUTED:          { label: 'Disputed',           className: 'bg-coral-50 text-coral-400' },
+  CANCELLED:         { label: 'Cancelled',          className: 'bg-gray-100 text-gray-500' },
+};
+
+function timeAgo(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const h = Math.floor(diff / 3600000);
+  if (h < 1) return 'Just now';
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function fileExtBadge(fileName: string) {
+  const ext = fileName.split('.').pop()?.toUpperCase() ?? 'FILE';
+  const map: Record<string, string> = {
+    PDF:  'bg-red-100 text-red-600',
+    XLSX: 'bg-green-100 text-green-700',
+    XLS:  'bg-green-100 text-green-700',
+    DOCX: 'bg-blue-100 text-blue-700',
+    DOC:  'bg-blue-100 text-blue-700',
+  };
+  return { ext, className: map[ext] ?? 'bg-gray-100 text-gray-500' };
+}
+
+// ── PAGE ────────────────────────────────────────────────────────────────────────
+
+type PageParams = { folderId: string };
+
+export default function VaultFolderPage({ params }: { params: Promise<PageParams> }) {
+  const { folderId } = use(params);
+  const router = useRouter();
+  const { currentUser } = useUserSession();
+
+  const folder = MOCK_VAULT_FOLDERS.find((f) => f.id === folderId) ?? null;
+
+  const hasAccess  = canAccessBOCDocuments(currentUser.jobRole);
+  const canDownload = canDownloadDocuments(currentUser.jobRole);
+
+  // Auth state
+  const [unlocked, setUnlocked]           = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword]   = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [shakeForm, setShakeForm]         = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!unlocked) setTimeout(() => inputRef.current?.focus(), 80);
+  }, [unlocked]);
+
+  // ── NOT FOUND ──────────────────────────────────────────────────────────────────
+  if (!folder) {
+    return (
+      <DashboardLayout>
+        <div className="bg-white border border-sand-200 p-8 rounded-2xl text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-coral-400 mx-auto" />
+          <h2 className="text-lg font-bold text-maritime-900">Vault Folder Not Found</h2>
+          <p className="text-xs text-gray-500">
+            No BOC vault folder exists with ID:{' '}
+            <code className="font-mono bg-sand-100 px-1 rounded">{folderId}</code>
+          </p>
+          <button
+            onClick={() => router.push('/documents')}
+            className="bg-maritime-400 text-white text-xs font-bold px-4 py-2 rounded-lg"
+          >
+            Back to Document Vault
+          </button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ── NO ROLE ACCESS ─────────────────────────────────────────────────────────────
+  if (!hasAccess) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-4">
+          <button
+            onClick={() => router.push('/documents')}
+            className="flex items-center gap-1.5 text-xs text-maritime-400 hover:text-maritime-900 font-medium"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to BOC Document Vault
+          </button>
+
+          <div className="bg-red-50 border border-red-200 p-10 rounded-2xl text-center space-y-4">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+              <Lock className="w-8 h-8 text-red-500" />
+            </div>
+            <h3 className="font-extrabold text-base text-red-950">BOC Vault — Access Restricted</h3>
+            <p className="text-xs text-red-700 max-w-sm mx-auto leading-relaxed">
+              Your active profile (<strong className="uppercase">{currentUser.jobRole}</strong>) does not have
+              clearance to access the Bureau of Customs Document Vault. Only Trade Party members and Customs Brokers
+              are authorized.
+            </p>
+            <div className="text-[11px] bg-white border border-sand-200 rounded-lg p-3 max-w-sm mx-auto text-gray-500 font-medium">
+              💡 Switch to <strong>Charles Solomon (CUSTOMS_BROKER)</strong> or{' '}
+              <strong>Tyshaun Louis (IMPORTER)</strong> via the toolbar above to access the vault.
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const statusCfg = STATUS_CONFIG[folder.status];
+
+  function handlePasswordSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (passwordInput === folder!.vaultPassword) {
+      setUnlocked(true);
+      setPasswordError('');
+    } else {
+      const next = failedAttempts + 1;
+      setFailedAttempts(next);
+      setPasswordError(
+        `Incorrect vault password.${next >= 3 ? ` ${next} failed attempts recorded.` : ' Please try again.'}`
+      );
+      setShakeForm(true);
+      setTimeout(() => setShakeForm(false), 500);
+    }
+  }
+
+  // ── PASSWORD GATE ──────────────────────────────────────────────────────────────
+  if (!unlocked) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-4 max-w-lg mx-auto">
+          {/* Back */}
+          <button
+            onClick={() => router.push('/documents')}
+            className="flex items-center gap-1.5 text-xs text-maritime-400 hover:text-maritime-900 font-medium"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to BOC Document Vault
+          </button>
+
+          {/* Vault unlock card */}
+          <motion.div
+            animate={{ x: shakeForm ? [0, -8, 8, -6, 6, -3, 3, 0] : 0 }}
+            transition={shakeForm ? { duration: 0.4 } : {}}
+            className="bg-white border border-sand-200 rounded-2xl shadow-sm overflow-hidden"
+          >
+            {/* Header */}
+            <div className="bg-maritime-900 px-6 pt-6 pb-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-maritime-700 rounded-xl flex items-center justify-center">
+                  <FolderLock className="w-5 h-5 text-maritime-200" />
+                </div>
+                <div>
+                  <h1 className="font-black text-white text-base">Vault Authorization</h1>
+                  <p className="text-[10px] text-maritime-200 font-mono">{folder.referenceCode}</p>
+                </div>
+              </div>
+
+              {/* Folder summary */}
+              <div className="bg-maritime-800/60 rounded-xl p-3 space-y-1.5 text-xs">
+                <p className="text-white font-semibold">{folder.description}</p>
+                <div className="flex flex-wrap items-center gap-3 text-maritime-300 text-[11px]">
+                  <span className="flex items-center gap-1">
+                    <Globe className="w-3 h-3" />
+                    {folder.originCountry} → {folder.destinationPort}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    {folder.documents.length} document{folder.documents.length !== 1 ? 's' : ''}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${statusCfg.className}`}>
+                    {statusCfg.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handlePasswordSubmit} className="px-6 py-6 space-y-5">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 bg-maritime-50 border-2 border-maritime-100 rounded-full flex items-center justify-center mx-auto">
+                  <Key className="w-6 h-6 text-maritime-400" />
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed max-w-xs mx-auto">
+                  Enter the vault password to access documents in this shipment folder. Passwords are managed by the
+                  Trade Party.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-maritime-900 block">Vault Password</label>
+                <div className="relative">
+                  <input
+                    ref={inputRef}
+                    type={showPassword ? 'text' : 'password'}
+                    value={passwordInput}
+                    onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(''); }}
+                    placeholder="Enter folder password..."
+                    className={`w-full border rounded-xl px-4 py-3 pr-10 text-sm outline-none font-mono tracking-widest transition-colors ${
+                      passwordError
+                        ? 'border-coral-400 bg-coral-50 text-coral-700 placeholder:text-coral-300'
+                        : 'border-sand-200 bg-sand-50 focus:border-maritime-400 text-maritime-900'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {passwordError && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-coral-400 font-semibold">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {passwordError}
+                  </div>
+                )}
+
+                {/* Demo hint */}
+                <div className="flex items-center gap-1.5 text-[10px] text-gray-400 bg-sand-50 border border-sand-100 rounded-lg px-3 py-2 font-mono">
+                  <Key className="w-3 h-3 text-maritime-400" />
+                  Demo password: <strong className="text-ocean-600">{folder.vaultPassword}</strong>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => router.push('/documents')}
+                  className="flex-1 border border-sand-200 text-gray-600 font-bold py-2.5 rounded-xl text-sm hover:bg-sand-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!passwordInput.trim()}
+                  className="flex-1 bg-maritime-400 hover:bg-maritime-700 disabled:bg-maritime-100 disabled:text-maritime-300 text-white font-bold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+                >
+                  <Unlock className="w-4 h-4" />
+                  Unlock Folder
+                </button>
+              </div>
+
+              <p className="text-[10px] text-gray-400 text-center leading-relaxed">
+                All vault access attempts are logged for compliance. Unauthorized access violates BOC Article II data
+                security protocols.
+              </p>
+            </form>
+          </motion.div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ── UNLOCKED — DOCUMENT LIST ───────────────────────────────────────────────────
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-1">
+            <button
+              onClick={() => router.push('/documents')}
+              className="flex items-center gap-1.5 text-xs text-maritime-400 hover:text-maritime-900 font-medium"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Back to BOC Document Vault
+            </button>
+            <h1 className="text-3xl font-black text-maritime-900 tracking-tight font-mono">{folder.referenceCode}</h1>
+            <p className="text-xs text-gray-500 font-semibold">{folder.description}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
+            <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] ${statusCfg.className}`}>
+              {statusCfg.label}
+            </span>
+            <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] ${
+              folder.scope === 'OVERSEAS' ? 'bg-maritime-50 text-maritime-400' : 'bg-ocean-50 text-ocean-600'
+            }`}>
+              {folder.scope}
+            </span>
+            <div className="flex items-center gap-1.5 bg-ocean-50 border border-ocean-100 text-ocean-600 font-bold px-3 py-1.5 rounded-lg">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Vault Unlocked</span>
+            </div>
+            <button
+              onClick={() => setUnlocked(false)}
+              className="flex items-center gap-1 border border-sand-200 text-gray-400 hover:text-coral-400 hover:border-coral-200 hover:bg-coral-50 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
+            >
+              <Lock className="w-3 h-3" />
+              Lock
+            </button>
+          </div>
+        </div>
+
+        {/* Folder meta strip */}
+        <div className="bg-white border border-sand-200 rounded-2xl p-4 flex flex-wrap gap-4 text-xs text-gray-500">
+          <span className="flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-gray-400" />
+            <strong className="text-gray-700">{folder.originCountry}</strong> →{' '}
+            <strong className="text-gray-700">{folder.destinationPort}</strong>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5 text-gray-400" />
+            {folder.documents.length} document{folder.documents.length !== 1 ? 's' : ''}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-gray-400" />
+            Created {timeAgo(folder.createdAt)}
+          </span>
+        </div>
+
+        {/* Security notice */}
+        <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-3 flex items-start gap-2.5 text-xs text-ocean-700">
+          <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-ocean-400" />
+          <span>
+            Vault session active — this folder will lock automatically when you navigate away or click Lock.
+          </span>
+        </div>
+
+        {/* Document list */}
+        {folder.documents.length === 0 ? (
+          <div className="text-center py-16 bg-white border border-sand-200 rounded-2xl text-gray-400 text-xs font-mono">
+            NO ENCRYPTED CARGO FILES IN THIS VAULT FOLDER.
+          </div>
+        ) : (
+          <div className="bg-white border border-sand-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="divide-y divide-sand-100">
+              {folder.documents.map((doc) => {
+                const { ext, className: extClass } = fileExtBadge(doc.fileName);
+                return (
+                  <div key={doc.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-sand-50 border border-sand-200 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-gray-400" />
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-bold text-maritime-900 truncate max-w-sm">{doc.fileName}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400 font-medium">
+                          <span className={`px-1.5 py-0.5 rounded font-bold font-mono ${extClass}`}>{ext}</span>
+                          <span>v{doc.version}</span>
+                          {doc.version > 1 && (
+                            <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-black uppercase text-[9px]">
+                              Amended
+                            </span>
+                          )}
+                          <span className="text-gray-300">•</span>
+                          <span>Uploaded {timeAgo(doc.createdAt)}</span>
+                          <span className="text-gray-300">•</span>
+                          <span>
+                            By: <strong className="text-gray-600">{doc.uploadedById.substring(0, 12)}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {canDownload && (
+                      <a
+                        href={doc.fileUrl}
+                        download
+                        className="flex items-center gap-1.5 text-xs font-bold bg-white hover:bg-sand-50 border border-sand-200 text-gray-600 px-3 py-2 rounded-xl transition-colors shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5 text-gray-400" />
+                        Download
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 bg-ocean-50/60 border-t border-ocean-100 flex items-center justify-between">
+              <span className="text-[10px] text-ocean-600 font-bold flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                {folder.documents.length} file{folder.documents.length !== 1 ? 's' : ''} — Vault session active
+              </span>
+              <button
+                onClick={() => setUnlocked(false)}
+                className="text-[10px] text-gray-400 hover:text-coral-400 font-bold flex items-center gap-1 transition-colors"
+              >
+                <Lock className="w-3 h-3" />
+                Lock Folder
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </DashboardLayout>
+  );
+}
