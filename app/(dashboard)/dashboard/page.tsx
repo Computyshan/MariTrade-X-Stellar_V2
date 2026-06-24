@@ -242,18 +242,20 @@ export default function DashboardHome() {
   return (
     <DashboardLayout>
       {/* Dynamic Welcome Heading */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-3xl font-black text-maritime-900 tracking-tight">
-            Kamusta, {currentUser.fullName}!
+          <h1 className="text-[28px] font-black text-[#111c30] tracking-tight leading-tight">
+            Kamusta, {currentUser.fullName.split(' ')[0]}.
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Running secure portal. Your role is configured as <span className="text-maritime-400 font-bold uppercase">{currentUser.jobRole.replace(/_/g, ' ')}</span>.
+          <p className="text-[11px] text-gray-400 mt-1.5 flex items-center gap-3 font-medium tracking-wide">
+            <span>ROLE: <span className="text-[#111c30] font-bold">{currentUser.jobRole.replace(/_/g, ' ')}</span></span>
+            <span className="text-gray-300">|</span>
+            <span>SYSTEM STATUS: <span className="text-green-500 font-bold">SECURE</span></span>
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-sand-200 shadow-sm text-xs text-gray-500">
-          <Clock className="w-4 h-4 text-maritime-400" />
-          <span className="font-mono">LEDGER ACTIVE (UTC)</span>
+        <div className="flex items-center gap-1.5 border border-gray-200 bg-white rounded-lg px-3 py-1.5 text-[11px] font-semibold text-gray-500 shadow-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+          <span className="font-mono tracking-widest">[ LEDGER: ACTIVE ]</span>
         </div>
       </div>
 
@@ -266,131 +268,135 @@ export default function DashboardHome() {
         <>
           {/* USER SPECIFIC PORTAL: TRADE PARTY (IMPORTER / EXPORTER) */}
           {currentUser.userType === 'TRADE_PARTY' ? (
-            <div className="space-y-8">
-              {/* Stat Boxes */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Stat 1 */}
-                <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-maritime-50 rounded-xl flex items-center justify-center text-maritime-400">
-                    <Ship className="w-6 h-6" />
-                  </div>
+            <div className="space-y-5">
+              {/* Stat Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Card 1 — Active Cargoes */}
+                <div className="bg-white border border-gray-200 p-5 rounded-xl shadow-sm flex items-center justify-between">
                   <div>
-                    <span className="block text-[10px] text-gray-400 uppercase font-mono tracking-wider font-bold">Active Cargoes</span>
-                    <strong className="text-2xl text-maritime-900 font-black font-mono">
-                      {shipments.filter(s => s.status !== 'DELIVERED' && s.status !== 'CANCELLED').length}
+                    <span className="block text-[10px] text-gray-400 uppercase font-medium tracking-widest mb-2">Active Cargoes</span>
+                    <strong className="text-[28px] text-[#111c30] font-black leading-none">
+                      {String(shipments.filter(s => s.status !== 'DELIVERED' && s.status !== 'CANCELLED').length).padStart(2, '0')}
                     </strong>
+                  </div>
+                  <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                    <Ship className="w-5 h-5" />
                   </div>
                 </div>
 
-                {/* Stat 2 */}
-                <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-ocean-50 rounded-xl flex items-center justify-center text-ocean-600">
-                    <Coins className="w-6 h-6 text-ocean-400" />
-                  </div>
+                {/* Card 2 — Escrow Holdings (DARK) */}
+                <div className="bg-[#111c30] border border-[#1e3a5f] p-5 rounded-xl shadow-sm col-span-1">
+                  <span className="block text-[10px] text-white/40 uppercase font-medium tracking-widest mb-2">Escrow Holdings</span>
+                  <strong className="text-[28px] text-white font-black leading-none">
+                    45,000 <span className="text-sm font-semibold text-white/60">USDC</span>
+                  </strong>
+                  <span className="block text-[11px] text-white/40 mt-1.5 font-mono">₱2,641,500.00 EQV</span>
+                </div>
+
+                {/* Card 3 — Completed (MO) */}
+                <div className="bg-white border border-gray-200 p-5 rounded-xl shadow-sm flex items-center justify-between">
                   <div>
-                    <span className="block text-[10px] text-gray-400 uppercase font-mono tracking-wider font-bold">Funds In Escrow</span>
-                    <strong className="text-2xl text-maritime-900 font-black font-mono">
-                      $45,000 <span className="text-xs text-gray-400">USDC</span>
+                    <span className="block text-[10px] text-gray-400 uppercase font-medium tracking-widest mb-2">Completed (MO)</span>
+                    <strong className="text-[28px] text-[#111c30] font-black leading-none">
+                      {String(shipments.filter(s => s.status === 'DELIVERED').length).padStart(2, '0')}
                     </strong>
-                    <span className="block text-[10px] text-ocean-600 italic mt-0.5">₱2,641,500 equivalent</span>
+                  </div>
+                  <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                    <CheckSquare className="w-5 h-5" />
                   </div>
                 </div>
 
-                {/* Stat 3 */}
-                <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
-                    <CheckSquare className="w-6 h-6 text-green-400" />
-                  </div>
+                {/* Card 4 — Smart Locks */}
+                <div className="bg-white border border-gray-200 p-5 rounded-xl shadow-sm flex items-center justify-between">
                   <div>
-                    <span className="block text-[10px] text-gray-400 uppercase font-mono tracking-wider font-bold">Delivered Month</span>
-                    <strong className="text-2xl text-maritime-900 font-black font-mono">
-                      {shipments.filter(s => s.status === 'DELIVERED').length}
-                    </strong>
+                    <span className="block text-[10px] text-gray-400 uppercase font-medium tracking-widest mb-2">Smart Locks</span>
+                    <strong className="text-[28px] text-[#111c30] font-black leading-none">2/2</strong>
                   </div>
-                </div>
-
-                {/* Stat 4 */}
-                <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-coral-50 rounded-xl flex items-center justify-center text-coral-400">
-                    <TrendingUp className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-gray-400 uppercase font-mono tracking-wider font-bold">Locks Confirmed</span>
-                    <strong className="text-2xl text-maritime-900 font-black font-mono">2 / 2</strong>
+                  <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                    <TrendingUp className="w-5 h-5" />
                   </div>
                 </div>
               </div>
 
-              {/* Grid 2 Column: Ships list + Activity Log */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Shipments Table */}
-                <div className="lg:col-span-2 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-extrabold text-maritime-900 tracking-tight">Active Shipments</h2>
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-                      <input
-                        type="text"
-                        placeholder="Search ref or cargo..."
-                        className="bg-white border border-sand-200 pl-8 pr-3 py-1.5 rounded-lg text-xs outline-none focus:border-maritime-400"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                    </div>
-                  </div>
+              {/* Grid: Active Shipments (left) + Port Activity (right) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-                  <div className="bg-white border border-sand-200 rounded-2xl overflow-hidden shadow-sm">
+                {/* Shipments Table */}
+                <div className="lg:col-span-2">
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    {/* Table header */}
+                    <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100">
+                      <h2 className="text-sm font-bold text-[#111c30]">Active Shipments</h2>
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search reference..."
+                          className="bg-gray-50 border border-gray-200 pl-8 pr-3 py-1.5 rounded-lg text-[11px] outline-none focus:border-gray-400 w-44"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
                     {filteredShipments.length === 0 ? (
-                      <div className="text-center py-12 text-gray-400 text-xs font-mono">
-                        NO CARGOES FOUND MATCHING SEARCH.
+                      <div className="text-center py-14 text-gray-400 text-xs">
+                        No cargoes found.
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left">
-                          <thead className="bg-sand-50 border-b border-sand-200 text-gray-500 font-bold uppercase font-mono text-[10px]">
-                            <tr>
-                              <th className="px-4 py-3">Reference</th>
-                              <th className="px-4 py-3">Origin</th>
-                              <th className="px-4 py-3">Status</th>
-                              <th className="px-4 py-3">Escrow</th>
-                              <th className="px-4 py-3 text-right">Action</th>
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="border-b border-gray-100">
+                              <th className="px-5 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Reference</th>
+                              <th className="px-5 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Origin &amp; Route</th>
+                              <th className="px-5 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Status</th>
+                              <th className="px-5 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Escrow</th>
+                              <th className="px-5 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Actions</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-sand-200">
+                          <tbody className="divide-y divide-gray-50">
                             {filteredShipments.map((ship) => (
-                              <tr key={ship.id} className="hover:bg-sand-50/50">
-                                <td className="px-4 py-3.5">
-                                  <Link href={`/shipments/${ship.id}`} className="font-bold font-mono text-maritime-400 hover:underline">
+                              <tr key={ship.id} className="hover:bg-gray-50/50 transition-colors">
+                                <td className="px-5 py-4">
+                                  <Link href={`/shipments/${ship.id}`} className="text-[12px] font-bold text-[#111c30] hover:text-blue-600 block">
                                     {ship.referenceCode}
                                   </Link>
-                                  <span className="block text-[10px] text-gray-400 font-normal truncate max-w-[150px]">{ship.description}</span>
+                                  <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{ship.description.slice(0, 25)}</span>
                                 </td>
-                                <td className="px-4 py-3.5 text-gray-600 font-medium">
-                                  {ship.originCountry}
-                                  <span className="block text-[10px] text-gray-400 font-normal">To {ship.destinationPort}</span>
+                                <td className="px-5 py-4">
+                                  <span className="text-[12px] font-semibold text-gray-700 block">{ship.originCountry}</span>
+                                  <span className="text-[10px] text-gray-400">TO {ship.destinationPort?.toUpperCase()}</span>
                                 </td>
-                                <td className="px-4 py-3.5">
-                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                                    ship.status === 'DELIVERED' 
-                                      ? 'bg-green-100 text-green-700'
-                                      : ship.status === 'IN_TRANSIT'
-                                      ? 'bg-blue-100 text-blue-700'
-                                      : 'bg-amber-100 text-amber-700'
-                                  }`}>
-                                    {ship.status?.replace(/_/g, ' ')}
-                                  </span>
+                                <td className="px-5 py-4">
+                                  {ship.status === 'DELIVERED' ? (
+                                    <span className="inline-flex items-center gap-1.5 bg-green-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />
+                                      DELIVERED
+                                    </span>
+                                  ) : ship.status === 'IN_TRANSIT' ? (
+                                    <span className="inline-flex items-center gap-1.5 bg-[#111c30] text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />
+                                      IN TRANSIT
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full">
+                                      {ship.status?.replace(/_/g, ' ')}
+                                    </span>
+                                  )}
                                 </td>
-                                <td className="px-4 py-3.5 font-bold font-mono text-maritime-900">
-                                  ${ship.totalValueUSD?.toLocaleString()}
-                                  <span className="block text-[9px] text-ocean-600 font-medium">{ship.escrowStatus}</span>
+                                <td className="px-5 py-4">
+                                  <span className="text-[12px] font-bold text-[#111c30] block">${ship.totalValueUSD?.toLocaleString()}</span>
+                                  <span className={`text-[10px] font-semibold ${
+                                    ship.escrowStatus === 'FUNDED' ? 'text-green-500' : 'text-gray-400'
+                                  }`}>{ship.escrowStatus}</span>
                                 </td>
-                                <td className="px-4 py-3.5 text-right">
-                                  <Link 
+                                <td className="px-5 py-4">
+                                  <Link
                                     href={`/shipments/${ship.id}`}
-                                    className="bg-maritime-50 hover:bg-maritime-100 text-maritime-900 font-bold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-all"
+                                    className="inline-block border border-gray-200 hover:bg-gray-50 text-[#111c30] text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors"
                                   >
-                                    <span>Manage</span>
-                                    <ChevronRight className="w-3.5 h-3.5" />
+                                    {ship.status === 'DELIVERED' ? 'DETAILS' : 'MANAGE'}
                                   </Link>
                                 </td>
                               </tr>
@@ -402,80 +408,61 @@ export default function DashboardHome() {
                   </div>
                 </div>
 
-                {/* Right col: Live Updates feed */}
-                <div className="space-y-6">
-                  {/* Realtime feed */}
-                  <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm space-y-4">
-                    <h3 className="font-extrabold text-sm text-maritime-900 flex items-center gap-2">
-                      <Activity className="w-5 h-5 text-ocean-400" />
-                      <span>Live Port Activity Feed</span>
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      {milestones.map((me, idx) => (
-                        <div key={idx} className="flex gap-3 border-b border-sand-100 pb-3 last:border-0 last:pb-0">
-                          <div className="w-8 h-8 rounded-full bg-ocean-50 flex items-center justify-center text-ocean-600 flex-shrink-0 text-xs font-bold">
-                            ⚓
-                          </div>
-                          <div className="text-xs space-y-1">
-                            <p className="font-bold text-gray-800 uppercase tracking-tight">{me.type.replace(/_/g, ' ')}</p>
-                            <p className="text-gray-500 leading-normal">{me.description}</p>
-                            <span className="text-[10px] text-gray-400 font-mono block">cargo ref: MT-2026-00341</span>
-                          </div>
+                {/* Right column: Port Activity + Support */}
+                <div className="space-y-4">
+                  {/* Port Activity */}
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100">
+                      <h3 className="text-sm font-bold text-[#111c30]">Port Activity</h3>
+                      <button className="text-[11px] font-semibold text-blue-500 hover:text-blue-700">VIEW ALL</button>
+                    </div>
+                    <div className="px-5 py-4 space-y-0 relative">
+                      {/* Timeline line */}
+                      <div className="absolute left-[26px] top-6 bottom-6 w-px bg-gray-100" />
+
+                      {/* Entry 1 */}
+                      <div className="flex gap-4 pb-5">
+                        <div className="w-5 h-5 rounded-full bg-[#111c30] flex items-center justify-center flex-shrink-0 mt-0.5 z-10">
+                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
                         </div>
-                      ))}
+                        <div>
+                          <p className="text-[11px] font-bold text-[#111c30] uppercase tracking-wide">BOC ENTRY FILED</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Customs declaration registered and verified.</p>
+                          <p className="text-[10px] text-blue-500 mt-1 font-medium">
+                            {milestones[0] ? `REF: ${milestones[0].shipmentId?.slice(-10).toUpperCase() || 'MT-2026-00341'}` : 'REF: MT-2026-00341'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Entry 2 */}
+                      <div className="flex gap-4 pb-5">
+                        <div className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-0.5 z-10">
+                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold text-[#111c30] uppercase tracking-wide">VESSEL SECURED</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Container vessel clearance approved at source.</p>
+                        </div>
+                      </div>
+
+                      {/* Entry 3 — dimmed */}
+                      <div className="flex gap-4">
+                        <div className="w-5 h-5 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0 mt-0.5 z-10" />
+                        <div className="opacity-40">
+                          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">KYC VERIFIED</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">Identity confirmed by global compliance.</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* AI Cost Estimation widget */}
-                  <div className="bg-maritime-900 text-white p-6 rounded-2xl shadow-sm space-y-4">
-                    <h3 className="font-extrabold text-sm flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-ocean-400" />
-                      <span>AI Freight Fee Estimator</span>
-                    </h3>
-                    <p className="text-[11px] text-maritime-200 leading-normal">
-                      Use Gemini smart predictions to estimate regional container freight costs before shipping.
-                    </p>
-
-                    <form onSubmit={handleAIEstimate} className="space-y-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] text-maritime-200 font-bold uppercase tracking-wider">Weight (kg)</label>
-                          <input 
-                            type="number" 
-                            className="bg-maritime-700 text-white rounded p-1.5 w-full text-xs outline-none focus:ring-1 focus:ring-ocean-400"
-                            value={aiCargoWeight}
-                            onChange={(e)=>setAiCargoWeight(e.target.value)}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] text-maritime-200 font-bold uppercase tracking-wider">Cargo Type</label>
-                          <input 
-                            type="text" 
-                            className="bg-maritime-700 text-white rounded p-1.5 w-full text-xs outline-none focus:ring-1 focus:ring-ocean-400"
-                            value={aiCargoType}
-                            onChange={(e)=>setAiCargoType(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="submit"
-                        className="bg-ocean-400 hover:bg-ocean-600 text-maritime-900 w-full rounded py-1.5 text-xs font-bold transition-all cursor-pointer"
-                        disabled={estimating}
-                      >
-                        {estimating ? 'Calculating ocean currents...' : 'Predict Shipping Payout'}
-                      </button>
-                    </form>
-
-                    {aiResult && (
-                      <div className="p-3 bg-maritime-800 rounded-lg text-[11px] space-y-2 border border-maritime-700">
-                        <div className="flex justify-between items-center text-xs font-black text-ocean-400">
-                          <span>ESTIMATED: ${aiResult.estimatedUSD?.toLocaleString()}</span>
-                          <span className="text-[10px] bg-maritime-900 px-1.5 py-0.5 rounded uppercase">{aiResult.confidence} CONFIDENCE</span>
-                        </div>
-                        <p className="text-maritime-200 leading-normal">{aiResult.breakdown}</p>
-                      </div>
-                    )}
+                  {/* Support Card */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">NEED SUPPORT?</p>
+                    <p className="text-[12px] text-gray-500 leading-relaxed">Our maritime trade agents are available 24/7 for logistics clearance.</p>
+                    <button className="w-full bg-[#111c30] hover:bg-[#1e3a5f] text-white font-bold py-2.5 rounded-lg text-[11px] tracking-wider transition-colors">
+                      CONTACT AGENT
+                    </button>
                   </div>
                 </div>
               </div>

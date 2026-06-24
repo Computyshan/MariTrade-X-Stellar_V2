@@ -32,27 +32,24 @@ export default function OnboardingPage() {
   const [uploading, setUploading] = useState(false);
 
   // Filter job roles based on Step 1 selection
+  // Trade Party: 2 roles
   const tradePartyJobs = [
-    { value: 'IMPORTER', label: 'Importer (I coordinate incoming local containers)' },
-    { value: 'EXPORTER', label: 'Exporter (I dispatch international shipments)' },
-    { value: 'COMPANY_OWNER', label: 'Company Owner (Filipino SME Director)' },
-    { value: 'TRADER', label: 'Trader (Intermediate Trade Agent)' }
+    { value: 'IMPORTER', label: 'Importer — I receive & coordinate incoming cargo' },
+    { value: 'EXPORTER', label: 'Exporter — I dispatch international shipments' },
   ];
 
+  // Logistics Chain: 3 roles
   const logisticsJobs = [
-    { value: 'FREIGHT_FORWARDER', label: 'Freight Forwarder (I coordinate vessel slots)' },
-    { value: 'SHIPPING_LINE_CAPTAIN', label: 'Shipping Line / Captain (I verify water milestones)' },
-    { value: 'CUSTOMS_BROKER', label: 'Customs Broker (I submit entries & duties)' },
-    { value: 'WAREHOUSE_OPERATOR', label: 'Warehouse Operator (I pack, stage & unbox)' },
-    { value: 'PORT_AUTHORITY_OFFICER', label: 'Port Authority Officer (I gate containers)' },
-    { value: 'TRUCKER', label: 'Trucker (I deliver last mile toAddress)' }
+    { value: 'FREIGHT_FORWARDER', label: 'Freight Forwarder — I manage bookings, vessel slots & final delivery' },
+    { value: 'WAREHOUSE_OPERATOR', label: 'Warehouse Operator — I inspect, pack, stage & receive cargo' },
+    { value: 'CUSTOMS_BROKER', label: 'Customs Broker — I file BOC entries, duties & clearances' },
   ];
 
   const handleNext = () => {
     if (step < 4) {
       // Auto-set starting default job role if user swapped type
       if (step === 1) {
-        setJobRole(userType === 'TRADE_PARTY' ? 'IMPORTER' : 'FREIGHT_FORWARDER');
+          setJobRole(userType === 'TRADE_PARTY' ? 'IMPORTER' : 'FREIGHT_FORWARDER');
       }
       setStep(prev => prev + 1);
     }

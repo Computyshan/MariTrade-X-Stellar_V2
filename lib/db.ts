@@ -28,6 +28,7 @@ interface SchemaStore {
 const STORAGE_PATH = '/tmp/maritrade_v2_db.json';
 
 const INITIAL_USERS: User[] = [
+  // ─── Trade Party (2) ───
   {
     id: 'shaun-importer-id',
     email: 'shaun@siga.ph',
@@ -54,32 +55,7 @@ const INITIAL_USERS: User[] = [
     createdAt: '2026-01-11T11:00:00Z',
     updatedAt: '2026-01-11T11:00:00Z'
   },
-  {
-    id: 'charles-broker-id',
-    email: 'selrach@solomonbrokerage.ph',
-    fullName: 'Charles Solomon',
-    fullAddress: 'NGAVill, Cagayan De Oro, Philippines',
-    contactNumber: '+639189876543',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'CUSTOMS_BROKER',
-    companyName: 'Selcrach Customs Brokerage',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-12T09:00:00Z',
-    updatedAt: '2026-01-12T09:00:00Z'
-  },
-  {
-    id: 'reginald-trucker-id',
-    email: 'duque@manilamovers.ph',
-    fullName: 'Reighnald Duque',
-    fullAddress: 'Tondo, Manila, Philippines',
-    contactNumber: '+639155554433',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'TRUCKER',
-    companyName: 'Manila Heavy Movers',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-12T14:00:00Z',
-    updatedAt: '2026-01-12T14:00:00Z'
-  },
+  // ─── Logistics Chain (3) ───
   {
     id: 'tristan-forwarder-id',
     email: 'trst@domingsforwarding.ph',
@@ -92,19 +68,6 @@ const INITIAL_USERS: User[] = [
     kycStatus: 'VERIFIED',
     createdAt: '2026-01-13T08:00:00Z',
     updatedAt: '2026-01-13T08:00:00Z'
-  },
-  {
-    id: 'von-captain-id',
-    email: 'von@captain.ph',
-    fullName: 'Captain Von Jorge',
-    fullAddress: 'South Harbor, Port Area, Manila, Philippines',
-    contactNumber: '+639174443322',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'SHIPPING_LINE_CAPTAIN',
-    companyName: 'Pacific Ocean Lines',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-14T09:00:00Z',
-    updatedAt: '2026-01-14T09:00:00Z'
   },
   {
     id: 'quinn-warehouse-id',
@@ -120,18 +83,18 @@ const INITIAL_USERS: User[] = [
     updatedAt: '2026-01-15T11:00:00Z'
   },
   {
-    id: 'jed-port-id',
-    email: 'officer@ppa.gov.ph',
-    fullName: 'Officer Jed Somera',
-    fullAddress: 'PPA Head Office, Manila, Philippines',
-    contactNumber: '+639151239876',
+    id: 'charles-broker-id',
+    email: 'selrach@solomonbrokerage.ph',
+    fullName: 'Charles Solomon',
+    fullAddress: 'NGAVill, Cagayan De Oro, Philippines',
+    contactNumber: '+639189876543',
     userType: 'LOGISTICS_CHAIN',
-    jobRole: 'PORT_AUTHORITY_OFFICER',
-    companyName: 'Philippine Ports Authority',
+    jobRole: 'CUSTOMS_BROKER',
+    companyName: 'Selcrach Customs Brokerage',
     kycStatus: 'VERIFIED',
-    createdAt: '2026-01-16T14:30:00Z',
-    updatedAt: '2026-01-16T14:30:00Z'
-  }
+    createdAt: '2026-01-12T09:00:00Z',
+    updatedAt: '2026-01-12T09:00:00Z'
+  },
 ];
 
 const INITIAL_SHIPMENTS: Shipment[] = [
@@ -183,32 +146,20 @@ const INITIAL_ASSIGNMENTS: ShipmentAssignment[] = [
   {
     id: 'assign-2',
     shipmentId: 'shipment-tokyo-manila-1',
-    userId: 'reginald-trucker-id',
-    assignedAt: '2026-05-16T10:15:00Z'
-  },
-  {
-    id: 'assign-3',
-    shipmentId: 'shipment-tokyo-manila-1',
     userId: 'tristan-forwarder-id',
     assignedAt: '2026-05-16T09:30:00Z'
   },
   {
-    id: 'assign-4',
-    shipmentId: 'shipment-tokyo-manila-1',
-    userId: 'von-captain-id',
-    assignedAt: '2026-05-16T10:30:00Z'
-  },
-  {
-    id: 'assign-5',
+    id: 'assign-3',
     shipmentId: 'shipment-tokyo-manila-1',
     userId: 'quinn-warehouse-id',
     assignedAt: '2026-05-16T11:00:00Z'
   },
   {
-    id: 'assign-6',
+    id: 'assign-4',
     shipmentId: 'shipment-tokyo-manila-1',
-    userId: 'jed-port-id',
-    assignedAt: '2026-05-16T11:45:00Z'
+    userId: 'charles-broker-id',
+    assignedAt: '2026-05-16T10:00:00Z'
   }
 ];
 
@@ -276,9 +227,9 @@ const INITIAL_MILESTONES: MilestoneEvent[] = [
   {
     id: 'me-4',
     shipmentId: 'shipment-zambo-manila-2',
-    loggedById: 'shaun-importer-id',
+    loggedById: 'tristan-forwarder-id',
     type: 'BOOKING_CONFIRMED',
-    description: 'Direct sea cargo booked.',
+    description: 'Direct sea cargo booked by forwarder.',
     evidenceUrl: 'https://picsum.photos/seed/boat/800/600',
     occurredAt: '2026-05-12T08:00:00Z',
     verified: true
@@ -296,9 +247,9 @@ const INITIAL_MILESTONES: MilestoneEvent[] = [
   {
     id: 'me-6',
     shipmentId: 'shipment-zambo-manila-2',
-    loggedById: 'reginald-trucker-id',
+    loggedById: 'tristan-forwarder-id',
     type: 'DELIVERED_AND_SIGNED_OFF',
-    description: 'Sardine crates delivered safely to Binondo Storage Hall.',
+    description: 'Sardine crates delivered safely to Binondo Storage Hall. Signed off by importer.',
     evidenceUrl: 'https://picsum.photos/seed/storage/800/600',
     occurredAt: '2026-06-05T15:30:00Z',
     verified: true
@@ -378,7 +329,11 @@ function readDb(): SchemaStore {
           const parsed = JSON.parse(fileContent);
           if (parsed && typeof parsed === 'object') {
             // Check if the new importer profile exists, otherwise force reset/refresh matching your manual code changes
-            const hasNewProfiles = Array.isArray(parsed.users) && parsed.users.some((u: any) => u.id === 'shaun-importer-id');
+            // Force reset if old roles (TRUCKER, SHIPPING_LINE_CAPTAIN, PORT_AUTHORITY_OFFICER) are still present
+            const hasLegacyRoles = Array.isArray(parsed.users) && parsed.users.some(
+              (u: any) => ['TRUCKER', 'SHIPPING_LINE_CAPTAIN', 'PORT_AUTHORITY_OFFICER', 'COMPANY_OWNER', 'TRADER'].includes(u.jobRole)
+            );
+            const hasNewProfiles = Array.isArray(parsed.users) && parsed.users.some((u: any) => u.id === 'shaun-importer-id') && !hasLegacyRoles;
             if (!hasNewProfiles) {
               fs.writeFileSync(STORAGE_PATH, JSON.stringify(IN_MEMORY_STORE, null, 2), 'utf-8');
               return IN_MEMORY_STORE;

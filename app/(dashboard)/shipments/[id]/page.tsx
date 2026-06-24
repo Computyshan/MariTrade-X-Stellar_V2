@@ -218,6 +218,15 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
           <span className="bg-maritime-900 text-white font-bold px-3 py-1 rounded-full uppercase">
             {shipment.shipmentScope}
           </span>
+          {/* Log Milestone CTA — visible only to Logistics Chain roles */}
+          {currentUser.userType === 'LOGISTICS_CHAIN' && (
+            <button
+              onClick={() => router.push(`/shipments/${shipmentId}/log-milestone`)}
+              className="bg-ocean-400 hover:bg-ocean-600 text-maritime-900 font-black px-3 py-1 rounded-full uppercase text-xs flex items-center gap-1 transition-all"
+            >
+              + Log Milestone
+            </button>
+          )}
           <span className={`px-3 py-1 rounded-full uppercase font-bold ${
             shipment.status === 'DELIVERED' 
               ? 'bg-green-100 text-green-700' 

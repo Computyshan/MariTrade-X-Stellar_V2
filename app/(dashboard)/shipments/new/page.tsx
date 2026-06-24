@@ -15,30 +15,41 @@ import { ShipmentScope, MilestoneType, JobRole } from '@/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// Milestones grouped by the 3 logistics chain roles that own them
 const MILESTONE_BY_JOB: Record<string, MilestoneType[]> = {
-  'Freight Forwarder': [
-    'BOOKING_CONFIRMED', 'DOCUMENTS_SUBMITTED_TO_CARRIER',
-    'CARGO_READY_FOR_COLLECTION', 'SPACE_ON_VESSEL_SECURED',
+  '🏢 Freight Forwarder': [
+    'BOOKING_CONFIRMED',
+    'DOCUMENTS_SUBMITTED_TO_CARRIER',
+    'SPACE_ON_VESSEL_SECURED',
+    'CONTAINER_GATED_OUT_ORIGIN',
+    'CONTAINER_LOADED_ON_VESSEL',
+    'VESSEL_CLEARED_TO_DEPART',
+    'VESSEL_DEPARTED_ORIGIN',
+    'BILL_OF_LADING_ISSUED',
+    'VESSEL_ARRIVED_AT_BERTH',
+    'VESSEL_ARRIVED_DESTINATION',
+    'CONTAINER_OFFLOADED',
+    'CONTAINER_GATED_IN_DESTINATION',
+    'CARGO_RELEASED_FOR_PICKUP',
+    'IN_TRANSIT_TO_DESTINATION',
+    'ARRIVED_AT_DELIVERY_ADDRESS',
+    'DELIVERED_AND_SIGNED_OFF',
   ],
-  'Shipping Line / Captain': [
-    'BILL_OF_LADING_ISSUED', 'CONTAINER_LOADED_ON_VESSEL',
-    'VESSEL_DEPARTED_ORIGIN', 'VESSEL_ARRIVED_DESTINATION', 'CONTAINER_OFFLOADED',
+  '🛃 Customs Broker': [
+    'BOC_ENTRY_FILED',
+    'PORT_HOLD_PLACED_OR_LIFTED',
+    'DUTIES_AND_TAXES_PAID',
+    'CUSTOMS_EXAMINATION_REQUESTED',
+    'CUSTOMS_CLEARANCE_APPROVED',
   ],
-  'Customs Broker': [
-    'BOC_ENTRY_FILED', 'DUTIES_AND_TAXES_PAID', 'CUSTOMS_EXAMINATION_REQUESTED',
-    'CUSTOMS_CLEARANCE_APPROVED', 'CARGO_RELEASED_FOR_PICKUP',
-  ],
-  'Warehouse Operator': [
-    'CARGO_RECEIVED_AT_WAREHOUSE', 'CARGO_INSPECTED_AND_PACKED',
-    'CARGO_STAGED_FOR_PICKUP', 'CARGO_HANDED_OFF_TO_CARRIER', 'INCOMING_CARGO_STORED',
-  ],
-  'Port Authority': [
-    'VESSEL_CLEARED_TO_DEPART', 'CONTAINER_GATED_OUT_ORIGIN',
-    'VESSEL_ARRIVED_AT_BERTH', 'CONTAINER_GATED_IN_DESTINATION', 'PORT_HOLD_PLACED_OR_LIFTED',
-  ],
-  'Trucker': [
-    'CARGO_PICKED_UP_FROM_PORT', 'IN_TRANSIT_TO_DESTINATION',
-    'ARRIVED_AT_DELIVERY_ADDRESS', 'DELIVERED_AND_SIGNED_OFF', 'FAILED_DELIVERY_ATTEMPT',
+  '🏬 Warehouse Operator': [
+    'CARGO_READY_FOR_COLLECTION',
+    'CARGO_INSPECTED_AND_PACKED',
+    'CARGO_STAGED_FOR_PICKUP',
+    'CARGO_HANDED_OFF_TO_CARRIER',
+    'CARGO_PICKED_UP_FROM_PORT',
+    'CARGO_RECEIVED_AT_WAREHOUSE',
+    'INCOMING_CARGO_STORED',
   ],
 };
 
@@ -48,48 +59,47 @@ const DEFAULT_PRIORITY_MILESTONES: MilestoneType[] = [
 ];
 
 const JOB_ROLE_LABELS: Record<JobRole, string> = {
-  FREIGHT_FORWARDER:      'Freight Forwarder',
-  SHIPPING_LINE_CAPTAIN:  'Shipping Line / Captain',
-  CUSTOMS_BROKER:         'Customs Broker',
-  WAREHOUSE_OPERATOR:     'Warehouse Operator',
-  PORT_AUTHORITY_OFFICER: 'Port Authority Officer',
-  TRUCKER:                'Trucker',
-  IMPORTER:               'Importer',
-  EXPORTER:               'Exporter',
-  COMPANY_OWNER:          'Company Owner',
-  TRADER:                 'Trader',
+  // Trade Party
+  IMPORTER:            'Importer',
+  EXPORTER:            'Exporter',
+  // Logistics Chain
+  FREIGHT_FORWARDER:   'Freight Forwarder',
+  WAREHOUSE_OPERATOR:  'Warehouse Operator',
+  CUSTOMS_BROKER:      'Customs Broker',
 };
 
 const MILESTONE_LABELS: Record<MilestoneType, string> = {
+  // 🏢 Freight Forwarder
   BOOKING_CONFIRMED:               'Booking Confirmed',
   DOCUMENTS_SUBMITTED_TO_CARRIER:  'Documents Submitted to Carrier',
-  CARGO_READY_FOR_COLLECTION:      'Cargo Ready for Collection',
   SPACE_ON_VESSEL_SECURED:         'Space on Vessel Secured',
-  BILL_OF_LADING_ISSUED:           'Bill of Lading Issued',
+  CONTAINER_GATED_OUT_ORIGIN:      'Container Gated Out (Origin)',
   CONTAINER_LOADED_ON_VESSEL:      'Container Loaded on Vessel',
+  VESSEL_CLEARED_TO_DEPART:        'Vessel Cleared to Depart',
   VESSEL_DEPARTED_ORIGIN:          'Vessel Departed Origin',
+  BILL_OF_LADING_ISSUED:           'Bill of Lading Issued',
+  VESSEL_ARRIVED_AT_BERTH:         'Vessel Arrived at Berth',
   VESSEL_ARRIVED_DESTINATION:      'Vessel Arrived at Destination',
   CONTAINER_OFFLOADED:             'Container Offloaded',
-  BOC_ENTRY_FILED:                 'BOC Entry Filed',
-  DUTIES_AND_TAXES_PAID:           'Duties and Taxes Paid',
-  CUSTOMS_EXAMINATION_REQUESTED:   'Customs Examination Requested',
-  CUSTOMS_CLEARANCE_APPROVED:      'Customs Clearance Approved',
-  CARGO_RELEASED_FOR_PICKUP:       'Cargo Released for Pickup',
-  CARGO_RECEIVED_AT_WAREHOUSE:     'Cargo Received at Warehouse',
-  CARGO_INSPECTED_AND_PACKED:      'Cargo Inspected and Packed',
-  CARGO_STAGED_FOR_PICKUP:         'Cargo Staged for Pickup',
-  CARGO_HANDED_OFF_TO_CARRIER:     'Cargo Handed Off to Carrier',
-  INCOMING_CARGO_STORED:           'Incoming Cargo Stored',
-  VESSEL_CLEARED_TO_DEPART:        'Vessel Cleared to Depart',
-  CONTAINER_GATED_OUT_ORIGIN:      'Container Gated Out (Origin)',
-  VESSEL_ARRIVED_AT_BERTH:         'Vessel Arrived at Berth',
   CONTAINER_GATED_IN_DESTINATION:  'Container Gated In (Destination)',
-  PORT_HOLD_PLACED_OR_LIFTED:      'Port Hold Placed or Lifted',
-  CARGO_PICKED_UP_FROM_PORT:       'Cargo Picked Up from Port',
+  CARGO_RELEASED_FOR_PICKUP:       'Cargo Released for Pickup',
   IN_TRANSIT_TO_DESTINATION:       'In Transit to Destination',
   ARRIVED_AT_DELIVERY_ADDRESS:     'Arrived at Delivery Address',
   DELIVERED_AND_SIGNED_OFF:        'Delivered and Signed Off',
-  FAILED_DELIVERY_ATTEMPT:         'Failed Delivery Attempt',
+  // 🛃 Customs Broker
+  BOC_ENTRY_FILED:                 'BOC Entry Filed',
+  PORT_HOLD_PLACED_OR_LIFTED:      'Port Hold Placed or Lifted',
+  DUTIES_AND_TAXES_PAID:           'Duties and Taxes Paid',
+  CUSTOMS_EXAMINATION_REQUESTED:   'Customs Examination Requested',
+  CUSTOMS_CLEARANCE_APPROVED:      'Customs Clearance Approved',
+  // 🏬 Warehouse Operator
+  CARGO_READY_FOR_COLLECTION:      'Cargo Ready for Collection',
+  CARGO_INSPECTED_AND_PACKED:      'Cargo Inspected and Packed',
+  CARGO_STAGED_FOR_PICKUP:         'Cargo Staged for Pickup',
+  CARGO_HANDED_OFF_TO_CARRIER:     'Cargo Handed Off to Carrier',
+  CARGO_PICKED_UP_FROM_PORT:       'Cargo Picked Up from Port',
+  CARGO_RECEIVED_AT_WAREHOUSE:     'Cargo Received at Warehouse',
+  INCOMING_CARGO_STORED:           'Incoming Cargo Stored',
 };
 
 const STEPS = [

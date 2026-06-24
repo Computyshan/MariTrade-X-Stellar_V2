@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { User, JobRole } from '../types';
+import { User, JobRole, TradePartyRole, LogisticsChainRole } from '../types';
 
 interface UserSessionState {
   currentUser: User;
@@ -9,7 +9,9 @@ interface UserSessionState {
   resetSession: () => void;
 }
 
+// 5 seed users: 2 Trade Party + 3 Logistics Chain
 const STATIC_USERS: User[] = [
+  // ─── Trade Party ───
   {
     id: 'shaun-importer-id',
     email: 'shaun@siga.ph',
@@ -36,19 +38,7 @@ const STATIC_USERS: User[] = [
     createdAt: '2026-01-11T11:00:00Z',
     updatedAt: '2026-01-11T11:00:00Z'
   },
-  {
-    id: 'charles-broker-id',
-    email: 'selrach@solomonbrokerage.ph',
-    fullName: 'Charles Solomon',
-    fullAddress: 'NGAVill, Cagayan De Oro, Philippines',
-    contactNumber: '+639189876543',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'CUSTOMS_BROKER',
-    companyName: 'Selcrach Customs Brokerage',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-12T09:00:00Z',
-    updatedAt: '2026-01-12T09:00:00Z'
-  },
+  // ─── Logistics Chain ───
   {
     id: 'tristan-forwarder-id',
     email: 'trst@domingsforwarding.ph',
@@ -61,32 +51,6 @@ const STATIC_USERS: User[] = [
     kycStatus: 'VERIFIED',
     createdAt: '2026-01-13T08:00:00Z',
     updatedAt: '2026-01-13T08:00:00Z'
-  },
-  {
-    id: 'reginald-trucker-id',
-    email: 'duque@manilamovers.ph',
-    fullName: 'Reighnald Duque',
-    fullAddress: 'Tondo, Manila, Philippines',
-    contactNumber: '+639155554433',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'TRUCKER',
-    companyName: 'Manila Heavy Movers',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-12T14:00:00Z',
-    updatedAt: '2026-01-12T14:00:00Z'
-  },
-  {
-    id: 'von-captain-id',
-    email: 'von@captain.ph',
-    fullName: 'Captain Von Jorge',
-    fullAddress: 'South Harbor, Port Area, Manila, Philippines',
-    contactNumber: '+639174443322',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'SHIPPING_LINE_CAPTAIN',
-    companyName: 'Pacific Ocean Lines',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-14T09:00:00Z',
-    updatedAt: '2026-01-14T09:00:00Z'
   },
   {
     id: 'quinn-warehouse-id',
@@ -102,18 +66,18 @@ const STATIC_USERS: User[] = [
     updatedAt: '2026-01-15T11:00:00Z'
   },
   {
-    id: 'jed-port-id',
-    email: 'officer@ppa.gov.ph',
-    fullName: 'Officer Jed Somera',
-    fullAddress: 'PPA Head Office, Manila, Philippines',
-    contactNumber: '+639151239876',
+    id: 'charles-broker-id',
+    email: 'selrach@solomonbrokerage.ph',
+    fullName: 'Charles Solomon',
+    fullAddress: 'NGAVill, Cagayan De Oro, Philippines',
+    contactNumber: '+639189876543',
     userType: 'LOGISTICS_CHAIN',
-    jobRole: 'PORT_AUTHORITY_OFFICER',
-    companyName: 'Philippine Ports Authority',
+    jobRole: 'CUSTOMS_BROKER',
+    companyName: 'Selcrach Customs Brokerage',
     kycStatus: 'VERIFIED',
-    createdAt: '2026-01-16T14:30:00Z',
-    updatedAt: '2026-01-16T14:30:00Z'
-  }
+    createdAt: '2026-01-12T09:00:00Z',
+    updatedAt: '2026-01-12T09:00:00Z'
+  },
 ];
 
 export const useUserSession = create<UserSessionState>((set) => ({
@@ -121,12 +85,13 @@ export const useUserSession = create<UserSessionState>((set) => ({
   allUsers: STATIC_USERS,
   setCurrentUser: (user) => set({ currentUser: user }),
   updateUserKyc: (kycStatus, jobRole, companyName) => set((state) => {
+    const tradePartyRoles: JobRole[] = ['IMPORTER', 'EXPORTER'];
     const updatedUser = { 
       ...state.currentUser, 
       kycStatus,
       ...(jobRole && { jobRole }),
       ...(companyName && { companyName }),
-      userType: (jobRole === 'IMPORTER' || jobRole === 'EXPORTER' || jobRole === 'COMPANY_OWNER' || jobRole === 'TRADER') 
+      userType: jobRole && tradePartyRoles.includes(jobRole)
         ? 'TRADE_PARTY' as const 
         : 'LOGISTICS_CHAIN' as const
     };
