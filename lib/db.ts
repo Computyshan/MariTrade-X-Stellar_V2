@@ -9,7 +9,8 @@ import {
   ShipmentDocument, 
   ChatThread, 
   ChatParticipant, 
-  Message 
+  Message,
+  ConnectionRequest
 } from '../types';
 
 interface SchemaStore {
@@ -22,6 +23,7 @@ interface SchemaStore {
   threads: ChatThread[];
   participants: ChatParticipant[];
   messages: Message[];
+  connectionRequests: ConnectionRequest[];
   _chatSeedCleared?: boolean;
 }
 
@@ -303,6 +305,35 @@ const INITIAL_THREADS: ChatThread[] = [];
 const INITIAL_PARTICIPANTS: ChatParticipant[] = [];
 const INITIAL_MESSAGES: Message[] = [];
 
+// Seed: Shaun (importer) already has accepted connections with Tristan (FF) and Charles (CB).
+// Quinn (WO) is still PENDING — demonstrates the Trusted Network gate in shipment creation.
+const INITIAL_CONNECTION_REQUESTS: ConnectionRequest[] = [
+  {
+    id: 'conn-shaun-tristan-1',
+    requesterId: 'shaun-importer-id',
+    receiverId: 'tristan-forwarder-id',
+    status: 'ACCEPTED',
+    createdAt: '2026-01-20T09:00:00Z',
+    updatedAt: '2026-01-20T10:30:00Z',
+  },
+  {
+    id: 'conn-shaun-charles-1',
+    requesterId: 'shaun-importer-id',
+    receiverId: 'charles-broker-id',
+    status: 'ACCEPTED',
+    createdAt: '2026-01-20T09:05:00Z',
+    updatedAt: '2026-01-20T10:35:00Z',
+  },
+  {
+    id: 'conn-shaun-quinn-1',
+    requesterId: 'shaun-importer-id',
+    receiverId: 'quinn-warehouse-id',
+    status: 'PENDING',
+    createdAt: '2026-06-20T14:00:00Z',
+    updatedAt: '2026-06-20T14:00:00Z',
+  },
+];
+
 const IN_MEMORY_STORE: SchemaStore = {
   users: INITIAL_USERS,
   shipments: INITIAL_SHIPMENTS,
@@ -312,7 +343,8 @@ const IN_MEMORY_STORE: SchemaStore = {
   documents: INITIAL_DOCUMENTS,
   threads: INITIAL_THREADS,
   participants: INITIAL_PARTICIPANTS,
-  messages: INITIAL_MESSAGES
+  messages: INITIAL_MESSAGES,
+  connectionRequests: INITIAL_CONNECTION_REQUESTS,
 };
 
 function readDb(): SchemaStore {
@@ -349,6 +381,7 @@ function readDb(): SchemaStore {
               threads: Array.isArray(parsed.threads) ? parsed.threads : IN_MEMORY_STORE.threads,
               participants: Array.isArray(parsed.participants) ? parsed.participants : IN_MEMORY_STORE.participants,
               messages: Array.isArray(parsed.messages) ? parsed.messages : IN_MEMORY_STORE.messages,
+              connectionRequests: Array.isArray(parsed.connectionRequests) ? parsed.connectionRequests : IN_MEMORY_STORE.connectionRequests,
               _chatSeedCleared: parsed._chatSeedCleared === true,
             };
 
@@ -401,6 +434,7 @@ function writeDb(store: SchemaStore) {
   IN_MEMORY_STORE.threads = store.threads;
   IN_MEMORY_STORE.participants = store.participants;
   IN_MEMORY_STORE.messages = store.messages;
+  IN_MEMORY_STORE.connectionRequests = store.connectionRequests;
 }
 
 export const dbStore = {
@@ -544,5 +578,33 @@ export const dbStore = {
       return m;
     });
     writeDb(db);
-  }
+  },
+
+  // ─── Vendor Network ───────────────────────────────────────────────────────
+  getConnectionRequests: () => readDb().connectionRequests,
+  getConnectionRequestById: (id: string) =>
+    readDb().connectionRequests.find(c => c.id === id),
+  /** All requests where userId is either requester or receiver */
+  getConnectionRequestsForUser: (userId: string) =>
+    readDb().connectionRequests.filter(
+      c => c.requesterId === userId || c.receiverId === userId
+    ),
+  /** IDs of vendors in the Importer's Trusted Network (status === ACCEPTED) */
+  getTrustedVendorIds: (importerId: string): string[] => {
+    const db = readDb();
+    return db.connectionRequests
+      .filter(c => c.requesterId === importerId && c.status === 'ACCEPTED')
+      .map(c => c.receiverId);
+  },
+  saveConnectionRequest: (conn: ConnectionRequest) => {
+    const db = readDb();
+    const idx = db.connectionRequests.findIndex(c => c.id === conn.id);
+    if (idx !== -1) {
+      db.connectionRequests[idx] = conn;
+    } else {
+      db.connectionRequests.push(conn);
+    }
+    writeDb(db);
+    return conn;
+  },
 };

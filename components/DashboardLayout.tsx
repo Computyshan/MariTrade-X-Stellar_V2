@@ -16,7 +16,8 @@ import {
   Bell,
   UserCircle,
   ChevronDown,
-  Bot
+  Bot,
+  Network
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -40,10 +41,11 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
   const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Shipments', href: '/shipments', icon: Ship },
-    { name: 'Messages', href: '/messages', icon: MessageSquare },
+    { name: 'Network',   href: '/network',   icon: Network },
+    { name: 'Messages',  href: '/messages',  icon: MessageSquare },
     { name: 'Documents', href: '/documents', icon: FileText },
-    { name: 'Escrow', href: '/payments', icon: CreditCard },
-    { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Escrow',    href: '/payments',  icon: CreditCard },
+    { name: 'Settings',  href: '/settings',  icon: Settings },
   ];
 
   const handleBotSubmit = async (e: React.FormEvent) => {

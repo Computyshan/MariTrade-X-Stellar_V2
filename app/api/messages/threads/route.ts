@@ -58,7 +58,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'SenderId and ReceiverId are required' }, { status: 400 });
     }
 
-    // Check if an open thread already exists between these two
+    // ── Network guard ─────────────────────────────────────────────────────────
+    // A message thread can only be opened between two users who share an
+    // ACCEPTED connection in the B2B Vendor Network.  This prevents cold
+    // outreach to unvetted third parties.
+    const senderUser   = dbStore.getUserById(senderId);
+    const receiverUser = dbStore.getUserById(receiverId);
+
+    if (senderUser && receiverUser) {
+      const isCrossParty =
+        (senderUser.userType === 'TRADE_PARTY'    && receiverUser.userType === 'LOGISTICS_CHAIN') ||
+        (senderUser.userType === 'LOGISTICS_CHAIN' && receiverUser.userType === 'TRADE_PARTY');
+
+      if (isCrossParty) {
+        // Determine which party is the importer (connection requester)
+        const allConns = dbStore.getConnectionRequests();
+        const hasAcceptedConnection = allConns.some(
+          c =>
+            c.status === 'ACCEPTED' &&
+            ((c.requesterId === senderId   && c.receiverId === receiverId) ||
+             (c.requesterId === receiverId && c.receiverId === senderId))
+        );
+
+        if (!hasAcceptedConnection) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'You can only message vendors in your Trusted Network. Connect with this user on the Network page first.',
+              code: 'NOT_IN_NETWORK',
+            },
+            { status: 403 }
+          );
+        }
+      }
+    }
+    // ── End network guard ─────────────────────────────────────────────────────
     const allThreads = dbStore.getThreads();
     const allParticipants = dbStore.getParticipants();
 

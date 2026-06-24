@@ -202,6 +202,19 @@ export interface ChatParticipant {
   userId: string;
 }
 
+// ─── B2B Vendor Network ────────────────────────────────────────────────────
+
+export type ConnectionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+export interface ConnectionRequest {
+  id: string;
+  requesterId: string;   // The Importer who sent the request
+  receiverId: string;    // The logistics chain vendor
+  status: ConnectionStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Message {
   id: string;
   threadId: string;

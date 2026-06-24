@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession } from '@/hooks/use-user-session';
 import {
@@ -208,6 +209,8 @@ export default function NewShipmentPage() {
   const [assignedUserIds,    setAssignedUserIds]    = useState<string[]>([]);
   const [priorityMilestones, setPriorityMilestones] = useState<MilestoneType[]>(DEFAULT_PRIORITY_MILESTONES);
   const [logisticsSearch,    setLogisticsSearch]    = useState('');
+  const [trustedNetworkIds,  setTrustedNetworkIds]  = useState<string[]>([]);
+  const [networkLoading,     setNetworkLoading]     = useState(false);
 
   // ── Step 4 — Escrow ─────────────────────────────────────────────────────────
   const [phpRate,       setPhpRate]       = useState<number | null>(null);
@@ -215,6 +218,25 @@ export default function NewShipmentPage() {
   const [rateError,     setRateError]     = useState(false);
   const [escrowLoading, setEscrowLoading] = useState(false);
   const [escrowSuccess, setEscrowSuccess] = useState(false);
+
+  // ── Fetch Trusted Network when reaching Step 3 ─────────────────────────────
+  useEffect(() => {
+    if (step !== 3) return;
+    setNetworkLoading(true);
+    fetch(`/api/network/connections?userId=${currentUser.id}`)
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) {
+          const acceptedIds: string[] = json.data
+            .filter((c: any) => c.status === 'ACCEPTED' && c.direction === 'SENT')
+            .map((c: any) => c.otherParty?.id)
+            .filter(Boolean);
+          setTrustedNetworkIds(acceptedIds);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setNetworkLoading(false));
+  }, [step, currentUser.id]);
 
   // ── Auto-lock country fields when scope is NATIONWIDE ───────────────────────
   useEffect(() => {
@@ -340,6 +362,7 @@ export default function NewShipmentPage() {
   const logisticsUsers = allUsers.filter(u =>
     u.userType === 'LOGISTICS_CHAIN' &&
     u.id !== currentUser.id &&
+    trustedNetworkIds.includes(u.id) &&
     (logisticsSearch === '' ||
       u.fullName.toLowerCase().includes(logisticsSearch.toLowerCase()) ||
       (u.companyName || '').toLowerCase().includes(logisticsSearch.toLowerCase()) ||
@@ -1099,9 +1122,28 @@ export default function NewShipmentPage() {
                 onChange={e => setLogisticsSearch(e.target.value)}
               />
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {logisticsUsers.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-6">No users found.</p>
-                ) : logisticsUsers.map(user => {
+                {networkLoading ? (
+                  <div className="py-8 text-center">
+                    <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-xs text-gray-400">Loading your Trusted Network…</p>
+                  </div>
+                ) : logisticsUsers.length === 0 ? (
+                  <div className="py-6 px-3 text-center space-y-2 border border-dashed border-sand-200 rounded-xl bg-sand-50">
+                    <Users className="w-8 h-8 text-gray-200 mx-auto" />
+                    <p className="text-xs font-bold text-gray-500">No trusted vendors yet</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">
+                      Only vendors in your Trusted Network can be assigned to shipments.
+                    </p>
+                    <Link
+                      href="/network"
+                      target="_blank"
+                      className="inline-flex items-center gap-1 text-[11px] font-black text-maritime-400 hover:text-maritime-900 transition-colors"
+                    >
+                      Build your network →
+                    </Link>
+                  </div>
+                ) : (
+                  logisticsUsers.map(user => {
                   const assigned = assignedUserIds.includes(user.id);
                   return (
                     <button
@@ -1120,8 +1162,9 @@ export default function NewShipmentPage() {
                       </div>
                     </button>
                   );
-                })}
-              </div>
+                  })
+                )}
+                </div>
               {assignedUserIds.length > 0 && (
                 <p className="text-[10px] text-ocean-400 font-bold">
                   {assignedUserIds.length} user{assignedUserIds.length > 1 ? 's' : ''} assigned
