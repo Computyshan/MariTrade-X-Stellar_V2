@@ -10,7 +10,8 @@ import {
   ChatThread, 
   ChatParticipant, 
   Message,
-  ConnectionRequest
+  ConnectionRequest,
+  VaultFolder
 } from '../types';
 
 interface SchemaStore {
@@ -24,6 +25,7 @@ interface SchemaStore {
   participants: ChatParticipant[];
   messages: Message[];
   connectionRequests: ConnectionRequest[];
+  vaultFolders: VaultFolder[];
   _chatSeedCleared?: boolean;
 }
 
@@ -307,6 +309,27 @@ const INITIAL_MESSAGES: Message[] = [];
 
 // Seed: Shaun (importer) already has accepted connections with Tristan (FF) and Charles (CB).
 // Quinn (WO) is still PENDING — demonstrates the Trusted Network gate in shipment creation.
+const INITIAL_VAULT_FOLDERS: VaultFolder[] = [
+  {
+    id: 'vault-folder-001',
+    shipmentId: 'shipment-tokyo-manila-1',
+    referenceCode: 'MT-2026-00341',
+    folderName: 'JPN-MNL_INDUSTRIAL_MOTORS_2026',
+    password: 'TKY2026',
+    createdByUserId: 'shaun-importer-id',
+    createdAt: '2026-05-15T08:30:00Z',
+  },
+  {
+    id: 'vault-folder-002',
+    shipmentId: 'shipment-zambo-manila-2',
+    referenceCode: 'MT-2026-00122',
+    folderName: 'ZMB-MNL_SARDINES_BATCH22B_2026',
+    password: 'ZMB2026',
+    createdByUserId: 'shaun-importer-id',
+    createdAt: '2026-05-10T09:15:00Z',
+  },
+];
+
 const INITIAL_CONNECTION_REQUESTS: ConnectionRequest[] = [
   {
     id: 'conn-shaun-tristan-1',
@@ -345,6 +368,7 @@ const IN_MEMORY_STORE: SchemaStore = {
   participants: INITIAL_PARTICIPANTS,
   messages: INITIAL_MESSAGES,
   connectionRequests: INITIAL_CONNECTION_REQUESTS,
+  vaultFolders: INITIAL_VAULT_FOLDERS,
 };
 
 function readDb(): SchemaStore {
@@ -382,6 +406,7 @@ function readDb(): SchemaStore {
               participants: Array.isArray(parsed.participants) ? parsed.participants : IN_MEMORY_STORE.participants,
               messages: Array.isArray(parsed.messages) ? parsed.messages : IN_MEMORY_STORE.messages,
               connectionRequests: Array.isArray(parsed.connectionRequests) ? parsed.connectionRequests : IN_MEMORY_STORE.connectionRequests,
+              vaultFolders: Array.isArray(parsed.vaultFolders) ? parsed.vaultFolders : IN_MEMORY_STORE.vaultFolders,
               _chatSeedCleared: parsed._chatSeedCleared === true,
             };
 
@@ -435,6 +460,7 @@ function writeDb(store: SchemaStore) {
   IN_MEMORY_STORE.participants = store.participants;
   IN_MEMORY_STORE.messages = store.messages;
   IN_MEMORY_STORE.connectionRequests = store.connectionRequests;
+  IN_MEMORY_STORE.vaultFolders = store.vaultFolders;
 }
 
 export const dbStore = {
@@ -578,6 +604,22 @@ export const dbStore = {
       return m;
     });
     writeDb(db);
+  },
+
+  // ─── BOC Document Vault Folders ──────────────────────────────────────────
+  getVaultFolders: () => readDb().vaultFolders,
+  getVaultFolderByShipmentId: (shipmentId: string) =>
+    readDb().vaultFolders.find(v => v.shipmentId === shipmentId),
+  saveVaultFolder: (folder: VaultFolder) => {
+    const db = readDb();
+    const idx = db.vaultFolders.findIndex(v => v.id === folder.id);
+    if (idx !== -1) {
+      db.vaultFolders[idx] = folder;
+    } else {
+      db.vaultFolders.push(folder);
+    }
+    writeDb(db);
+    return folder;
   },
 
   // ─── Vendor Network ───────────────────────────────────────────────────────

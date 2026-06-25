@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
-import { Shipment, PriorityMilestone, ShipmentAssignment } from '@/types';
+import { Shipment, PriorityMilestone, ShipmentAssignment, VaultFolder } from '@/types';
 
 export async function GET(req: NextRequest) {
   try {
@@ -47,8 +47,10 @@ export async function POST(req: NextRequest) {
       shipmentScope, 
       totalValueUSD,
       estimatedArrival,
-      selectedLogisticsUsers, // Array of user IDs to assign
-      requiredMilestones // Array of MilestoneType
+      selectedLogisticsUsers,
+      requiredMilestones,
+      vaultFolderName,
+      vaultPassword,
     } = body;
 
     if (!importerId || !description || !originCountry || !destinationPort || !shipmentScope || !totalValueUSD) {
@@ -118,6 +120,20 @@ export async function POST(req: NextRequest) {
       });
     }
     dbStore.savePriorityMilestones(milestonesList);
+
+    // ── Create BOC Document Vault Folder ──────────────────────────────────────
+    if (vaultFolderName && vaultPassword) {
+      const vaultFolder: VaultFolder = {
+        id:              'vf_' + Math.random().toString(36).substring(2, 9),
+        shipmentId:      newId,
+        referenceCode,
+        folderName:      String(vaultFolderName).trim(),
+        password:        String(vaultPassword).trim(),
+        createdByUserId: importerId,
+        createdAt:       new Date().toISOString(),
+      };
+      dbStore.saveVaultFolder(vaultFolder);
+    }
 
     return NextResponse.json({ success: true, data: newShipment });
   } catch (err: any) {

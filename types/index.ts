@@ -63,7 +63,8 @@ export type MilestoneType =
   | 'CARGO_HANDED_OFF_TO_CARRIER'
   | 'CARGO_PICKED_UP_FROM_PORT'
   | 'CARGO_RECEIVED_AT_WAREHOUSE'
-  | 'INCOMING_CARGO_STORED';
+  | 'INCOMING_CARGO_STORED'
+  | 'FAILED_DELIVERY_ATTEMPT';
 
 /**
  * Phase labels for grouping milestones in the timeline UI.
@@ -213,6 +214,18 @@ export interface ConnectionRequest {
   status: ConnectionStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+// ─── BOC Document Vault ──────────────────────────────────────────────────────
+
+export interface VaultFolder {
+  id: string;
+  shipmentId: string;
+  referenceCode: string;  // mirrors Shipment.referenceCode for easy lookup
+  folderName: string;     // custom display name set at shipment creation
+  password: string;       // plain-text for demo; hash server-side in production
+  createdByUserId: string;
+  createdAt: string;
 }
 
 export interface Message {
