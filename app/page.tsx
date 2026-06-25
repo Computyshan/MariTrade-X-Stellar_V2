@@ -9,7 +9,6 @@ import {
   ShieldCheck, 
   Search, 
   ArrowRight, 
-  Activity, 
   FileLock2, 
   Coins, 
   TrendingUp, 
@@ -18,8 +17,11 @@ import {
   CheckCircle,
   FileText,
   Truck,
-  Layers,
-  Globe
+  Globe,
+  Lock,
+  Zap,
+  BarChart3,
+  ChevronRight,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -29,11 +31,10 @@ export default function LandingPage() {
   const [errorSearch, setErrorSearch] = useState('');
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  // Mouse trajectory tracker for fluid interactive background blobs
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth - 0.5) * 40;
-      const y = (e.clientY / window.innerHeight - 0.5) * 40;
+      const x = (e.clientX / window.innerWidth - 0.5) * 30;
+      const y = (e.clientY / window.innerHeight - 0.5) * 30;
       setMousePos({ x, y });
     };
     window.addEventListener('mousemove', handleMouseMove);
@@ -43,7 +44,6 @@ export default function LandingPage() {
   const handleTrackSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!trackCode.trim()) return;
-
     const formatted = trackCode.trim().toUpperCase();
     if (formatted === 'MT-2026-00341' || formatted === 'MT-2026-00122' || formatted.startsWith('MT-')) {
       router.push(`/track/${formatted}`);
@@ -53,354 +53,308 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f9fb] text-[#191c1e] flex flex-col font-sans select-none selection:bg-secondary/20 scroll-smooth">
-      
-      {/* Top Professional Navigation Bar */}
-      <nav className="sticky top-0 z-50 flex justify-between items-center w-full px-8 py-4 h-16 bg-white border-b border-[#e0e3e5] shadow-xs">
-        <div className="flex items-center gap-8">
+    <div className="min-h-screen bg-[#f7f9fb] text-[#191c1e] flex flex-col font-sans select-none scroll-smooth">
+
+      {/* Navigation */}
+      <nav className="sticky top-0 z-50 flex justify-between items-center w-full px-8 py-0 h-16 bg-white border-b border-[#e0e3e5]">
+        <div className="flex items-center gap-10">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8.5 h-8.5 bg-secondary rounded flex items-center justify-center transition-transform group-hover:scale-102">
-              <Ship className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-secondary rounded-md flex items-center justify-center">
+              <Ship className="w-4.5 h-4.5 text-white" />
             </div>
-            <div>
-              <span className="text-xl font-display font-black text-black leading-none block tracking-tight">MariTrade</span>
-              <span className="text-[9px] text-gray-500 font-mono tracking-widest leading-none mt-0.5 block uppercase">Stellar Escrow Trust</span>
+            <div className="leading-none">
+              <span className="text-[17px] font-display font-black text-black tracking-tight block">MariTrade</span>
+              <span className="text-[9px] text-gray-400 font-mono tracking-widest uppercase block mt-0.5">Logistics Tracking Platform</span>
             </div>
           </Link>
-          <div className="hidden md:flex gap-6">
-            <span className="text-xs font-label-caps font-bold text-secondary border-b-2 border-secondary py-1 cursor-pointer">Platform</span>
-            <span className="text-xs font-label-caps font-semibold text-[#45464d] hover:text-secondary py-1 cursor-pointer transition-colors">Resources</span>
-            <span className="text-xs font-label-caps font-semibold text-[#45464d] hover:text-secondary py-1 cursor-pointer transition-colors">Pricing</span>
+          <div className="hidden md:flex items-center gap-1">
+            <span className="text-[13px] font-semibold text-secondary border-b-2 border-secondary px-3 py-[18px] cursor-pointer">Platform</span>
+            <span className="text-[13px] font-semibold text-[#45464d] hover:text-black px-3 py-[18px] cursor-pointer transition-colors">How it works</span>
           </div>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <Link 
-            href="/dashboard" 
-            className="hidden lg:flex items-center gap-2 px-6 py-2 bg-secondary text-white text-xs font-label-caps font-semibold tracking-wide rounded border border-secondary hover:opacity-90 transition-all cursor-pointer shadow-sm active:translate-y-[0.5px]"
+
+        <div className="flex items-center gap-3">
+          <button className="text-[#45464d] hover:text-black p-1.5 rounded transition-colors relative" title="Notifications">
+            <Bell className="w-4.5 h-4.5" />
+            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-secondary" />
+          </button>
+          <button className="text-[#45464d] hover:text-black p-1.5 rounded transition-colors" title="Account">
+            <User className="w-4.5 h-4.5" />
+          </button>
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1.5 px-5 py-2 bg-secondary text-white text-[13px] font-semibold rounded-md hover:bg-[#0047a3] transition-colors shadow-sm"
           >
-            Enter Dashboard Portal
+            Open Dashboard
+            <ChevronRight className="w-3.5 h-3.5" />
           </Link>
-          <div className="flex gap-2.5 items-center mr-1">
-            <button className="text-[#45464d] hover:text-black p-1 rounded-md transition-colors cursor-pointer relative" title="Notifications">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-secondary-container" />
-            </button>
-            <button className="text-[#45464d] hover:text-black p-1 rounded-md transition-colors cursor-pointer" title="Account">
-              <User className="w-5 h-5" />
-            </button>
-          </div>
         </div>
       </nav>
 
       <main className="flex-1">
-        
-        {/* Hero Section with Cinematic Depth and Interactive Lighting */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-[#131b2e] to-black min-h-[750px] flex flex-col items-center justify-center text-center px-4 sm:px-6 lg:px-8">
-          
-          {/* Atmospheric Layer - Glow Blobs reactive to mouse coordinates */}
-          <div className="absolute inset-0 opacity-15 pointer-events-none">
-            <div 
-              className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-secondary rounded-full blur-[130px] transition-transform duration-500 ease-out"
-              style={{ transform: `translate(${mousePos.x}px, ${mousePos.y}px)` }}
+
+        {/* Hero */}
+        <section className="relative overflow-hidden bg-[#0a1628] min-h-[680px] flex flex-col items-center justify-center text-center px-6">
+
+          {/* Subtle ambient glow */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div
+              className="absolute top-[20%] left-[30%] w-[500px] h-[500px] rounded-full opacity-[0.07]"
+              style={{
+                background: 'radial-gradient(circle, #0058be 0%, transparent 70%)',
+                transform: `translate(${mousePos.x}px, ${mousePos.y}px)`,
+                transition: 'transform 0.6s ease-out',
+              }}
             />
-            <div 
-              className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-secondary-container rounded-full blur-[130px] transition-transform duration-500 ease-out"
-              style={{ transform: `translate(${-mousePos.x}px, ${-mousePos.y}px)` }}
+            <div
+              className="absolute bottom-[10%] right-[20%] w-[400px] h-[400px] rounded-full opacity-[0.05]"
+              style={{
+                background: 'radial-gradient(circle, #0BAFB0 0%, transparent 70%)',
+                transform: `translate(${-mousePos.x}px, ${-mousePos.y}px)`,
+                transition: 'transform 0.6s ease-out',
+              }}
+            />
+            {/* Subtle grid lines */}
+            <div
+              className="absolute inset-0 opacity-[0.03]"
+              style={{
+                backgroundImage: 'linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px)',
+                backgroundSize: '60px 60px',
+              }}
             />
           </div>
 
-          <div className="relative z-10 max-w-4xl mx-auto space-y-7">
-            
+          <div className="relative z-10 max-w-3xl mx-auto space-y-6">
+
             {/* Trust badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-secondary/30 bg-secondary/10 text-secondary text-[11px] font-label-caps font-bold">
-              <ShieldCheck className="w-4 h-4 text-secondary-container animate-pulse" />
-              <span className="tracking-wide">Secured via Stellar Blockchain Multi-Signature Trust Contracts</span>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/10 bg-white/5 text-[#7c9cbf] text-[11px] font-semibold tracking-wide">
+              <ShieldCheck className="w-3.5 h-3.5 text-ocean-400" />
+              <span>Secured by Stellar Blockchain Multi-Signature Contracts</span>
             </div>
 
-            {/* Display Header */}
-            <h1 className="text-3xl sm:text-5xl md:text-display-lg font-display font-black text-white leading-tight tracking-tight">
-              Smart Milestone-Based Escrows <br className="hidden md:block" /> for <span className="text-[#adc6ff] underline decoration-secondary decoration-wavy underline-offset-8">Filipino SME Importers</span>
+            {/* Headline */}
+            <h1 className="text-4xl sm:text-5xl md:text-[56px] font-display font-black text-white leading-[1.1] tracking-tight">
+              Track your Shipments.<br className="hidden sm:block" />
+              <span>Digitize the Process.</span><br className="hidden sm:block" />
+              Made for{' '}
+              <span className="text-[#adc6ff]">Filipino Importers/Exporters/Freight Forwarders/Custom Brokers/Warehouse Operators</span>
             </h1>
 
-            {/* Detailed descriptor */}
-            <p className="text-sm sm:text-body-lg text-[#7c839b] max-w-2xl mx-auto font-sans leading-relaxed">
-              Connect importers, global exporters, customs brokers, and dry logistics fleets in an unified trust chain. Escrows are automatically released on Bureau of Customs clearance and signed trucker receipts.
+            {/* Subtext */}
+            <p className="text-[15px] text-[#7c839b] max-w-xl mx-auto leading-relaxed">
+             Digitize the shipping process with MariTrade, a blockchain-powered escrow platform for Filipino's who are in the freight shipping business. Track shipments, secure payments, communicate internally, and streamline logistics with ease.
             </p>
 
-            {/* Public Interactive Tracker Control Panel */}
-            <div className="mt-8 bg-white/5 backdrop-blur-xl p-4 sm:p-5 rounded-xl border border-white/10 max-w-2xl mx-auto w-full transition-all hover:bg-white/8 hover:border-white/15 shadow-2xl">
-              <form onSubmit={handleTrackSubmit} className="flex flex-col sm:flex-row gap-2">
-                <div className="flex-1 relative">
-                  <Search className="w-4.5 h-4.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7c839b]" />
-                  <input
-                    type="text"
-                    placeholder="Enter Shipping Ref (e.g. MT-2026-00341)"
-                    className="w-full bg-white text-black rounded px-3 py-3 pl-11 outline-none text-sm transition-all focus:ring-2 focus:ring-secondary border-none"
-                    value={trackCode}
-                    onChange={(e) => {
-                      setTrackCode(e.target.value);
-                      setErrorSearch('');
-                    }}
-                  />
-                </div>
-                <button 
-                  type="submit" 
-                  className="bg-[#14b8a6] hover:bg-[#0d9488] text-white px-8 py-3 rounded text-sm font-bold tracking-wider font-sans transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md active:translate-y-[0.5px]"
-                >
-                  <span>Track</span>
-                  <ArrowRight className="w-4.5 h-4.5" />
-                </button>
-              </form>
-              
-              {errorSearch && (
-                <p className="text-rose-400 text-xs text-left mt-2 pl-3 font-semibold font-mono flex items-center gap-1.5">
-                  <span>⚠️</span> {errorSearch}
-                </p>
-              )}
-
-              {/* Instant click to autofill references */}
-              <div className="mt-4 flex flex-col sm:flex-row gap-2 sm:gap-4 text-xs font-label-caps font-semibold justify-center md:justify-start items-center">
-                <span className="text-[#7c839b]">Try real verification codes:</span>
-                <div className="flex flex-wrap gap-2">
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      setTrackCode('MT-2026-00341');
-                      setErrorSearch('');
-                    }} 
-                    className="text-white hover:text-secondary underline underline-offset-4 decoration-secondary/40 transition-colors uppercase cursor-pointer"
-                  >
-                    MT-2026-00341 (In Transit)
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      setTrackCode('MT-2026-00122');
-                      setErrorSearch('');
-                    }} 
-                    className="text-white hover:text-secondary underline underline-offset-4 decoration-secondary/40 transition-colors uppercase cursor-pointer"
-                  >
-                    MT-2026-00122 (Delivered)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </section>
-
-        {/* Bento Grid Ecosystem Layout representation */}
-        <section className="py-20 px-6 sm:px-8 max-w-7xl mx-auto space-y-12">
-          
-          <div className="text-center max-w-2xl mx-auto">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#0058be] font-bold">Comprehensive Trust Ecosystem</span>
-            <h2 className="text-2xl sm:text-headline-md font-display font-bold text-black tracking-tight mt-1">Multi-Sovereign Digital Logistics</h2>
-            <p className="text-xs sm:text-sm text-gray-500 mt-2 font-sans">
-              Combining on-chain stablecoin multi-signatures, strict Bureau of Customs authorization guidelines, and continuous freight carrier ledger records.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            
-            {/* Large Card: Core Technology flow (8/12 cols) */}
-            <div className="md:col-span-8 bg-white rounded-xl border border-[#e0e3e5] p-7 sm:p-8 flex flex-col justify-between overflow-hidden relative shadow-sm group hover:border-secondary/40 transition-all">
-              <div>
-                <span className="text-[10px] font-mono text-secondary tracking-widest uppercase font-bold block mb-1">Core Technology</span>
-                <h3 className="text-lg sm:text-headline-sm font-display font-extrabold text-black mb-3">Milestone-Verified Asset Release</h3>
-                <p className="text-xs sm:text-sm text-[#45464d] leading-relaxed max-w-lg">
-                  Funds held in cryptographic ledger escrows are programmatically released only when physical benchmarks are satisfied. Verified instantly by BOC database entries and authorized logistics operators.
-                </p>
-              </div>
-
-              {/* Progress Milestones timeline component */}
-              <div className="mt-8 flex flex-col sm:flex-row gap-4 overflow-x-auto pb-2 select-none">
-                <div className="flex-1 min-w-[170px] p-4 bg-[#f8fafc] rounded border border-[#eceef0] relative hover:border-secondary/30 transition-all">
-                  <FileText className="w-5 h-5 text-secondary mb-2.5" />
-                  <h4 className="font-bold text-xs text-black">1. BOC Lodgement</h4>
-                  <p className="text-[10px] text-[#45464d] mt-1 leading-snug">SAD registered & validated on-chain in real-time.</p>
-                </div>
-                <div className="flex-1 min-w-[170px] p-4 bg-[#f8fafc] rounded border border-[#eceef0] relative hover:border-secondary/30 transition-all">
-                  <CheckCircle className="w-5 h-5 text-secondary mb-2.5" />
-                  <h4 className="font-bold text-xs text-black">2. Gate Pass Issued</h4>
-                  <p className="text-[10px] text-[#45464d] mt-1 leading-snug">Clearance signal automates multi-sig triggers.</p>
-                </div>
-                <div className="flex-1 min-w-[170px] p-4 bg-[#f8fafc] rounded border border-[#eceef0] relative hover:border-secondary/30 transition-all">
-                  <Truck className="w-5 h-5 text-secondary mb-2.5" />
-                  <h4 className="font-bold text-xs text-black">3. Final Delivery</h4>
-                  <p className="text-[10px] text-[#45464d] mt-1 leading-snug">Trucker POD signature releases collateral funds.</p>
-                </div>
-              </div>
-
-              <div className="absolute -right-6 -bottom-6 opacity-3 group-hover:opacity-6 transition-opacity pointer-events-none">
-                <Layers className="w-40 h-40 text-black" />
-              </div>
-            </div>
-
-            {/* Small Card: Stellar Blockchain highlights (4/12 cols) */}
-            <div className="md:col-span-4 bg-[#131b2e] text-white rounded-xl p-7 flex flex-col justify-between items-center text-center shadow-md relative overflow-hidden hover:scale-[1.01] transition-transform">
-              <div className="w-14 h-14 rounded-full bg-secondary-container/10 border border-secondary-container/40 flex items-center justify-center mb-4 mt-2">
-                <Coins className="w-6 h-6 text-[#adc6ff]" />
-              </div>
-              <h3 className="text-base sm:text-headline-sm font-display font-extrabold text-white mb-2">Stellar Protocol Integration</h3>
-              <p className="text-[11.5px] text-[#7c839b] leading-relaxed px-2">
-                Near-zero transaction fees and instant finality settlements over digital USD stablecoins. No banking intermediaries or manual wire delays.
-              </p>
-              <div className="mt-6 flex items-center gap-1.5 text-[9.5px] font-mono tracking-wider text-[#adc6ff] uppercase font-bold cursor-pointer hover:text-white transition-colors">
-                <span>View On-Chain Ledger Nodes</span>
-                <TrendingUp className="w-3.5 h-3.5" />
-              </div>
-            </div>
-
-            {/* Columns section: Trust metrics (4/12 cols) */}
-            <div className="md:col-span-4 bg-[#eceef0] rounded-xl p-7 flex flex-col justify-between border border-[#e0e3e5] shadow-xs">
-              <h3 className="text-xs font-mono font-bold text-black uppercase tracking-wider mb-6">Verified Ecosystem Stats</h3>
-              <div className="space-y-6 flex-1 flex flex-col justify-around">
-                <div className="border-b border-gray-300 pb-3 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-gray-500 font-mono block">CLIENT NETWORK</span>
-                    <strong className="text-xl font-display font-bold text-black">500+ SME Importers</strong>
-                  </div>
-                  <CheckCircle className="w-4.5 h-4.5 text-secondary" />
-                </div>
-                <div className="border-b border-gray-300 pb-3 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-gray-500 font-mono block">COVERAGE NODES</span>
-                    <strong className="text-xl font-display font-bold text-black">15 Shipping Hubs</strong>
-                  </div>
-                  <Globe className="w-4.5 h-4.5 text-secondary" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-gray-500 font-mono block">SECURED VALUES</span>
-                    <strong className="text-xl font-display font-bold text-black">$20M+ Deposited</strong>
-                  </div>
-                  <Coins className="w-4.5 h-4.5 text-secondary" />
-                </div>
-              </div>
-            </div>
-
-            {/* Columns section: Rich visual backdrop representation (8/12 cols) */}
-            <div className="md:col-span-8 h-80 rounded-xl overflow-hidden relative group shadow-sm border border-[#e0e3e5]">
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent z-10" />
-              <img 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1cruobfxTUCKuEOmfY7l-Jkw17fFQG9uc2e6H2Z1b1cuMImE0-TjeCh5wE-V4ljQwN9LTIcbIxqX5Ar2DMNU0favO1opfL38EJeeSQiZX4RvrTTraRVe3Z9j1qOZkxH-51iQ8Ec-gnP9x4BsVeqVVNW1uwV5adueIBijHlNxrCchMsUnW9pGt2gVaTOlZvrgndTMV6dE5WI8xmGTKrW83S3roeVTlpdvLCWjHlKXtZRsHb758clFkU4RYrn0KlmzJOQfzwTG_asN5" 
-                alt="Container ship navigating Manila sunset"
-                className="object-cover h-full w-full group-hover:scale-101 transition-transform duration-700 pointer-events-none"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute bottom-6 left-6 right-6 z-20 text-white space-y-1">
-                <span className="text-[9px] font-mono text-secondary-container bg-white/10 px-2 py-0.5 rounded backdrop-blur-xs font-bold uppercase tracking-wider">MARITIME VISIBILITY</span>
-                <h4 className="text-lg font-display font-bold text-white tracking-tight pt-1">Philippines&apos; Port Gateway to Global Trade</h4>
-                <p className="text-[11px] text-[#7c839b] max-w-sm font-sans leading-relaxed">
-                  Connecting importer enterprises through transparent, role-authorized smart contract frameworks.
-                </p>
-              </div>
-            </div>
-
-          </div>
-        </section>
-
-        {/* Immersive Testimonial Quote */}
-        <section className="bg-white border-t border-b border-[#e0e3e5] py-16 text-center select-none">
-          <div className="max-w-4xl mx-auto px-6 lg:px-8 space-y-6">
-            <Anchor className="w-10 h-10 text-secondary mx-auto transform hover:rotate-45 transition-transform duration-500" />
-            <p className="text-base sm:text-lg italic text-[#2d3133] font-serif leading-relaxed max-w-2xl mx-auto">
-              &ldquo;MariTrade has reduced payment dispute resolution times for our shipping logistics routes across Subic and Manila Ports by over 85%, creating instant trust.&rdquo;
-            </p>
-            <div className="text-xs space-y-0.5">
-              <h4 className="font-extrabold text-black">Emilio Lacson</h4>
-              <p className="text-gray-500 font-mono uppercase tracking-wider text-[10px]">BINONDO METALS IMPORTING INC.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Ready to start CTA Section */}
-        <section className="py-20 bg-[#eceef0] text-center">
-          <div className="max-w-3xl mx-auto px-6 space-y-6">
-            <h2 className="text-2xl sm:text-headline-md font-display font-extrabold text-[#191c1e] tracking-tight">
-              Ready to Secure Your Next Cargo shipment?
-            </h2>
-            <p className="text-xs sm:text-sm text-[#45464d] max-w-lg mx-auto leading-relaxed">
-              Join the 500+ Filipino businesses leveraging MariTrade for friction-less, trust-less international trade.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-3 pt-3">
-              <Link 
-                href="/dashboard" 
-                className="px-8 py-3 bg-black text-white rounded text-xs font-label-caps font-bold hover:bg-black/90 tracking-wide transition-all uppercase cursor-pointer"
+            {/* CTA buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+              <Link
+                href="/dashboard"
+                className="px-7 py-3 bg-secondary text-white text-[13px] font-bold rounded-md hover:bg-[#0047a3] transition-colors shadow-lg shadow-secondary/20 flex items-center justify-center gap-2"
               >
-                Get Started for Free
+                Start for Free
+                <ArrowRight className="w-4 h-4" />
               </Link>
-              <button 
+              <button
                 type="button"
-                className="px-8 py-3 border border-outline text-[#191c1e] rounded text-xs font-label-caps font-semibold hover:bg-white transition-all uppercase cursor-pointer"
+                className="px-7 py-3 border border-white/15 text-white text-[13px] font-semibold rounded-md hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
               >
-                Talk to an Expert
+                Watch Demo
               </button>
             </div>
+
+            {/* Subtext */}
+            <p className="text-[13px] text-[#7c839b] max-w-xl mx-auto leading-relaxed">
+              Got a shipment to track? Enter your reference code below to see it publicly.
+            </p>
+            {/* Public shipment tracker */}
+            <div className="mt-6 bg-white/5 border border-white/10 rounded-xl p-4 max-w-xl mx-auto w-full">
+              <p className="text-[11px] font-mono text-[#7c839b] uppercase tracking-widest mb-3 text-left">Public Shipment Tracker</p>
+              <form onSubmit={handleTrackSubmit} className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#7c839b]" />
+                  <input
+                    type="text"
+                    placeholder="Enter reference code  (e.g. MT-2026-00341)"
+                    className="w-full bg-white text-black rounded-md px-3 py-2.5 pl-9 outline-none text-[13px] focus:ring-2 focus:ring-secondary border border-transparent"
+                    value={trackCode}
+                    onChange={(e) => { setTrackCode(e.target.value); setErrorSearch(''); }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="bg-ocean-400 hover:bg-ocean-600 text-white px-5 py-2.5 rounded-md text-[13px] font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  Track
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </form>
+              {errorSearch && (
+                <p className="text-rose-400 text-[11px] text-left mt-2 pl-1 font-mono">⚠ {errorSearch}</p>
+              )}
+              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#7c839b]">
+                <span>Sample codes:</span>
+                <button type="button" onClick={() => { setTrackCode('MT-2026-00341'); setErrorSearch(''); }} className="text-[#adc6ff] hover:text-white transition-colors underline underline-offset-2">MT-2026-00341</button>
+                <button type="button" onClick={() => { setTrackCode('MT-2026-00122'); setErrorSearch(''); }} className="text-[#adc6ff] hover:text-white transition-colors underline underline-offset-2">MT-2026-00122</button>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        {/* Trusted by bar */}
+        <section className="bg-white border-b border-[#e0e3e5] py-5 px-8">
+          <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
+            <span className="text-[11px] font-mono text-[#76777d] uppercase tracking-widest whitespace-nowrap">Trusted by</span>
+            <div className="flex flex-wrap justify-center sm:justify-start items-center gap-8 text-[12px] font-bold text-[#45464d] tracking-tight">
+              <span className="opacity-60">BINONDO METALS</span>
+              <span className="opacity-60">MANILA CARGO CO.</span>
+              <span className="opacity-60">CEBU TRADERS GUILD</span>
+              <span className="opacity-60">SUBIC FREIGHT INTL.</span>
+              <span className="opacity-60">DAVAO IMPORTS INC.</span>
+            </div>
+          </div>
+        </section>
+
+        {/* How it works*/}
+        <section className="py-20 px-6 sm:px-8 max-w-6xl mx-auto">
+          <div className="text-center max-w-xl mx-auto mb-14">
+            <span className="text-[10px] font-Inter uppercase tracking-widest text-secondary font-bold">How Does MariTrade Work?</span>
+            <h2 className="text-2xl sm:text-[32px] font-display font-black text-black tracking-tight mt-2 leading-tight">
+              MariTrade Introduces a payment-secured, organized, digitized platform for freight shipping nationwide and overseas.
+            </h2>
+            <p className="text-[13px] text-[#45464d] mt-3 leading-relaxed">
+              Where every peso stays protected in a cryptographic escrow until verified events are confirmed by your logistics chain network.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {[
+              {
+                step: '01',
+                icon: <FileLock2 className="w-5 h-5 text-secondary" />,
+                title: 'Create a Shipment Record and Fund Escrow',
+                desc: 'Importers create a shipment record with all relevant details, including assigned personnel from your trusted network, shipping documents, and expected milestones.',
+              },
+              {
+                step: '02',
+                icon: <Truck className="w-5 h-5 text-ocean-400" />,
+                title: 'Logistics Milestone Logging',
+                desc: 'Trusted Freight forwarders, Customs brokers, and Warehouse operators who belong to your network log verified milestones with photo proof as the cargo moves.',
+              },
+              {
+                step: '03',
+                icon: <CheckCircle className="w-5 h-5 text-green-500" />,
+                title: 'Release Funds Upon Verified Delivery',
+                desc: 'Once all milestones are confirmed, and with authorization from you, the escrowed funds are released to the exporter in seconds via Stellar USDC. No delays, no disputes.',
+              },
+            ].map((item) => (
+              <div key={item.step} className="bg-white rounded-xl border border-[#e0e3e5] p-7 relative group hover:border-secondary/30 transition-colors">
+                <span className="absolute top-6 right-6 text-[11px] font-mono text-[#c6c6cd] font-bold">{item.step}</span>
+                <div className="w-10 h-10 rounded-lg bg-[#f2f4f6] flex items-center justify-center mb-5">
+                  {item.icon}
+                </div>
+                <h3 className="font-display font-bold text-[15px] text-black mb-2">{item.title}</h3>
+                <p className="text-[13px] text-[#45464d] leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Capabilities strip */}
+        <section className="bg-white border-t border-b border-[#e0e3e5] py-14 px-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-10">
+              <span className="text-[15px] font-Inter uppercase tracking-widest text-secondary font-bold">Built for the Whole Chain</span>
+              <h2 className="text-[24px] font-display font-black text-black mt-2 tracking-tight">Everything the trade chain needs</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { icon: <Lock className="w-5 h-5 text-secondary" />, title: 'Multi-Sig Escrow', desc: 'USDC held in Stellar 3-of-3 multi-signature accounts. No single party can move funds alone.' },
+                { icon: <BarChart3 className="w-5 h-5 text-secondary" />, title: 'Real-Time Tracking', desc: 'Live milestone feed from every logistics role — freight, customs, warehouse, — in one view.' },
+                { icon: <Globe className="w-5 h-5 text-secondary" />, title: 'Native Communications', desc: 'Communicate and network with partners internally, No more lost emails or jumping from other messaging apps.' },
+                { icon: <FileText className="w-5 h-5 text-secondary" />, title: 'Secured BOC Document Center', desc: 'All shipping and customs documents can be stored on an authorized folder per shipment. Customs brokers get dedicated read access.' },
+                { icon: <Zap className="w-5 h-5 text-secondary" />, title: 'Instant Settlement', desc: 'Priority milestones confirmed? Funds move to the exporter in seconds. No forms. No delays.' },
+              ].map((cap, i) => (
+                <div key={i} className="p-5 rounded-xl border border-[#e0e3e5] hover:border-secondary/30 transition-colors bg-[#f7f9fb]">
+                  <div className="w-9 h-9 bg-[#eef4ff] rounded-lg flex items-center justify-center mb-4">
+                    {cap.icon}
+                  </div>
+                  <h3 className="font-display font-bold text-[14px] text-black mb-1.5">{cap.title}</h3>
+                  <p className="text-[12px] text-[#45464d] leading-relaxed">{cap.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="py-20 bg-[#0a1628] text-center px-6">
+          <div className="max-w-2xl mx-auto space-y-5">
+            <h2 className="text-[32px] font-display font-black text-white tracking-tight leading-tight">
+              Ready to protect your next<br />cargo shipment?
+            </h2>
+            <p className="text-[14px] text-[#7c839b] max-w-md mx-auto leading-relaxed">
+              Join 500+ Filipino businesses using MariTrade to move goods with full payment protection and supply chain transparency.
+            </p>
+            <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+              <Link
+                href="/dashboard"
+                className="px-8 py-3 bg-secondary text-white rounded-md text-[13px] font-bold hover:bg-[#0047a3] transition-colors shadow-lg shadow-secondary/25 flex items-center justify-center gap-2"
+              >
+                Get Started — Free
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <button
+                type="button"
+                className="px-8 py-3 border border-white/15 text-white rounded-md text-[13px] font-semibold hover:bg-white/5 transition-colors"
+              >
+                Talk to Our Team
+              </button>
+            </div>
+            <p className="text-[11px] text-[#76777d] font-mono">No credit card required · SEC-registered platform · BOC-compliant</p>
           </div>
         </section>
 
       </main>
 
-      {/* Structured Footer */}
-      <footer className="w-full bg-[#e0e3e5] border-t border-[#c6c6cd] py-14 px-8 text-[#191c1e]">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-12 pb-10 border-b border-[#c6c6cd]">
-          <div className="space-y-4 max-w-sm">
+      {/* Footer */}
+      <footer className="w-full bg-white border-t border-[#e0e3e5] py-14 px-8">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-start gap-12 pb-10 border-b border-[#e0e3e5]">
+          <div className="space-y-3 max-w-xs">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 bg-primary rounded flex items-center justify-center">
+              <div className="w-7 h-7 bg-secondary rounded-md flex items-center justify-center">
                 <Ship className="w-4 h-4 text-white" />
               </div>
-              <span className="text-lg font-display font-black tracking-tight text-black">MariTrade Global</span>
+              <span className="text-[16px] font-display font-black text-black tracking-tight">MariTrade</span>
             </div>
-            <p className="text-xs text-[#45464d] leading-relaxed">
-              Reimagining logistics trust for Filipino importing merchants via instant, decentralized stellar currency settlement systems.
+            <p className="text-[12px] text-[#45464d] leading-relaxed">
+              Blockchain-powered escrow and logistics for Filipino MSME Owners. Built on Stellar. Verified by the Bureau of Customs.
             </p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-label-caps font-bold text-black uppercase tracking-widest">Platform</h4>
-              <ul className="space-y-2 text-xs text-[#45464d]">
-                <li className="hover:underline cursor-pointer">Multisig Escrow</li>
-                <li className="hover:underline cursor-pointer">Live Tracking</li>
-                <li className="hover:underline cursor-pointer">Broker Integration</li>
-              </ul>
-            </div>
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-label-caps font-bold text-black uppercase tracking-widest">Company</h4>
-              <ul className="space-y-2 text-xs text-[#45464d]">
-                <li className="hover:underline cursor-pointer">About Us</li>
-                <li className="hover:underline cursor-pointer">Sovereign Compliance</li>
-                <li className="hover:underline cursor-pointer">Contact</li>
-              </ul>
-            </div>
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-label-caps font-bold text-black uppercase tracking-widest">Legal</h4>
-              <ul className="space-y-2 text-xs text-[#45464d]">
-                <li className="hover:underline cursor-pointer">Privacy Charter</li>
-                <li className="hover:underline cursor-pointer">Stellar Smart Terms</li>
-                <li className="hover:underline cursor-pointer">BOC Security Protocols</li>
-              </ul>
-            </div>
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-label-caps font-bold text-black uppercase tracking-widest">Support</h4>
-              <ul className="space-y-2 text-xs text-[#45464d]">
-                <li className="hover:underline cursor-pointer">System Status</li>
-                <li className="hover:underline cursor-pointer">API Integration</li>
-                <li className="hover:underline cursor-pointer">Helpdesk</li>
-              </ul>
-            </div>
+            {[
+              { title: 'Platform', links: ['Terms of Use', 'Privacy Policy',] },
+            ].map((col) => (
+              <div key={col.title} className="space-y-3">
+                <h4 className="text-[10px] font-mono font-bold text-black uppercase tracking-widest">{col.title}</h4>
+                <ul className="space-y-2">
+                  {col.links.map((link) => (
+                    <li key={link} className="text-[12px] text-[#45464d] hover:text-black cursor-pointer transition-colors">{link}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] text-gray-500 font-mono">
-          <span>© 2026 MariTrade Global Logistics. Secured via Stellar Blockchain. All rights reserved.</span>
-          <span>Created with Google AI Studio</span>
+        <div className="max-w-6xl mx-auto pt-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-[11px] text-[#76777d] font-Inter">
+          <span>© 2026 MariTrade Logistics. All rights reserved.</span>
+          <span className="flex items-center gap-1.5">
+          </span>
         </div>
       </footer>
 
     </div>
   );
 }
-
