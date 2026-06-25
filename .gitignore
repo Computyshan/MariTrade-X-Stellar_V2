@@ -1,8 +1,32 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
 node_modules/
+
+# ─── Next.js build output ────────────────────────────────────────────────────
 .next/
-coverage/
-.DS_Store
-*.log
+out/
+
+# ─── Environment variables ───────────────────────────────────────────────────
 .env*
 !.env.example
-!.env.local
+
+# ─── Rust / Soroban contract build artifacts ─────────────────────────────────
+contracts/escrow/target/
+**/target/
+# ─── Supabase local dev ──────────────────────────────────────────────────────
+supabase/.env
+supabase/.temp/
+
+# ─── TypeScript ──────────────────────────────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
+
+# ─── Testing & coverage ──────────────────────────────────────────────────────
+coverage/
+
+# ─── OS & editor clutter ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+
+# ─── Misc ────────────────────────────────────────────────────────────────────
+.vercel
