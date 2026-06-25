@@ -26,6 +26,11 @@ mod types;
 
 pub use escrow::MariTradeEscrowContract;
 
-// Re-export for integration tests
+// The `contractimpl` macro generates `MariTradeEscrowContractClient` inside
+// the `escrow` module. Re-export it at crate root so tests can import it via
+// `crate::MariTradeEscrowContractClient`.
+#[cfg(test)]
+pub use escrow::MariTradeEscrowContractClient;
+
 #[cfg(test)]
 mod tests;

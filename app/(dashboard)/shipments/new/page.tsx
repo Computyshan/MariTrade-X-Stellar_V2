@@ -5,15 +5,19 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession } from '@/hooks/use-user-session';
+import { useFreighter } from '@/hooks/use-freighter';
 import {
   Ship, ChevronLeft, ChevronRight, Globe, MapPin, Coins,
   ClipboardCheck, Zap, Upload, X, Check, Users, Lock,
   Wallet, RefreshCw, FileText, AlertTriangle, Plus, Calendar,
   Building2, Package, Weight, Search, ToggleLeft, ToggleRight,
   DollarSign, Hash, FolderLock, Key, Eye, EyeOff, Copy, CheckCircle2,
-  Shuffle, ShieldCheck, FolderOpen,
+  Shuffle, ShieldCheck, FolderOpen, ExternalLink,
 } from 'lucide-react';
 import { ShipmentScope, MilestoneType, JobRole } from '@/types';
+import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
+import { signAndSubmit } from '@/lib/stellar/freighter';
+import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -121,16 +125,27 @@ const HS_CODE_SUGGESTIONS = [
 
 const PACKAGING_TYPES = ['Cartons', 'Pallets', 'Crates', 'Drums', 'Bags', 'Bales', 'Rolls', 'Bundles', 'Containers (20ft)', 'Containers (40ft)'];
 
+const STELLAR_NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as 'testnet' | 'mainnet';
+const PLATFORM_ADDRESS = process.env.NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS ?? '';
+
+// ─── Stellar step labels ──────────────────────────────────────────────────────
+
+const STELLAR_STEPS = [
+  { key: 'connect',  label: 'Connecting Freighter wallet…' },
+  { key: 'create',   label: 'Signing: Create escrow vault on Stellar (1/3)…' },
+  { key: 'assign',   label: 'Signing: Assigning logistics users on-chain (2/3)…' },
+  { key: 'fund',     label: 'Signing: Depositing USDC into escrow (3/3)…' },
+  { key: 'confirm',  label: 'Confirming transaction on Stellar…' },
+];
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Generates a random vault password like "TKY-A3F9-2026" */
 function generateVaultPassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const seg = (len: number) => Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   return `${seg(3)}-${seg(4)}-${seg(4)}`;
 }
 
-/** Derives a suggested folder name from cargo description */
 function deriveFolderName(description: string, origin: string, dest: string): string {
   const year = new Date().getFullYear();
   const slug = description.trim().split(/\s+/).slice(0, 4).join('_').toUpperCase().replace(/[^A-Z0-9_]/g, '') || 'CARGO';
@@ -172,6 +187,7 @@ function PhilippinesBadge() {
 export default function NewShipmentPage() {
   const router = useRouter();
   const { currentUser, allUsers } = useUserSession();
+  const freighter = useFreighter();
   const [step, setStep] = useState(1);
   const [errorText, setErrorText] = useState('');
 
@@ -234,6 +250,8 @@ export default function NewShipmentPage() {
   const [rateError,     setRateError]     = useState(false);
   const [escrowLoading, setEscrowLoading] = useState(false);
   const [escrowSuccess, setEscrowSuccess] = useState(false);
+  const [stellarStep,   setStellarStep]   = useState(''); // current step label
+  const [txHash,        setTxHash]        = useState('');
 
   // ── Auto-suggest vault folder name when Step 2 becomes active ───────────────
   useEffect(() => {
@@ -445,11 +463,20 @@ export default function NewShipmentPage() {
     setStep(s => Math.max(s - 1, 1));
   };
 
+  // ── Stellar escrow fund flow ───────────────────────────────────────────────
+
   const handleFundEscrow = async () => {
     setEscrowLoading(true);
     setErrorText('');
+    setStellarStep('');
+    setTxHash('');
+
+    let shipmentId   = '';
+    let referenceCode = '';
+
     try {
-      const res  = await fetch('/api/shipments', {
+      // ── 1. Create the DB shipment record ────────────────────────────────────
+      const res = await fetch('/api/shipments', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
@@ -483,16 +510,84 @@ export default function NewShipmentPage() {
         }),
       });
       const json = await res.json();
-      if (json.success && json.data) {
-        setEscrowSuccess(true);
-        setTimeout(() => router.push(`/shipments/${json.data.id}`), 2000);
-      } else {
-        setErrorText(json.error || 'Failed to create shipment.');
+      if (!json.success || !json.data) {
+        setErrorText(json.error || 'Failed to create shipment record.');
+        return;
       }
-    } catch {
-      setErrorText('Network error — please try again.');
+      shipmentId    = json.data.id;
+      referenceCode = json.data.referenceCode;
+
+      // ── 2. Connect Freighter wallet ──────────────────────────────────────────
+      setStellarStep('connect');
+      const importerAddress = freighter.publicKey ?? await freighter.connect();
+
+      // ── 3. Resolve on-chain addresses ───────────────────────────────────────
+      const exporterUser    = allUsers.find(u => u.id === exporterId);
+      const exporterAddress = exporterUser?.stellarWallet ?? PLATFORM_ADDRESS;
+
+      const logisticsAddresses = assignedUserIds
+        .map(uid => allUsers.find(u => u.id === uid)?.stellarWallet)
+        .filter((addr): addr is string => Boolean(addr));
+
+      // ── 4. Build escrow client ────────────────────────────────────────────────
+      const client            = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
+      const requiredMilestones = dbMilestonesToContractEnums(priorityMilestones);
+
+      // ── 5. createEscrow (Freighter signs tx #1) ───────────────────────────────
+      setStellarStep('create');
+      const createXdr = await client.createEscrow({
+        referenceCode,
+        importer:             importerAddress,
+        exporter:             exporterAddress,
+        amountUsd:            Number(totalValueUSD),
+        requiredMilestones,
+        partialRefundPercent: 80,
+      });
+      await signAndSubmit(createXdr, STELLAR_NETWORK);
+
+      // ── 6. assignLogisticsUsers (Freighter signs tx #2) ─────────────────────
+      if (logisticsAddresses.length > 0) {
+        setStellarStep('assign');
+        const assignXdr = await client.assignLogisticsUsers({
+          referenceCode,
+          importer: importerAddress,
+          users:    logisticsAddresses,
+        });
+        await signAndSubmit(assignXdr, STELLAR_NETWORK);
+      }
+
+      // ── 7. fund (Freighter signs tx #3 — transfers USDC into vault) ──────────
+      setStellarStep('fund');
+      const fundXdr = await client.fund({ referenceCode, importer: importerAddress });
+      const fundHash = await signAndSubmit(fundXdr, STELLAR_NETWORK);
+      setTxHash(fundHash);
+
+      // ── 8. Update DB record with Stellar contract ID + FUNDED status ─────────
+      setStellarStep('confirm');
+      await fetch(`/api/shipments/${shipmentId}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          action:         'UPDATE_STELLAR_ESCROW',
+          stellarEscrowId: fundHash,
+          escrowStatus:   'FUNDED',
+        }),
+      });
+
+      setEscrowSuccess(true);
+      setTimeout(() => router.push(`/shipments/${shipmentId}`), 2500);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Stellar transaction failed.';
+      setErrorText(msg);
+      // If the DB record was created but chain failed, we still redirect so the
+      // user can see their shipment and retry funding from the detail page.
+      if (shipmentId) {
+        setTimeout(() => router.push(`/shipments/${shipmentId}`), 3000);
+      }
     } finally {
       setEscrowLoading(false);
+      setStellarStep('');
     }
   };
 
@@ -501,6 +596,9 @@ export default function NewShipmentPage() {
     : null;
 
   const isNationwide = shipmentScope === 'NATIONWIDE';
+
+  // Current Stellar step label for the UI
+  const currentStellarLabel = STELLAR_STEPS.find(s => s.key === stellarStep)?.label ?? '';
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -853,27 +951,20 @@ export default function NewShipmentPage() {
               )}
             </div>
 
-            {/* ──────────────────────────────────────────────────────────────
-                BOC DOCUMENT VAULT SETUP
-            ────────────────────────────────────────────────────────────── */}
+            {/* BOC DOCUMENT VAULT SETUP */}
             <div className="bg-white border-2 border-maritime-100 rounded-2xl overflow-hidden shadow-sm">
-
-              {/* Header bar */}
               <div className="bg-maritime-900 px-6 py-4 flex items-center gap-3">
                 <div className="w-9 h-9 bg-maritime-700 rounded-xl flex items-center justify-center flex-shrink-0">
                   <FolderLock className="w-5 h-5 text-maritime-200" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-white">BOC Document Vault — Folder Setup</h3>
-                  <p className="text-[10px] text-maritime-300">
-                    Configure the vault folder that will hold all documents for this shipment.
-                  </p>
+                  <p className="text-[10px] text-maritime-300">Configure the vault folder that will hold all documents for this shipment.</p>
                 </div>
                 <span className="ml-auto text-[9px] font-black bg-ocean-400/20 text-ocean-400 border border-ocean-400/30 px-2 py-1 rounded-lg tracking-widest uppercase">Required</span>
               </div>
 
               <div className="p-6 space-y-6">
-                {/* Explainer */}
                 <div className="flex items-start gap-3 bg-maritime-50 border border-maritime-100 rounded-xl p-4 text-xs text-maritime-700">
                   <ShieldCheck className="w-4 h-4 text-maritime-400 flex-shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
@@ -882,125 +973,67 @@ export default function NewShipmentPage() {
                   </div>
                 </div>
 
-                {/* ── VAULT FOLDER NAME ── */}
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-maritime-900 flex items-center gap-1.5">
                     <FolderOpen className="w-4 h-4 text-maritime-400" />
                     Vault Folder Name <span className="text-coral-400">*</span>
                     <span className="text-[10px] font-normal text-gray-400 ml-1">— visible to all authorized users</span>
                   </label>
-
                   <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="e.g. JPN-MNL_STEEL_COILS_2026"
+                    <input type="text" placeholder="e.g. JPN-MNL_STEEL_COILS_2026"
                       className="w-full border border-sand-200 rounded-xl px-4 py-3 pr-10 text-sm font-mono outline-none focus:border-maritime-400 bg-sand-50 text-maritime-900 tracking-wide"
-                      value={vaultFolderName}
-                      onChange={e => setVaultFolderName(e.target.value.toUpperCase().replace(/\s+/g, '_'))}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCopyName}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maritime-400 transition-colors"
-                      title="Copy folder name"
-                    >
+                      value={vaultFolderName} onChange={e => setVaultFolderName(e.target.value.toUpperCase().replace(/\s+/g, '_'))} />
+                    <button type="button" onClick={handleCopyName} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maritime-400 transition-colors" title="Copy folder name">
                       {nameCopied ? <CheckCircle2 className="w-4 h-4 text-ocean-400" /> : <Copy className="w-4 h-4" />}
                     </button>
                   </div>
-
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const suggested = deriveFolderName(description, originCountry, destinationPort);
-                        setVaultFolderName(suggested);
-                      }}
-                      className="flex items-center gap-1.5 text-[11px] font-bold text-maritime-400 hover:text-maritime-900 transition-colors border border-maritime-100 bg-maritime-50 px-2.5 py-1 rounded-lg"
-                    >
+                    <button type="button" onClick={() => setVaultFolderName(deriveFolderName(description, originCountry, destinationPort))}
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-maritime-400 hover:text-maritime-900 transition-colors border border-maritime-100 bg-maritime-50 px-2.5 py-1 rounded-lg">
                       <Shuffle className="w-3 h-3" /> Re-suggest from cargo details
                     </button>
                     <p className="text-[10px] text-gray-400">Letters, numbers, hyphens and underscores only.</p>
                   </div>
                 </div>
 
-                {/* ── VAULT PASSWORD ── */}
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-maritime-900 flex items-center gap-1.5">
                     <Key className="w-4 h-4 text-maritime-400" />
                     Vault Password <span className="text-coral-400">*</span>
                     <span className="text-[10px] font-normal text-gray-400 ml-1">— required to open this folder in the BOC Vault</span>
                   </label>
-
-                  {/* Password input row */}
                   <div className="flex gap-2">
                     <div className="relative flex-1">
-                      <input
-                        type={showVaultPw ? 'text' : 'password'}
-                        placeholder="Type a custom password or generate one →"
-                        className={`w-full border rounded-xl px-4 py-3 pr-20 text-sm font-mono tracking-widest outline-none transition-colors ${
-                          vaultPassword
-                            ? 'border-ocean-400 bg-ocean-50/40 text-maritime-900 focus:border-ocean-400'
-                            : 'border-sand-200 bg-sand-50 focus:border-maritime-400 text-maritime-900'
-                        }`}
-                        value={vaultPassword}
-                        onChange={e => setVaultPassword(e.target.value)}
-                      />
-                      {/* Show/hide toggle */}
-                      <button
-                        type="button"
-                        onClick={() => setShowVaultPw(v => !v)}
-                        className="absolute right-9 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                        title={showVaultPw ? 'Hide password' : 'Show password'}
-                      >
+                      <input type={showVaultPw ? 'text' : 'password'} placeholder="Type a custom password or generate one →"
+                        className={`w-full border rounded-xl px-4 py-3 pr-20 text-sm font-mono tracking-widest outline-none transition-colors ${vaultPassword ? 'border-ocean-400 bg-ocean-50/40 text-maritime-900 focus:border-ocean-400' : 'border-sand-200 bg-sand-50 focus:border-maritime-400 text-maritime-900'}`}
+                        value={vaultPassword} onChange={e => setVaultPassword(e.target.value)} />
+                      <button type="button" onClick={() => setShowVaultPw(v => !v)} className="absolute right-9 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors" title={showVaultPw ? 'Hide' : 'Show'}>
                         {showVaultPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
-                      {/* Copy */}
-                      <button
-                        type="button"
-                        onClick={handleCopyPassword}
-                        disabled={!vaultPassword}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maritime-400 disabled:opacity-30 transition-colors"
-                        title="Copy password"
-                      >
+                      <button type="button" onClick={handleCopyPassword} disabled={!vaultPassword} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maritime-400 disabled:opacity-30 transition-colors" title="Copy password">
                         {pwCopied ? <CheckCircle2 className="w-4 h-4 text-ocean-400" /> : <Copy className="w-4 h-4" />}
                       </button>
                     </div>
-
-                    {/* Generate button */}
-                    <button
-                      type="button"
-                      onClick={handleGeneratePassword}
-                      className="flex items-center gap-1.5 bg-maritime-400 hover:bg-maritime-900 text-white font-bold px-4 py-3 rounded-xl text-xs transition-all whitespace-nowrap flex-shrink-0"
-                    >
-                      <Shuffle className="w-3.5 h-3.5" />
-                      Generate
+                    <button type="button" onClick={handleGeneratePassword} className="flex items-center gap-1.5 bg-maritime-400 hover:bg-maritime-900 text-white font-bold px-4 py-3 rounded-xl text-xs transition-all whitespace-nowrap flex-shrink-0">
+                      <Shuffle className="w-3.5 h-3.5" /> Generate
                     </button>
                   </div>
-
-                  {/* Strength indicator */}
                   {vaultPassword && (
                     <div className="flex items-center gap-2">
                       {(() => {
                         const len = vaultPassword.length;
-                        const hasUpper = /[A-Z]/.test(vaultPassword);
-                        const hasNum   = /[0-9]/.test(vaultPassword);
-                        const hasSpec  = /[^A-Za-z0-9]/.test(vaultPassword);
-                        const score    = [len >= 8, hasUpper, hasNum, hasSpec].filter(Boolean).length;
-                        const configs  = [
-                          { label: 'Too short', color: 'bg-coral-400',   text: 'text-coral-400'   },
-                          { label: 'Weak',      color: 'bg-coral-400',   text: 'text-coral-400'   },
-                          { label: 'Fair',      color: 'bg-amber-400',   text: 'text-amber-600'   },
-                          { label: 'Good',      color: 'bg-ocean-400',   text: 'text-ocean-600'   },
-                          { label: 'Strong',    color: 'bg-ocean-400',   text: 'text-ocean-600'   },
+                        const score = [len >= 8, /[A-Z]/.test(vaultPassword), /[0-9]/.test(vaultPassword), /[^A-Za-z0-9]/.test(vaultPassword)].filter(Boolean).length;
+                        const configs = [
+                          { label: 'Too short', color: 'bg-coral-400', text: 'text-coral-400' },
+                          { label: 'Weak',      color: 'bg-coral-400', text: 'text-coral-400' },
+                          { label: 'Fair',      color: 'bg-amber-400', text: 'text-amber-600' },
+                          { label: 'Good',      color: 'bg-ocean-400', text: 'text-ocean-600' },
+                          { label: 'Strong',    color: 'bg-ocean-400', text: 'text-ocean-600' },
                         ];
                         const cfg = len < 6 ? configs[0] : configs[score];
                         return (
                           <>
-                            <div className="flex gap-1">
-                              {[0,1,2,3].map(i => (
-                                <div key={i} className={`h-1 w-8 rounded-full transition-colors ${i < score ? cfg.color : 'bg-sand-200'}`} />
-                              ))}
-                            </div>
+                            <div className="flex gap-1">{[0,1,2,3].map(i => <div key={i} className={`h-1 w-8 rounded-full transition-colors ${i < score ? cfg.color : 'bg-sand-200'}`} />)}</div>
                             <span className={`text-[10px] font-bold ${cfg.text}`}>{cfg.label}</span>
                             <span className="text-[10px] text-gray-400">{vaultPassword.length} characters</span>
                           </>
@@ -1008,35 +1041,20 @@ export default function NewShipmentPage() {
                       })()}
                     </div>
                   )}
-
-                  <p className="text-[10px] text-gray-400 leading-relaxed">
-                    Minimum 6 characters. Use the <strong>Generate</strong> button for a secure random password in the format <span className="font-mono bg-sand-100 px-1 rounded">XXX-XXXX-XXXX</span>.
-                    Store this password safely — it cannot be recovered from MariTrade after creation.
-                  </p>
                 </div>
 
-                {/* Preview card */}
                 {(vaultFolderName || vaultPassword) && (
                   <div className="bg-sand-50 border border-sand-200 rounded-xl p-4 space-y-3">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Vault Folder Preview</p>
                     <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-maritime-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <FolderLock className="w-5 h-5 text-maritime-400" />
-                      </div>
+                      <div className="w-10 h-10 bg-maritime-100 rounded-xl flex items-center justify-center flex-shrink-0"><FolderLock className="w-5 h-5 text-maritime-400" /></div>
                       <div className="min-w-0 space-y-1">
-                        <p className="text-sm font-black text-maritime-900 font-mono truncate">
-                          {vaultFolderName || <span className="text-gray-300 font-normal">Folder name not set</span>}
-                        </p>
+                        <p className="text-sm font-black text-maritime-900 font-mono truncate">{vaultFolderName || <span className="text-gray-300 font-normal">Folder name not set</span>}</p>
                         <div className="flex items-center gap-2 text-[10px]">
                           <span className={`flex items-center gap-1 font-bold ${vaultPassword ? 'text-ocean-600' : 'text-coral-400'}`}>
                             {vaultPassword ? <><Lock className="w-3 h-3" /> Password set</> : <><AlertTriangle className="w-3 h-3" /> No password</>}
                           </span>
-                          {documents.length > 0 && (
-                            <>
-                              <span className="text-gray-300">·</span>
-                              <span className="text-gray-500">{documents.length} document{documents.length > 1 ? 's' : ''} will be added</span>
-                            </>
-                          )}
+                          {documents.length > 0 && <><span className="text-gray-300">·</span><span className="text-gray-500">{documents.length} document{documents.length > 1 ? 's' : ''} will be added</span></>}
                         </div>
                       </div>
                     </div>
@@ -1058,29 +1076,12 @@ export default function NewShipmentPage() {
           {/* Vault sidebar guide */}
           <div className="lg:col-span-2">
             <div className="bg-maritime-900 text-white p-6 rounded-2xl space-y-5 sticky top-6">
-              <h3 className="font-extrabold text-sm flex items-center gap-2">
-                <FolderLock className="w-4 h-4 text-ocean-400" /> Vault Setup Guide
-              </h3>
+              <h3 className="font-extrabold text-sm flex items-center gap-2"><FolderLock className="w-4 h-4 text-ocean-400" /> Vault Setup Guide</h3>
               <div className="space-y-4 text-[11px] text-maritime-200 leading-relaxed">
                 {[
-                  {
-                    icon: FolderOpen,
-                    color: 'text-maritime-400',
-                    title: 'Folder Name',
-                    desc: 'A human-readable identifier for this shipment\'s document folder. Visible to all authorized BOC Vault users. Auto-suggested from your cargo details — customize as needed.',
-                  },
-                  {
-                    icon: Key,
-                    color: 'text-ocean-400',
-                    title: 'Vault Password',
-                    desc: 'Required to open the folder and access its documents. Use the Generate button for a cryptographically random password. Share it with Customs Brokers and trade parties who need access.',
-                  },
-                  {
-                    icon: ShieldCheck,
-                    color: 'text-coral-400',
-                    title: 'Security Note',
-                    desc: 'MariTrade does not store vault passwords in plain text. Once created, this password cannot be retrieved — only reset by the shipment owner.',
-                  },
+                  { icon: FolderOpen, color: 'text-maritime-400', title: 'Folder Name', desc: "A human-readable identifier for this shipment's document folder. Visible to all authorized BOC Vault users." },
+                  { icon: Key, color: 'text-ocean-400', title: 'Vault Password', desc: 'Required to open the folder and access its documents. Use Generate for a cryptographically random password.' },
+                  { icon: ShieldCheck, color: 'text-coral-400', title: 'Security Note', desc: 'MariTrade does not store vault passwords in plain text. Once created, this password cannot be retrieved — only reset by the shipment owner.' },
                 ].map(item => (
                   <div key={item.title} className="flex items-start gap-3 border-b border-maritime-700 pb-4 last:border-0 last:pb-0">
                     <div className="w-7 h-7 rounded-lg bg-maritime-800 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -1090,20 +1091,6 @@ export default function NewShipmentPage() {
                       <p className="font-black text-white text-xs mb-0.5">{item.title}</p>
                       <p>{item.desc}</p>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="bg-maritime-800 rounded-xl p-3 space-y-1.5 border border-maritime-700">
-                <p className="text-[9px] font-black text-maritime-300 uppercase tracking-widest">Who can access this vault folder?</p>
-                {[
-                  { role: 'Trade Party (Importer/Exporter)', access: 'See folder + unlock + download' },
-                  { role: 'Customs Broker (assigned)',       access: 'See folder + unlock + download' },
-                  { role: 'Other Logistics Chain',          access: 'Folder not visible' },
-                ].map(r => (
-                  <div key={r.role} className="flex items-center justify-between text-[10px]">
-                    <span className="text-maritime-300">{r.role}</span>
-                    <span className={`font-bold ${r.access.startsWith('Folder not') ? 'text-coral-400' : 'text-ocean-400'}`}>{r.access}</span>
                   </div>
                 ))}
               </div>
@@ -1126,33 +1113,28 @@ export default function NewShipmentPage() {
               <input type="text" placeholder="Search by name, company, or role..." className="w-full border border-sand-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-maritime-400" value={logisticsSearch} onChange={e => setLogisticsSearch(e.target.value)} />
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {networkLoading ? (
-                  <div className="py-8 text-center">
-                    <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                    <p className="text-xs text-gray-400">Loading your Trusted Network…</p>
-                  </div>
+                  <div className="py-8 text-center"><div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" /><p className="text-xs text-gray-400">Loading your Trusted Network…</p></div>
                 ) : logisticsUsers.length === 0 ? (
                   <div className="py-6 px-3 text-center space-y-2 border border-dashed border-sand-200 rounded-xl bg-sand-50">
                     <Users className="w-8 h-8 text-gray-200 mx-auto" />
                     <p className="text-xs font-bold text-gray-500">No trusted vendors yet</p>
                     <Link href="/network" target="_blank" className="inline-flex items-center gap-1 text-[11px] font-black text-maritime-400 hover:text-maritime-900 transition-colors">Build your network →</Link>
                   </div>
-                ) : (
-                  logisticsUsers.map(user => {
-                    const assigned = assignedUserIds.includes(user.id);
-                    return (
-                      <button key={user.id} onClick={() => toggleUser(user.id)}
-                        className={`w-full flex items-center justify-between p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${assigned ? 'border-ocean-400 bg-ocean-50' : 'border-sand-200 hover:border-maritime-200'}`}>
-                        <div>
-                          <p className="text-xs font-bold text-maritime-900">{user.fullName}</p>
-                          <p className="text-[10px] text-gray-500">{user.companyName} · {JOB_ROLE_LABELS[user.jobRole]}</p>
-                        </div>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${assigned ? 'bg-ocean-400 text-white' : 'bg-sand-100 text-gray-400'}`}>
-                          {assigned ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
+                ) : logisticsUsers.map(user => {
+                  const assigned = assignedUserIds.includes(user.id);
+                  return (
+                    <button key={user.id} onClick={() => toggleUser(user.id)}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${assigned ? 'border-ocean-400 bg-ocean-50' : 'border-sand-200 hover:border-maritime-200'}`}>
+                      <div>
+                        <p className="text-xs font-bold text-maritime-900">{user.fullName}</p>
+                        <p className="text-[10px] text-gray-500">{user.companyName} · {JOB_ROLE_LABELS[user.jobRole]}</p>
+                      </div>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${assigned ? 'bg-ocean-400 text-white' : 'bg-sand-100 text-gray-400'}`}>
+                        {assigned ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1232,7 +1214,7 @@ export default function NewShipmentPage() {
               ))}
             </dl>
 
-            {/* VAULT FOLDER SUMMARY */}
+            {/* Vault summary */}
             <div className="border border-maritime-100 bg-maritime-50 rounded-xl p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <FolderLock className="w-4 h-4 text-maritime-400" />
@@ -1247,15 +1229,8 @@ export default function NewShipmentPage() {
                 <div className="flex items-center justify-between py-2">
                   <dt className="text-maritime-500 font-semibold">Vault Password</dt>
                   <dd className="flex items-center gap-2">
-                    <span className="font-mono font-black text-maritime-900 tracking-widest">
-                      {'•'.repeat(Math.min(vaultPassword.length, 12))}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleCopyPassword}
-                      className="text-maritime-400 hover:text-maritime-900 transition-colors"
-                      title="Copy password"
-                    >
+                    <span className="font-mono font-black text-maritime-900 tracking-widest">{'•'.repeat(Math.min(vaultPassword.length, 12))}</span>
+                    <button type="button" onClick={handleCopyPassword} className="text-maritime-400 hover:text-maritime-900 transition-colors" title="Copy password">
                       {pwCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-ocean-400" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </dd>
@@ -1278,16 +1253,19 @@ export default function NewShipmentPage() {
             </div>
           </div>
 
-          {/* Escrow panel */}
+          {/* ── Escrow panel ── */}
           <div className="lg:col-span-2">
             <div className="bg-maritime-900 text-white p-6 rounded-2xl space-y-5">
               <h3 className="font-extrabold text-sm flex items-center gap-2"><Wallet className="w-5 h-5 text-ocean-400" /> Stellar Escrow</h3>
+
+              {/* Amount */}
               <div className="bg-maritime-800 rounded-xl p-4 space-y-1">
                 <p className="text-[10px] text-maritime-300 font-semibold uppercase tracking-wider">Escrow Amount</p>
                 <p className="text-3xl font-black text-white font-mono">{Number(totalValueUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                <p className="text-xs text-ocean-400 font-bold">USDC · Stellar Network</p>
+                <p className="text-xs text-ocean-400 font-bold">USDC · Stellar {STELLAR_NETWORK}</p>
                 {invoiceCurrency !== 'USD' && invoiceValue && <p className="text-[10px] text-maritime-300 pt-1">Invoice: {invoiceValue} {invoiceCurrency}</p>}
               </div>
+
               {shipmentScope === 'NATIONWIDE' && (
                 <div className="bg-maritime-800 rounded-xl p-4 space-y-2">
                   <div className="flex items-center justify-between">
@@ -1296,28 +1274,67 @@ export default function NewShipmentPage() {
                   </div>
                   {rateLoading && <p className="text-sm text-maritime-400 animate-pulse">Fetching live rate…</p>}
                   {!rateLoading && phpEquivalent && (
-                    <>
-                      <p className="text-2xl font-black text-white font-mono">₱ {phpEquivalent}</p>
-                      <p className="text-[10px] text-maritime-400">Live rate: 1 USD = ₱{phpRate?.toFixed(4)}</p>
-                    </>
+                    <><p className="text-2xl font-black text-white font-mono">₱ {phpEquivalent}</p><p className="text-[10px] text-maritime-400">Live rate: 1 USD = ₱{phpRate?.toFixed(4)}</p></>
                   )}
                 </div>
               )}
+
+              {/* Freighter wallet status */}
+              <div className="bg-maritime-800 rounded-xl p-3 space-y-2">
+                <p className="text-[10px] text-maritime-300 font-semibold uppercase tracking-wider">Freighter Wallet</p>
+                {freighter.publicKey ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-ocean-400 flex-shrink-0" />
+                    <span className="font-mono text-[10px] text-white truncate">{freighter.publicKey}</span>
+                  </div>
+                ) : (
+                  <button onClick={freighter.connect} disabled={freighter.connecting}
+                    className="w-full flex items-center justify-center gap-1.5 bg-maritime-700 hover:bg-maritime-600 text-white border border-maritime-600 font-bold py-2 rounded-lg text-xs transition-all cursor-pointer disabled:opacity-50">
+                    <Wallet className="w-3.5 h-3.5" />
+                    {freighter.connecting ? 'Connecting…' : 'Connect Freighter Wallet'}
+                  </button>
+                )}
+                {freighter.error && <p className="text-[10px] text-coral-400">{freighter.error}</p>}
+              </div>
+
+              {/* Stellar step progress */}
+              {escrowLoading && currentStellarLabel && (
+                <div className="bg-maritime-800 rounded-xl p-3 flex items-center gap-2.5">
+                  <RefreshCw className="w-4 h-4 text-ocean-400 animate-spin flex-shrink-0" />
+                  <p className="text-[11px] text-maritime-200 leading-snug">{currentStellarLabel}</p>
+                </div>
+              )}
+
+              {/* Tx hash on success */}
+              {txHash && (
+                <a href={`https://stellar.expert/explorer/testnet/tx/${txHash}`} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1.5 text-[10px] text-ocean-400 hover:text-ocean-300 font-mono break-all">
+                  <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                  {txHash.substring(0, 16)}…{txHash.substring(txHash.length - 8)} ↗
+                </a>
+              )}
+
+              {/* CTA */}
               {escrowSuccess ? (
                 <div className="bg-ocean-400 rounded-xl p-4 flex items-center gap-3">
                   <Check className="w-6 h-6 text-white flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-black text-white">Escrow Funded!</p>
+                    <p className="text-sm font-black text-white">Escrow Funded on Stellar!</p>
                     <p className="text-[10px] text-white/80">Redirecting to shipment record…</p>
                   </div>
                 </div>
               ) : (
                 <button onClick={handleFundEscrow} disabled={escrowLoading}
                   className="w-full bg-ocean-400 hover:bg-ocean-600 text-maritime-900 font-black py-3 rounded-xl text-sm uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
-                  {escrowLoading ? <><RefreshCw className="w-4 h-4 animate-spin" /> Processing…</> : <><Ship className="w-4 h-4" /> Fund Escrow via Stellar</>}
+                  {escrowLoading
+                    ? <><RefreshCw className="w-4 h-4 animate-spin" /> Processing…</>
+                    : <><Ship className="w-4 h-4" /> Fund Escrow via Stellar</>}
                 </button>
               )}
-              <p className="text-[10px] text-maritime-400 text-center leading-relaxed">Funds are locked in a multi-signature Stellar escrow until all priority milestones are confirmed and you approve the release.</p>
+
+              <p className="text-[10px] text-maritime-400 text-center leading-relaxed">
+                You will be prompted to sign <strong className="text-maritime-300">up to 3 transactions</strong> in Freighter: create vault, assign team, and deposit USDC.
+              </p>
             </div>
           </div>
         </div>
