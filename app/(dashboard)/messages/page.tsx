@@ -693,7 +693,7 @@ export default function ChatNegotiationCenter() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-1.5 flex-wrap">
                                         <h4 className="font-bold text-xs text-slate-900 leading-tight truncate">{member.fullName}</h4>
-                                        <BadgeCheck className="w-3 h-3 text-ocean-400 flex-shrink-0" title="KYC Verified" />
+                                        <BadgeCheck className="w-3 h-3 text-ocean-400 flex-shrink-0" aria-label="KYC Verified" />
                                       </div>
                                       <p className="text-[10px] text-gray-400 mt-0.5 truncate">{member.companyName}</p>
                                       <span className={`inline-block mt-1 text-[8px] px-1.5 py-0.5 font-bold rounded border uppercase tracking-wide ${color}`}>

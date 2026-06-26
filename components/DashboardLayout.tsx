@@ -15,7 +15,6 @@ import {
   LayoutDashboard,
   Bell,
   UserCircle,
-  ChevronDown,
   Bot,
   Network
 } from 'lucide-react';
@@ -29,7 +28,12 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children, flush = false }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, allUsers, setCurrentUser } = useUserSession();
+  const { currentUser, allUsers, setCurrentUser, signOut } = useUserSession();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace('/login');
+  };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showBot, setShowBot] = useState(false);
   const [botMessage, setBotMessage] = useState('');
@@ -74,7 +78,17 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
     }
   };
 
-  const userInitials = currentUser.fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+  const userInitials = currentUser?.fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() ?? '??';
+
+  // Session not yet resolved or user logged out — AuthProvider will redirect,
+  // but we still need to avoid crashing while the redirect is in flight.
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f0f2f5]">
+        <div className="w-8 h-8 border-4 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f0f2f5] text-gray-900 font-sans flex">
@@ -156,23 +170,10 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
             </span>
           </div>
 
-          {/* Right: profile switcher + icons */}
+          {/* Right: user info + sign out */}
           <div className="flex items-center gap-3">
             <span className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-gray-600">
-              PROFILE:
-              <select
-                className="bg-transparent text-[#111c30] font-bold text-[11px] outline-none cursor-pointer pr-1 appearance-none"
-                value={currentUser.id}
-                onChange={(e) => {
-                  const selected = allUsers.find(u => u.id === e.target.value);
-                  if (selected) { setCurrentUser(selected); router.push('/dashboard'); }
-                }}
-              >
-                {allUsers.map((usr) => (
-                  <option key={usr.id} value={usr.id}>{usr.jobRole.replace(/_/g, ' ')}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-3 h-3 text-gray-400" />
+              {currentUser?.jobRole.replace(/_/g, ' ')}
             </span>
             <button className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors">
               <Bell className="w-4 h-4" />
@@ -180,6 +181,12 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
             <Link href="/profile" className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors">
               <UserCircle className="w-5 h-5" />
             </Link>
+            <button
+              onClick={handleSignOut}
+              className="text-[11px] font-bold text-gray-400 hover:text-red-500 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-red-50"
+            >
+              Sign Out
+            </button>
           </div>
         </header>
 

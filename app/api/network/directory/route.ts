@@ -15,23 +15,23 @@ export async function GET(req: NextRequest) {
     const requesterId = searchParams.get('requesterId') || '';
     const search = (searchParams.get('search') || '').toLowerCase();
 
-    const users = dbStore.getUsers();
-    const allConnections = requesterId
-      ? dbStore.getConnectionRequestsForUser(requesterId)
-      : [];
+    const [users, allConnections] = await Promise.all([
+      dbStore.getUsers(),
+      requesterId ? dbStore.getConnectionRequestsForUser(requesterId) : Promise.resolve([]),
+    ]);
 
     // Only expose VERIFIED logistics vendors in the public directory
-    const vendors = users.filter(u =>
-      u.userType === 'LOGISTICS_CHAIN' &&
-      u.kycStatus === 'VERIFIED' &&
-      (search === '' ||
-        u.fullName.toLowerCase().includes(search) ||
-        (u.companyName || '').toLowerCase().includes(search) ||
-        u.jobRole.toLowerCase().includes(search))
+    const vendors = users.filter(
+      u =>
+        u.userType === 'LOGISTICS_CHAIN' &&
+        u.kycStatus === 'VERIFIED' &&
+        (search === '' ||
+          u.fullName.toLowerCase().includes(search) ||
+          (u.companyName || '').toLowerCase().includes(search) ||
+          u.jobRole.toLowerCase().includes(search))
     );
 
     const decorated = vendors.map(v => {
-      // Find if there's a connection between this requester and vendor
       const conn = allConnections.find(
         c =>
           (c.requesterId === requesterId && c.receiverId === v.id) ||
@@ -41,7 +41,6 @@ export async function GET(req: NextRequest) {
         ...v,
         connectionId: conn?.id ?? null,
         connectionStatus: conn?.status ?? null,
-        // True when requesterId is the one who sent the connection
         isSender: conn ? conn.requesterId === requesterId : false,
       };
     });

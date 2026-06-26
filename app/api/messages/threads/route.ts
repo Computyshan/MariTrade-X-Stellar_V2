@@ -9,9 +9,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'UserId query parameter is required' }, { status: 400 });
     }
 
-    const allThreads = dbStore.getThreads();
-    const allParticipants = dbStore.getParticipants();
-    const allUsers = dbStore.getUsers();
+    const [allThreads, allParticipants, allUsers] = await Promise.all([
+      dbStore.getThreads(),
+      dbStore.getParticipants(),
+      dbStore.getUsers(),
+    ]);
 
     // Filter threads where this user is active
     const userThreads = allThreads.filter(t => {
@@ -21,29 +23,50 @@ export async function GET(req: NextRequest) {
 
     const threadsWithDetails = userThreads
       .map(thread => {
-      // Find other participant
-      const parts = allParticipants.filter(p => p.threadId === thread.id);
-      const otherPart = parts.find(p => p.userId !== userId);
-      const otherUser = otherPart ? allUsers.find(u => u.id === otherPart.userId) : null;
-      
-      const messages = dbStore.getMessages(thread.id);
-      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+        const parts = allParticipants.filter(p => p.threadId === thread.id);
+        const otherPart = parts.find(p => p.userId !== userId);
+        const otherUser = otherPart ? allUsers.find(u => u.id === otherPart.userId) : null;
 
-      return {
-        ...thread,
-        otherParticipant: otherUser ? {
-          id: otherUser.id,
-          fullName: otherUser.fullName,
-          email: otherUser.email,
-          jobRole: otherUser.jobRole,
-          companyName: otherUser.companyName
-        } : null,
-        lastMessage
-      };
-    })
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        const messages = allParticipants; // already loaded — filter below
+        const threadMessages = allParticipants; // placeholder; getMessages is per-thread
 
-    return NextResponse.json({ success: true, data: threadsWithDetails });
+        return {
+          thread,
+          otherUser,
+        };
+      });
+
+    // Re-fetch with per-thread messages for last message preview
+    const threadsDecored = await Promise.all(
+      userThreads.map(async thread => {
+        const parts = allParticipants.filter(p => p.threadId === thread.id);
+        const otherPart = parts.find(p => p.userId !== userId);
+        const otherUser = otherPart ? allUsers.find(u => u.id === otherPart.userId) : null;
+
+        const messages = await dbStore.getMessages(thread.id);
+        const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+
+        return {
+          ...thread,
+          otherParticipant: otherUser
+            ? {
+                id: otherUser.id,
+                fullName: otherUser.fullName,
+                email: otherUser.email,
+                jobRole: otherUser.jobRole,
+                companyName: otherUser.companyName,
+              }
+            : null,
+          lastMessage,
+        };
+      })
+    );
+
+    const sorted = threadsDecored.sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+
+    return NextResponse.json({ success: true, data: sorted });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -59,25 +82,23 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Network guard ─────────────────────────────────────────────────────────
-    // A message thread can only be opened between two users who share an
-    // ACCEPTED connection in the B2B Vendor Network.  This prevents cold
-    // outreach to unvetted third parties.
-    const senderUser   = dbStore.getUserById(senderId);
-    const receiverUser = dbStore.getUserById(receiverId);
+    const [senderUser, receiverUser] = await Promise.all([
+      dbStore.getUserById(senderId),
+      dbStore.getUserById(receiverId),
+    ]);
 
     if (senderUser && receiverUser) {
       const isCrossParty =
-        (senderUser.userType === 'TRADE_PARTY'    && receiverUser.userType === 'LOGISTICS_CHAIN') ||
+        (senderUser.userType === 'TRADE_PARTY' && receiverUser.userType === 'LOGISTICS_CHAIN') ||
         (senderUser.userType === 'LOGISTICS_CHAIN' && receiverUser.userType === 'TRADE_PARTY');
 
       if (isCrossParty) {
-        // Determine which party is the importer (connection requester)
-        const allConns = dbStore.getConnectionRequests();
+        const allConns = await dbStore.getConnectionRequests();
         const hasAcceptedConnection = allConns.some(
           c =>
             c.status === 'ACCEPTED' &&
-            ((c.requesterId === senderId   && c.receiverId === receiverId) ||
-             (c.requesterId === receiverId && c.receiverId === senderId))
+            ((c.requesterId === senderId && c.receiverId === receiverId) ||
+              (c.requesterId === receiverId && c.receiverId === senderId))
         );
 
         if (!hasAcceptedConnection) {
@@ -92,9 +113,11 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    // ── End network guard ─────────────────────────────────────────────────────
-    const allThreads = dbStore.getThreads();
-    const allParticipants = dbStore.getParticipants();
+
+    const [allThreads, allParticipants] = await Promise.all([
+      dbStore.getThreads(),
+      dbStore.getParticipants(),
+    ]);
 
     let threadId = '';
     const existingThread = allThreads.find(t => {
@@ -107,39 +130,35 @@ export async function POST(req: NextRequest) {
     if (existingThread) {
       threadId = existingThread.id;
     } else {
-      // Create new thread
       threadId = 'thr_' + Math.random().toString(36).substring(2, 9);
       const newThread: ChatThread = {
         id: threadId,
         status: 'OPEN',
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
-      dbStore.saveThread(newThread);
+      await dbStore.saveThread(newThread);
 
-      // Create participants
       const p1: ChatParticipant = {
         id: 'cp_' + Math.random().toString(36).substring(2, 9),
         threadId,
-        userId: senderId
+        userId: senderId,
       };
       const p2: ChatParticipant = {
         id: 'cp_' + Math.random().toString(36).substring(2, 9),
         threadId,
-        userId: receiverId
+        userId: receiverId,
       };
-      dbStore.saveParticipant(p1);
-      dbStore.saveParticipant(p2);
+      await Promise.all([dbStore.saveParticipant(p1), dbStore.saveParticipant(p2)]);
     }
 
-    // Save initial message if present
     if (initialMessage) {
-      dbStore.saveMessage({
+      await dbStore.saveMessage({
         id: 'msg_' + Math.random().toString(36).substring(2, 9),
         threadId,
         senderId,
         content: initialMessage,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       });
     }
 

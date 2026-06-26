@@ -13,19 +13,17 @@ import { dbStore } from '@/lib/db';
  */
 export async function GET(_req: NextRequest) {
   try {
-    const folders   = dbStore.getVaultFolders();
-    const shipments = dbStore.getShipments();
-    const documents = dbStore.getDocuments();
+    const [folders, shipments, documents] = await Promise.all([
+      dbStore.getVaultFolders(),
+      dbStore.getShipments(),
+      dbStore.getDocuments(),
+    ]);
 
     const decorated = folders.map(folder => {
       const shipment = shipments.find(s => s.id === folder.shipmentId) ?? null;
-      const docs     = documents.filter(d => d.shipmentId === folder.shipmentId);
+      const docs = documents.filter(d => d.shipmentId === folder.shipmentId);
 
-      return {
-        ...folder,
-        shipment,
-        documents: docs,
-      };
+      return { ...folder, shipment, documents: docs };
     });
 
     // Sort newest first
@@ -35,9 +33,6 @@ export async function GET(_req: NextRequest) {
 
     return NextResponse.json({ success: true, data: decorated });
   } catch (err: any) {
-    return NextResponse.json(
-      { success: false, error: err.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

@@ -1,652 +1,721 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { 
-  User, 
-  Shipment, 
-  ShipmentAssignment, 
-  PriorityMilestone, 
-  MilestoneEvent, 
-  ShipmentDocument, 
-  ChatThread, 
-  ChatParticipant, 
+/**
+ * lib/db.ts — MariTrade v2
+ *
+ * All data operations are backed by Supabase (PostgreSQL).
+ * The exported `dbStore` object preserves the same interface that all API
+ * routes already use, so no route-level changes are required.
+ *
+ * Column name mapping (snake_case DB ↔ camelCase TS):
+ *   full_name          ↔ fullName
+ *   full_address       ↔ fullAddress
+ *   contact_number     ↔ contactNumber
+ *   user_type          ↔ userType
+ *   job_role           ↔ jobRole
+ *   company_name       ↔ companyName
+ *   stellar_wallet     ↔ stellarWallet
+ *   bank_details       ↔ bankDetails
+ *   kyc_status         ↔ kycStatus
+ *   kyc_document_url   ↔ kycDocumentUrl
+ *   created_at         ↔ createdAt
+ *   updated_at         ↔ updatedAt
+ *   reference_code     ↔ referenceCode
+ *   importer_id        ↔ importerId
+ *   exporter_id        ↔ exporterId
+ *   origin_country     ↔ originCountry
+ *   destination_port   ↔ destinationPort
+ *   shipment_scope     ↔ shipmentScope
+ *   total_value_usd    ↔ totalValueUSD
+ *   escrow_status      ↔ escrowStatus
+ *   escrow_amount_usd  ↔ escrowAmountUSD
+ *   stellar_escrow_id  ↔ stellarEscrowId
+ *   estimated_arrival  ↔ estimatedArrival
+ *   shipment_id        ↔ shipmentId
+ *   user_id            ↔ userId
+ *   assigned_at        ↔ assignedAt
+ *   is_completed       ↔ isCompleted
+ *   logged_by_id       ↔ loggedById
+ *   evidence_url       ↔ evidenceUrl
+ *   occurred_at        ↔ occurredAt
+ *   file_name          ↔ fileName
+ *   file_url           ↔ fileUrl
+ *   uploaded_by_id     ↔ uploadedById
+ *   is_latest          ↔ isLatest
+ *   thread_id          ↔ threadId
+ *   cargo_description  ↔ cargoDescription
+ *   current_counter_price_usd ↔ currentCounterPriceUSD
+ *   sender_id          ↔ senderId
+ *   image_url          ↔ imageUrl
+ *   is_unsent          ↔ isUnsent
+ *   requester_id       ↔ requesterId
+ *   receiver_id        ↔ receiverId
+ *   folder_name        ↔ folderName
+ *   created_by_user_id ↔ createdByUserId
+ */
+
+import { supabase } from './supabase';
+import {
+  User,
+  Shipment,
+  ShipmentAssignment,
+  PriorityMilestone,
+  MilestoneEvent,
+  ShipmentDocument,
+  ChatThread,
+  ChatParticipant,
   Message,
   ConnectionRequest,
-  VaultFolder
+  VaultFolder,
 } from '../types';
 
-interface SchemaStore {
-  users: User[];
-  shipments: Shipment[];
-  assignments: ShipmentAssignment[];
-  priorityMilestones: PriorityMilestone[];
-  milestones: MilestoneEvent[];
-  documents: ShipmentDocument[];
-  threads: ChatThread[];
-  participants: ChatParticipant[];
-  messages: Message[];
-  connectionRequests: ConnectionRequest[];
-  vaultFolders: VaultFolder[];
-  _chatSeedCleared?: boolean;
+// ─── Row → TypeScript mappers ─────────────────────────────────────────────────
+
+function rowToUser(row: any): User {
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    fullAddress: row.full_address ?? undefined,
+    contactNumber: row.contact_number ?? undefined,
+    userType: row.user_type,
+    jobRole: row.job_role,
+    companyName: row.company_name ?? undefined,
+    stellarWallet: row.stellar_wallet ?? undefined,
+    bankDetails: row.bank_details ?? undefined,
+    kycStatus: row.kyc_status,
+    kycDocumentUrl: row.kyc_document_url ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
-const STORAGE_PATH = '/tmp/maritrade_v2_db.json';
-
-const INITIAL_USERS: User[] = [
-  // ─── Trade Party (2) ───
-  {
-    id: 'shaun-importer-id',
-    email: 'shaun@siga.ph',
-    fullName: 'Tyshaun Louis L. Siga',
-    fullAddress: 'Mintal, Davao, Philippines',
-    contactNumber: '+639171234567',
-    userType: 'TRADE_PARTY',
-    jobRole: 'IMPORTER',
-    companyName: 'Shaun Trading',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-10T10:00:00Z',
-    updatedAt: '2026-01-10T10:00:00Z'
-  },
-  {
-    id: 'dav4d-exporter-id',
-    email: 'dav4d@ngalogistics.jp',
-    fullName: 'Ryan David',
-    fullAddress: 'Japanacan, Tokyo, Japan',
-    contactNumber: '+819012345678',
-    userType: 'TRADE_PARTY',
-    jobRole: 'EXPORTER',
-    companyName: 'Random ass Logistics Corp',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-11T11:00:00Z',
-    updatedAt: '2026-01-11T11:00:00Z'
-  },
-  // ─── Logistics Chain (3) ───
-  {
-    id: 'tristan-forwarder-id',
-    email: 'trst@domingsforwarding.ph',
-    fullName: 'Tristan Dominiga',
-    fullAddress: 'Atlantis, Surigao del Norte, Philippines',
-    contactNumber: '+639178881122',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'FREIGHT_FORWARDER',
-    companyName: 'Domingo Global Forwarding',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-13T08:00:00Z',
-    updatedAt: '2026-01-13T08:00:00Z'
-  },
-  {
-    id: 'quinn-warehouse-id',
-    email: 'quinn@warehouse.ph',
-    fullName: 'Quinn Reboqiuo',
-    fullAddress: 'Dasmariñas, Cavite, Philippines',
-    contactNumber: '+639167778899',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'WAREHOUSE_OPERATOR',
-    companyName: 'Metro Manila Distribution Center',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-15T11:00:00Z',
-    updatedAt: '2026-01-15T11:00:00Z'
-  },
-  {
-    id: 'charles-broker-id',
-    email: 'selrach@solomonbrokerage.ph',
-    fullName: 'Charles Solomon',
-    fullAddress: 'NGAVill, Cagayan De Oro, Philippines',
-    contactNumber: '+639189876543',
-    userType: 'LOGISTICS_CHAIN',
-    jobRole: 'CUSTOMS_BROKER',
-    companyName: 'Selcrach Customs Brokerage',
-    kycStatus: 'VERIFIED',
-    createdAt: '2026-01-12T09:00:00Z',
-    updatedAt: '2026-01-12T09:00:00Z'
-  },
-];
-
-const INITIAL_SHIPMENTS: Shipment[] = [
-  {
-    id: 'shipment-tokyo-manila-1',
-    referenceCode: 'MT-2026-00341',
-    importerId: 'shaun-importer-id',
-    exporterId: 'dav4d-exporter-id',
-    description: 'Industrial Electric Motors and Replacement Gears',
-    originCountry: 'Japan (Tokyo)',
-    destinationPort: 'Port of Manila (MICP)',
-    shipmentScope: 'OVERSEAS',
-    status: 'IN_TRANSIT',
-    totalValueUSD: 45000,
-    escrowStatus: 'FUNDED',
-    escrowAmountUSD: 45000,
-    stellarEscrowId: 'GCE6...KCSU_ESCROW_ESC341',
-    estimatedArrival: '2026-06-28T18:00:00Z',
-    createdAt: '2026-05-15T08:24:00Z',
-    updatedAt: '2026-06-18T10:15:00Z'
-  },
-  {
-    id: 'shipment-zambo-manila-2',
-    referenceCode: 'MT-2026-00122',
-    importerId: 'shaun-importer-id',
-    exporterId: 'shaun-importer-id', // Local self-trade or custom merchant
-    description: 'Fresh Mindanao Canned Sardines Batch 22B',
-    originCountry: 'Philippines (Zamboanga)',
-    destinationPort: 'Manila North Harbor',
-    shipmentScope: 'NATIONWIDE',
-    status: 'DELIVERED',
-    totalValueUSD: 12500,
-    escrowStatus: 'RELEASED',
-    escrowAmountUSD: 12500,
-    stellarEscrowId: 'GDE3...JKLD_ESCROW_ESC122',
-    estimatedArrival: '2026-06-05T12:00:00Z',
-    createdAt: '2026-05-10T09:00:00Z',
-    updatedAt: '2026-06-05T15:30:00Z'
-  }
-];
-
-const INITIAL_ASSIGNMENTS: ShipmentAssignment[] = [
-  {
-    id: 'assign-1',
-    shipmentId: 'shipment-tokyo-manila-1',
-    userId: 'charles-broker-id',
-    assignedAt: '2026-05-16T10:00:00Z'
-  },
-  {
-    id: 'assign-2',
-    shipmentId: 'shipment-tokyo-manila-1',
-    userId: 'tristan-forwarder-id',
-    assignedAt: '2026-05-16T09:30:00Z'
-  },
-  {
-    id: 'assign-3',
-    shipmentId: 'shipment-tokyo-manila-1',
-    userId: 'quinn-warehouse-id',
-    assignedAt: '2026-05-16T11:00:00Z'
-  },
-  {
-    id: 'assign-4',
-    shipmentId: 'shipment-tokyo-manila-1',
-    userId: 'charles-broker-id',
-    assignedAt: '2026-05-16T10:00:00Z'
-  }
-];
-
-const INITIAL_PRIORITY_MILESTONES: PriorityMilestone[] = [
-  {
-    id: 'pm-1',
-    shipmentId: 'shipment-tokyo-manila-1',
-    type: 'CUSTOMS_CLEARANCE_APPROVED',
-    isCompleted: false
-  },
-  {
-    id: 'pm-2',
-    shipmentId: 'shipment-tokyo-manila-1',
-    type: 'DELIVERED_AND_SIGNED_OFF',
-    isCompleted: false
-  },
-  // Completed ones for shipment 2
-  {
-    id: 'pm-3',
-    shipmentId: 'shipment-zambo-manila-2',
-    type: 'CUSTOMS_CLEARANCE_APPROVED',
-    isCompleted: true
-  },
-  {
-    id: 'pm-4',
-    shipmentId: 'shipment-zambo-manila-2',
-    type: 'DELIVERED_AND_SIGNED_OFF',
-    isCompleted: true
-  }
-];
-
-const INITIAL_MILESTONES: MilestoneEvent[] = [
-  // Shipment 1 events
-  {
-    id: 'me-1',
-    shipmentId: 'shipment-tokyo-manila-1',
-    loggedById: 'tristan-forwarder-id',
-    type: 'BOOKING_CONFIRMED',
-    description: 'Vessel spot booked on Maersk Tokyo Express.',
-    evidenceUrl: 'https://picsum.photos/seed/booking/800/600',
-    occurredAt: '2026-05-18T14:30:00Z',
-    verified: true
-  },
-  {
-    id: 'me-2',
-    shipmentId: 'shipment-tokyo-manila-1',
-    loggedById: 'tristan-forwarder-id',
-    type: 'SPACE_ON_VESSEL_SECURED',
-    description: 'Container sealed and space locked on bay 3A.',
-    evidenceUrl: 'https://picsum.photos/seed/seal/800/600',
-    occurredAt: '2026-05-20T11:00:00Z',
-    verified: true
-  },
-  {
-    id: 'me-3',
-    shipmentId: 'shipment-tokyo-manila-1',
-    loggedById: 'charles-broker-id',
-    type: 'BOC_ENTRY_FILED',
-    description: 'BOC single administrative document (SAD) logged at MICP.',
-    evidenceUrl: 'https://picsum.photos/seed/boc/800/600',
-    occurredAt: '2026-06-18T10:15:00Z',
-    verified: true
-  },
-  // Shipment 2 events (fully delivered timeline)
-  {
-    id: 'me-4',
-    shipmentId: 'shipment-zambo-manila-2',
-    loggedById: 'tristan-forwarder-id',
-    type: 'BOOKING_CONFIRMED',
-    description: 'Direct sea cargo booked by forwarder.',
-    evidenceUrl: 'https://picsum.photos/seed/boat/800/600',
-    occurredAt: '2026-05-12T08:00:00Z',
-    verified: true
-  },
-  {
-    id: 'me-5',
-    shipmentId: 'shipment-zambo-manila-2',
-    loggedById: 'charles-broker-id',
-    type: 'CUSTOMS_CLEARANCE_APPROVED',
-    description: 'Zamboanga customs duty clearance verified and tax receipt issued.',
-    evidenceUrl: 'https://picsum.photos/seed/receipt/800/600',
-    occurredAt: '2026-05-28T16:00:00Z',
-    verified: true
-  },
-  {
-    id: 'me-6',
-    shipmentId: 'shipment-zambo-manila-2',
-    loggedById: 'tristan-forwarder-id',
-    type: 'DELIVERED_AND_SIGNED_OFF',
-    description: 'Sardine crates delivered safely to Binondo Storage Hall. Signed off by importer.',
-    evidenceUrl: 'https://picsum.photos/seed/storage/800/600',
-    occurredAt: '2026-06-05T15:30:00Z',
-    verified: true
-  }
-];
-
-const INITIAL_DOCUMENTS: ShipmentDocument[] = [
-  {
-    id: 'doc-1',
-    shipmentId: 'shipment-tokyo-manila-1',
-    fileName: 'BillOfLading_MT341_Maersk.pdf',
-    fileUrl: 'https://picsum.photos/seed/doc1/800/600',
-    uploadedById: 'tristan-forwarder-id',
-    version: 1,
-    isLatest: true,
-    createdAt: '2026-05-18T14:40:00Z'
-  },
-  {
-    id: 'doc-2',
-    shipmentId: 'shipment-tokyo-manila-1',
-    fileName: 'BOC_Import_Declaration_SAD_Signed.pdf',
-    fileUrl: 'https://picsum.photos/seed/doc2/800/600',
-    uploadedById: 'charles-broker-id',
-    version: 1,
-    isLatest: true,
-    createdAt: '2026-06-18T10:20:00Z'
-  },
-  {
-    id: 'doc-3',
-    shipmentId: 'shipment-tokyo-manila-1',
-    fileName: 'Amended_Commercial_Invoice_Tanaka.pdf',
-    fileUrl: 'https://picsum.photos/seed/doc3/800/600',
-    uploadedById: 'dav4d-exporter-id',
-    version: 2,
-    isLatest: true,
-    createdAt: '2026-06-19T13:00:00Z'
-  },
-  {
-    id: 'doc-4',
-    shipmentId: 'shipment-zambo-manila-2',
-    fileName: 'Domestic_Cargo_Release_Slip.pdf',
-    fileUrl: 'https://picsum.photos/seed/doc4/800/600',
-    uploadedById: 'shaun-importer-id',
-    version: 1,
-    isLatest: true,
-    createdAt: '2026-05-14T09:30:00Z'
-  }
-];
-
-const INITIAL_THREADS: ChatThread[] = [];
-const INITIAL_PARTICIPANTS: ChatParticipant[] = [];
-const INITIAL_MESSAGES: Message[] = [];
-
-// Seed: Shaun (importer) already has accepted connections with Tristan (FF) and Charles (CB).
-// Quinn (WO) is still PENDING — demonstrates the Trusted Network gate in shipment creation.
-const INITIAL_VAULT_FOLDERS: VaultFolder[] = [
-  {
-    id: 'vault-folder-001',
-    shipmentId: 'shipment-tokyo-manila-1',
-    referenceCode: 'MT-2026-00341',
-    folderName: 'JPN-MNL_INDUSTRIAL_MOTORS_2026',
-    password: 'TKY2026',
-    createdByUserId: 'shaun-importer-id',
-    createdAt: '2026-05-15T08:30:00Z',
-  },
-  {
-    id: 'vault-folder-002',
-    shipmentId: 'shipment-zambo-manila-2',
-    referenceCode: 'MT-2026-00122',
-    folderName: 'ZMB-MNL_SARDINES_BATCH22B_2026',
-    password: 'ZMB2026',
-    createdByUserId: 'shaun-importer-id',
-    createdAt: '2026-05-10T09:15:00Z',
-  },
-];
-
-const INITIAL_CONNECTION_REQUESTS: ConnectionRequest[] = [
-  {
-    id: 'conn-shaun-tristan-1',
-    requesterId: 'shaun-importer-id',
-    receiverId: 'tristan-forwarder-id',
-    status: 'ACCEPTED',
-    createdAt: '2026-01-20T09:00:00Z',
-    updatedAt: '2026-01-20T10:30:00Z',
-  },
-  {
-    id: 'conn-shaun-charles-1',
-    requesterId: 'shaun-importer-id',
-    receiverId: 'charles-broker-id',
-    status: 'ACCEPTED',
-    createdAt: '2026-01-20T09:05:00Z',
-    updatedAt: '2026-01-20T10:35:00Z',
-  },
-  {
-    id: 'conn-shaun-quinn-1',
-    requesterId: 'shaun-importer-id',
-    receiverId: 'quinn-warehouse-id',
-    status: 'PENDING',
-    createdAt: '2026-06-20T14:00:00Z',
-    updatedAt: '2026-06-20T14:00:00Z',
-  },
-];
-
-const IN_MEMORY_STORE: SchemaStore = {
-  users: INITIAL_USERS,
-  shipments: INITIAL_SHIPMENTS,
-  assignments: INITIAL_ASSIGNMENTS,
-  priorityMilestones: INITIAL_PRIORITY_MILESTONES,
-  milestones: INITIAL_MILESTONES,
-  documents: INITIAL_DOCUMENTS,
-  threads: INITIAL_THREADS,
-  participants: INITIAL_PARTICIPANTS,
-  messages: INITIAL_MESSAGES,
-  connectionRequests: INITIAL_CONNECTION_REQUESTS,
-  vaultFolders: INITIAL_VAULT_FOLDERS,
-};
-
-function readDb(): SchemaStore {
-  try {
-    if (typeof window === 'undefined') {
-      if (fs.existsSync(STORAGE_PATH)) {
-        const fileContent = fs.readFileSync(STORAGE_PATH, 'utf-8').trim();
-        if (!fileContent) {
-          // File is empty, write initial memory store
-          fs.writeFileSync(STORAGE_PATH, JSON.stringify(IN_MEMORY_STORE, null, 2), 'utf-8');
-          return IN_MEMORY_STORE;
-        }
-        try {
-          const parsed = JSON.parse(fileContent);
-          if (parsed && typeof parsed === 'object') {
-            // Check if the new importer profile exists, otherwise force reset/refresh matching your manual code changes
-            // Force reset if old roles (TRUCKER, SHIPPING_LINE_CAPTAIN, PORT_AUTHORITY_OFFICER) are still present
-            const hasLegacyRoles = Array.isArray(parsed.users) && parsed.users.some(
-              (u: any) => ['TRUCKER', 'SHIPPING_LINE_CAPTAIN', 'PORT_AUTHORITY_OFFICER', 'COMPANY_OWNER', 'TRADER'].includes(u.jobRole)
-            );
-            const hasNewProfiles = Array.isArray(parsed.users) && parsed.users.some((u: any) => u.id === 'shaun-importer-id') && !hasLegacyRoles;
-            if (!hasNewProfiles) {
-              fs.writeFileSync(STORAGE_PATH, JSON.stringify(IN_MEMORY_STORE, null, 2), 'utf-8');
-              return IN_MEMORY_STORE;
-            }
-
-            const sanitized: SchemaStore = {
-              users: Array.isArray(parsed.users) ? parsed.users : IN_MEMORY_STORE.users,
-              shipments: Array.isArray(parsed.shipments) ? parsed.shipments : IN_MEMORY_STORE.shipments,
-              assignments: Array.isArray(parsed.assignments) ? parsed.assignments : IN_MEMORY_STORE.assignments,
-              priorityMilestones: Array.isArray(parsed.priorityMilestones) ? parsed.priorityMilestones : IN_MEMORY_STORE.priorityMilestones,
-              milestones: Array.isArray(parsed.milestones) ? parsed.milestones : IN_MEMORY_STORE.milestones,
-              documents: Array.isArray(parsed.documents) ? parsed.documents : IN_MEMORY_STORE.documents,
-              threads: Array.isArray(parsed.threads) ? parsed.threads : IN_MEMORY_STORE.threads,
-              participants: Array.isArray(parsed.participants) ? parsed.participants : IN_MEMORY_STORE.participants,
-              messages: Array.isArray(parsed.messages) ? parsed.messages : IN_MEMORY_STORE.messages,
-              connectionRequests: Array.isArray(parsed.connectionRequests) ? parsed.connectionRequests : IN_MEMORY_STORE.connectionRequests,
-              vaultFolders: Array.isArray(parsed.vaultFolders) ? parsed.vaultFolders : IN_MEMORY_STORE.vaultFolders,
-              _chatSeedCleared: parsed._chatSeedCleared === true,
-            };
-
-            if (!sanitized._chatSeedCleared) {
-              sanitized.threads = [];
-              sanitized.participants = [];
-              sanitized.messages = [];
-              sanitized._chatSeedCleared = true;
-              fs.writeFileSync(STORAGE_PATH, JSON.stringify(sanitized, null, 2), 'utf-8');
-            }
-
-            return sanitized;
-          }
-        } catch {
-          // JSON parsing failed, heal file with memory content
-          fs.writeFileSync(STORAGE_PATH, JSON.stringify(IN_MEMORY_STORE, null, 2), 'utf-8');
-          return IN_MEMORY_STORE;
-        }
-      } else {
-        // Populate initial
-        fs.writeFileSync(STORAGE_PATH, JSON.stringify(IN_MEMORY_STORE, null, 2), 'utf-8');
-        return IN_MEMORY_STORE;
-      }
-    }
-  } catch (err) {
-    console.error('Error reading DB, using memory:', err);
-  }
-  return IN_MEMORY_STORE;
+function userToRow(user: User): any {
+  return {
+    id: user.id,
+    email: user.email,
+    full_name: user.fullName,
+    full_address: user.fullAddress ?? null,
+    contact_number: user.contactNumber ?? null,
+    user_type: user.userType,
+    job_role: user.jobRole,
+    company_name: user.companyName ?? null,
+    stellar_wallet: user.stellarWallet ?? null,
+    bank_details: user.bankDetails ?? null,
+    kyc_status: user.kycStatus,
+    kyc_document_url: user.kycDocumentUrl ?? null,
+    created_at: user.createdAt,
+    updated_at: user.updatedAt,
+  };
 }
 
-function writeDb(store: SchemaStore) {
-  try {
-    if (typeof window === 'undefined') {
-      const parentDir = path.dirname(STORAGE_PATH);
-      if (!fs.existsSync(parentDir)) {
-        fs.mkdirSync(parentDir, { recursive: true });
-      }
-      fs.writeFileSync(STORAGE_PATH, JSON.stringify(store, null, 2), 'utf-8');
-    }
-  } catch (err) {
-    console.error('Error writing DB:', err);
-  }
-  // Keep memory synchronized too
-  IN_MEMORY_STORE.users = store.users;
-  IN_MEMORY_STORE.shipments = store.shipments;
-  IN_MEMORY_STORE.assignments = store.assignments;
-  IN_MEMORY_STORE.priorityMilestones = store.priorityMilestones;
-  IN_MEMORY_STORE.milestones = store.milestones;
-  IN_MEMORY_STORE.documents = store.documents;
-  IN_MEMORY_STORE.threads = store.threads;
-  IN_MEMORY_STORE.participants = store.participants;
-  IN_MEMORY_STORE.messages = store.messages;
-  IN_MEMORY_STORE.connectionRequests = store.connectionRequests;
-  IN_MEMORY_STORE.vaultFolders = store.vaultFolders;
+function rowToShipment(row: any): Shipment {
+  return {
+    id: row.id,
+    referenceCode: row.reference_code,
+    importerId: row.importer_id,
+    exporterId: row.exporter_id ?? undefined,
+    description: row.description,
+    originCountry: row.origin_country,
+    destinationPort: row.destination_port,
+    shipmentScope: row.shipment_scope,
+    status: row.status,
+    totalValueUSD: Number(row.total_value_usd),
+    escrowStatus: row.escrow_status,
+    escrowAmountUSD: row.escrow_amount_usd != null ? Number(row.escrow_amount_usd) : undefined,
+    stellarEscrowId: row.stellar_escrow_id ?? undefined,
+    estimatedArrival: row.estimated_arrival ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
+
+function shipmentToRow(s: Shipment): any {
+  return {
+    id: s.id,
+    reference_code: s.referenceCode,
+    importer_id: s.importerId,
+    exporter_id: s.exporterId ?? null,
+    description: s.description,
+    origin_country: s.originCountry,
+    destination_port: s.destinationPort,
+    shipment_scope: s.shipmentScope,
+    status: s.status,
+    total_value_usd: s.totalValueUSD,
+    escrow_status: s.escrowStatus,
+    escrow_amount_usd: s.escrowAmountUSD ?? null,
+    stellar_escrow_id: s.stellarEscrowId ?? null,
+    estimated_arrival: s.estimatedArrival ?? null,
+    created_at: s.createdAt,
+    updated_at: s.updatedAt,
+  };
+}
+
+function rowToAssignment(row: any): ShipmentAssignment {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    userId: row.user_id,
+    assignedAt: row.assigned_at,
+  };
+}
+
+function assignmentToRow(a: ShipmentAssignment): any {
+  return {
+    id: a.id,
+    shipment_id: a.shipmentId,
+    user_id: a.userId,
+    assigned_at: a.assignedAt,
+  };
+}
+
+function rowToPriorityMilestone(row: any): PriorityMilestone {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    type: row.type,
+    isCompleted: row.is_completed,
+  };
+}
+
+function priorityMilestoneToRow(pm: PriorityMilestone): any {
+  return {
+    id: pm.id,
+    shipment_id: pm.shipmentId,
+    type: pm.type,
+    is_completed: pm.isCompleted,
+  };
+}
+
+function rowToMilestoneEvent(row: any): MilestoneEvent {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    loggedById: row.logged_by_id,
+    type: row.type,
+    description: row.description ?? undefined,
+    evidenceUrl: row.evidence_url,
+    occurredAt: row.occurred_at,
+    verified: row.verified,
+  };
+}
+
+function milestoneEventToRow(me: MilestoneEvent): any {
+  return {
+    id: me.id,
+    shipment_id: me.shipmentId,
+    logged_by_id: me.loggedById,
+    type: me.type,
+    description: me.description ?? null,
+    evidence_url: me.evidenceUrl,
+    occurred_at: me.occurredAt,
+    verified: me.verified,
+  };
+}
+
+function rowToDocument(row: any): ShipmentDocument {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    fileName: row.file_name,
+    fileUrl: row.file_url,
+    uploadedById: row.uploaded_by_id,
+    version: row.version,
+    isLatest: row.is_latest,
+    createdAt: row.created_at,
+  };
+}
+
+function documentToRow(doc: ShipmentDocument): any {
+  return {
+    id: doc.id,
+    shipment_id: doc.shipmentId,
+    file_name: doc.fileName,
+    file_url: doc.fileUrl,
+    uploaded_by_id: doc.uploadedById,
+    version: doc.version,
+    is_latest: doc.isLatest,
+    created_at: doc.createdAt,
+  };
+}
+
+function rowToThread(row: any): ChatThread {
+  return {
+    id: row.id,
+    status: row.status,
+    shipmentId: row.shipment_id ?? undefined,
+    cargoDescription: row.cargo_description ?? undefined,
+    currentCounterPriceUSD: row.current_counter_price_usd != null ? Number(row.current_counter_price_usd) : undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function threadToRow(t: ChatThread): any {
+  return {
+    id: t.id,
+    status: t.status,
+    shipment_id: t.shipmentId ?? null,
+    cargo_description: t.cargoDescription ?? null,
+    current_counter_price_usd: t.currentCounterPriceUSD ?? null,
+    created_at: t.createdAt,
+    updated_at: t.updatedAt,
+  };
+}
+
+function rowToParticipant(row: any): ChatParticipant {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    userId: row.user_id,
+  };
+}
+
+function participantToRow(p: ChatParticipant): any {
+  return {
+    id: p.id,
+    thread_id: p.threadId,
+    user_id: p.userId,
+  };
+}
+
+function rowToMessage(row: any): Message {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    senderId: row.sender_id,
+    content: row.content,
+    createdAt: row.created_at,
+    imageUrl: row.image_url ?? undefined,
+    isUnsent: row.is_unsent ?? false,
+  };
+}
+
+function messageToRow(msg: Message): any {
+  return {
+    id: msg.id,
+    thread_id: msg.threadId,
+    sender_id: msg.senderId,
+    content: msg.content,
+    created_at: msg.createdAt,
+    image_url: msg.imageUrl ?? null,
+    is_unsent: msg.isUnsent ?? false,
+  };
+}
+
+function rowToConnection(row: any): ConnectionRequest {
+  return {
+    id: row.id,
+    requesterId: row.requester_id,
+    receiverId: row.receiver_id,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function connectionToRow(c: ConnectionRequest): any {
+  return {
+    id: c.id,
+    requester_id: c.requesterId,
+    receiver_id: c.receiverId,
+    status: c.status,
+    created_at: c.createdAt,
+    updated_at: c.updatedAt,
+  };
+}
+
+function rowToVaultFolder(row: any): VaultFolder {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    referenceCode: row.reference_code,
+    folderName: row.folder_name,
+    password: row.password,
+    createdByUserId: row.created_by_user_id,
+    createdAt: row.created_at,
+  };
+}
+
+function vaultFolderToRow(vf: VaultFolder): any {
+  return {
+    id: vf.id,
+    shipment_id: vf.shipmentId,
+    reference_code: vf.referenceCode,
+    folder_name: vf.folderName,
+    password: vf.password,
+    created_by_user_id: vf.createdByUserId,
+    created_at: vf.createdAt,
+  };
+}
+
+// ─── Helper: throw on Supabase error ─────────────────────────────────────────
+
+function assertNoError(error: any, context: string) {
+  if (error) {
+    console.error(`[dbStore] ${context}:`, error.message);
+    throw new Error(error.message);
+  }
+}
+
+// ─── dbStore — public API (async) ────────────────────────────────────────────
 
 export const dbStore = {
-  getUsers: () => readDb().users,
-  getUserById: (id: string) => readDb().users.find(u => u.id === id),
-  saveUser: (user: User) => {
-    const db = readDb();
-    const idx = db.users.findIndex(u => u.id === user.id);
-    if (idx !== -1) {
-      db.users[idx] = user;
-    } else {
-      db.users.push(user);
-    }
-    writeDb(db);
-    return user;
+  // ── Users ──────────────────────────────────────────────────────────────────
+
+  getUsers: async (): Promise<User[]> => {
+    const { data, error } = await supabase.from('users').select('*').order('created_at');
+    assertNoError(error, 'getUsers');
+    return (data ?? []).map(rowToUser);
   },
 
-  getShipments: () => readDb().shipments,
-  getShipmentById: (id: string) => readDb().shipments.find(s => s.id === id || s.referenceCode === id),
-  saveShipment: (shipment: Shipment) => {
-    const db = readDb();
-    const idx = db.shipments.findIndex(s => s.id === shipment.id);
-    if (idx !== -1) {
-      db.shipments[idx] = shipment;
-    } else {
-      db.shipments.push(shipment);
-    }
-    writeDb(db);
-    return shipment;
+  getUserById: async (id: string): Promise<User | undefined> => {
+    const { data, error } = await supabase.from('users').select('*').eq('id', id).maybeSingle();
+    assertNoError(error, 'getUserById');
+    return data ? rowToUser(data) : undefined;
   },
 
-  getAssignments: () => readDb().assignments,
-  getAssignmentsForShipment: (shipmentId: string) => readDb().assignments.filter(a => a.shipmentId === shipmentId),
-  getAssignmentsForUser: (userId: string) => readDb().assignments.filter(a => a.userId === userId),
-  saveAssignment: (assignment: ShipmentAssignment) => {
-    const db = readDb();
-    db.assignments.push(assignment);
-    writeDb(db);
-    return assignment;
+  getUserByEmail: async (email: string): Promise<User | undefined> => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .ilike('email', email)
+      .maybeSingle();
+    assertNoError(error, 'getUserByEmail');
+    return data ? rowToUser(data) : undefined;
   },
 
-  getPriorityMilestones: (shipmentId: string) => readDb().priorityMilestones.filter(pm => pm.shipmentId === shipmentId),
-  savePriorityMilestones: (milestones: PriorityMilestone[]) => {
-    const db = readDb();
-    // Remove stale ones for these shipments
-    const shipmentIds = Array.from(new Set(milestones.map(m => m.shipmentId)));
-    db.priorityMilestones = db.priorityMilestones.filter(pm => !shipmentIds.includes(pm.shipmentId));
-    db.priorityMilestones.push(...milestones);
-    writeDb(db);
-  },
-  updatePriorityMilestoneStatus: (shipmentId: string, type: string, isCompleted: boolean) => {
-    const db = readDb();
-    db.priorityMilestones = db.priorityMilestones.map(pm => {
-      if (pm.shipmentId === shipmentId && pm.type === type) {
-        return { ...pm, isCompleted };
-      }
-      return pm;
-    });
-    writeDb(db);
+  saveUser: async (user: User): Promise<User> => {
+    const { data, error } = await supabase
+      .from('users')
+      .upsert(userToRow(user), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveUser');
+    return rowToUser(data);
   },
 
-  getMilestones: (shipmentId: string) => readDb().milestones.filter(m => m.shipmentId === shipmentId),
-  getAllMilestones: () => readDb().milestones,
-  saveMilestone: (milestone: MilestoneEvent) => {
-    const db = readDb();
-    db.milestones.push(milestone);
-    writeDb(db);
-    return milestone;
+  // ── Shipments ─────────────────────────────────────────────────────────────
+
+  getShipments: async (): Promise<Shipment[]> => {
+    const { data, error } = await supabase.from('shipments').select('*').order('created_at', { ascending: false });
+    assertNoError(error, 'getShipments');
+    return (data ?? []).map(rowToShipment);
   },
 
-  getDocuments: (shipmentId?: string) => {
-    const docs = readDb().documents;
+  getShipmentById: async (id: string): Promise<Shipment | undefined> => {
+    // Accepts both the UUID id and the human-readable reference_code
+    const { data, error } = await supabase
+      .from('shipments')
+      .select('*')
+      .or(`id.eq.${id},reference_code.eq.${id}`)
+      .maybeSingle();
+    assertNoError(error, 'getShipmentById');
+    return data ? rowToShipment(data) : undefined;
+  },
+
+  saveShipment: async (shipment: Shipment): Promise<Shipment> => {
+    const { data, error } = await supabase
+      .from('shipments')
+      .upsert(shipmentToRow(shipment), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveShipment');
+    return rowToShipment(data);
+  },
+
+  // ── Shipment Assignments ──────────────────────────────────────────────────
+
+  getAssignments: async (): Promise<ShipmentAssignment[]> => {
+    const { data, error } = await supabase.from('shipment_assignments').select('*');
+    assertNoError(error, 'getAssignments');
+    return (data ?? []).map(rowToAssignment);
+  },
+
+  getAssignmentsForShipment: async (shipmentId: string): Promise<ShipmentAssignment[]> => {
+    const { data, error } = await supabase
+      .from('shipment_assignments')
+      .select('*')
+      .eq('shipment_id', shipmentId);
+    assertNoError(error, 'getAssignmentsForShipment');
+    return (data ?? []).map(rowToAssignment);
+  },
+
+  getAssignmentsForUser: async (userId: string): Promise<ShipmentAssignment[]> => {
+    const { data, error } = await supabase
+      .from('shipment_assignments')
+      .select('*')
+      .eq('user_id', userId);
+    assertNoError(error, 'getAssignmentsForUser');
+    return (data ?? []).map(rowToAssignment);
+  },
+
+  saveAssignment: async (assignment: ShipmentAssignment): Promise<ShipmentAssignment> => {
+    const { data, error } = await supabase
+      .from('shipment_assignments')
+      .upsert(assignmentToRow(assignment), { onConflict: 'shipment_id,user_id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveAssignment');
+    return rowToAssignment(data);
+  },
+
+  // ── Priority Milestones ───────────────────────────────────────────────────
+
+  getPriorityMilestones: async (shipmentId: string): Promise<PriorityMilestone[]> => {
+    const { data, error } = await supabase
+      .from('priority_milestones')
+      .select('*')
+      .eq('shipment_id', shipmentId);
+    assertNoError(error, 'getPriorityMilestones');
+    return (data ?? []).map(rowToPriorityMilestone);
+  },
+
+  savePriorityMilestones: async (milestones: PriorityMilestone[]): Promise<void> => {
+    if (!milestones.length) return;
+    const { error } = await supabase
+      .from('priority_milestones')
+      .upsert(milestones.map(priorityMilestoneToRow), { onConflict: 'shipment_id,type' });
+    assertNoError(error, 'savePriorityMilestones');
+  },
+
+  updatePriorityMilestoneStatus: async (
+    shipmentId: string,
+    type: string,
+    isCompleted: boolean
+  ): Promise<void> => {
+    const { error } = await supabase
+      .from('priority_milestones')
+      .update({ is_completed: isCompleted })
+      .eq('shipment_id', shipmentId)
+      .eq('type', type);
+    assertNoError(error, 'updatePriorityMilestoneStatus');
+  },
+
+  // ── Milestone Events ──────────────────────────────────────────────────────
+
+  getMilestones: async (shipmentId: string): Promise<MilestoneEvent[]> => {
+    const { data, error } = await supabase
+      .from('milestone_events')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('occurred_at');
+    assertNoError(error, 'getMilestones');
+    return (data ?? []).map(rowToMilestoneEvent);
+  },
+
+  getAllMilestones: async (): Promise<MilestoneEvent[]> => {
+    const { data, error } = await supabase
+      .from('milestone_events')
+      .select('*')
+      .order('occurred_at');
+    assertNoError(error, 'getAllMilestones');
+    return (data ?? []).map(rowToMilestoneEvent);
+  },
+
+  saveMilestone: async (milestone: MilestoneEvent): Promise<MilestoneEvent> => {
+    const { data, error } = await supabase
+      .from('milestone_events')
+      .insert(milestoneEventToRow(milestone))
+      .select()
+      .single();
+    assertNoError(error, 'saveMilestone');
+    return rowToMilestoneEvent(data);
+  },
+
+  // ── Shipment Documents ────────────────────────────────────────────────────
+
+  getDocuments: async (shipmentId?: string): Promise<ShipmentDocument[]> => {
+    let query = supabase.from('shipment_documents').select('*').order('created_at');
     if (shipmentId) {
-      return docs.filter(d => d.shipmentId === shipmentId);
+      query = query.eq('shipment_id', shipmentId);
     }
-    return docs;
+    const { data, error } = await query;
+    assertNoError(error, 'getDocuments');
+    return (data ?? []).map(rowToDocument);
   },
-  saveDocument: (doc: ShipmentDocument) => {
-    const db = readDb();
-    // If we upload a new version, mark others as not latest
+
+  saveDocument: async (doc: ShipmentDocument): Promise<ShipmentDocument> => {
+    // Mark older versions of the same file as not-latest before inserting
     if (doc.isLatest) {
-      db.documents = db.documents.map(d => {
-        if (d.shipmentId === doc.shipmentId && d.fileName === doc.fileName) {
-          return { ...d, isLatest: false };
-        }
-        return d;
-      });
+      await supabase
+        .from('shipment_documents')
+        .update({ is_latest: false })
+        .eq('shipment_id', doc.shipmentId)
+        .eq('file_name', doc.fileName);
     }
-    db.documents.push(doc);
-    writeDb(db);
-    return doc;
+    const { data, error } = await supabase
+      .from('shipment_documents')
+      .insert(documentToRow(doc))
+      .select()
+      .single();
+    assertNoError(error, 'saveDocument');
+    return rowToDocument(data);
   },
 
-  getThreads: () => readDb().threads,
-  getThreadById: (id: string) => readDb().threads.find(t => t.id === id),
-  saveThread: (thread: ChatThread) => {
-    const db = readDb();
-    const idx = db.threads.findIndex(t => t.id === thread.id);
-    if (idx !== -1) {
-      db.threads[idx] = thread;
-    } else {
-      db.threads.push(thread);
-    }
-    writeDb(db);
-    return thread;
+  // ── Chat Threads ──────────────────────────────────────────────────────────
+
+  getThreads: async (): Promise<ChatThread[]> => {
+    const { data, error } = await supabase
+      .from('chat_threads')
+      .select('*')
+      .order('updated_at', { ascending: false });
+    assertNoError(error, 'getThreads');
+    return (data ?? []).map(rowToThread);
   },
 
-  getParticipants: () => readDb().participants,
-  getParticipantsForThread: (threadId: string) => readDb().participants.filter(p => p.threadId === threadId),
-  saveParticipant: (participant: ChatParticipant) => {
-    const db = readDb();
-    db.participants.push(participant);
-    writeDb(db);
-    return participant;
+  getThreadById: async (id: string): Promise<ChatThread | undefined> => {
+    const { data, error } = await supabase
+      .from('chat_threads')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    assertNoError(error, 'getThreadById');
+    return data ? rowToThread(data) : undefined;
   },
 
-  getMessages: (threadId?: string) => {
-    const msgs = readDb().messages;
+  saveThread: async (thread: ChatThread): Promise<ChatThread> => {
+    const { data, error } = await supabase
+      .from('chat_threads')
+      .upsert(threadToRow(thread), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveThread');
+    return rowToThread(data);
+  },
+
+  // ── Chat Participants ─────────────────────────────────────────────────────
+
+  getParticipants: async (): Promise<ChatParticipant[]> => {
+    const { data, error } = await supabase.from('chat_participants').select('*');
+    assertNoError(error, 'getParticipants');
+    return (data ?? []).map(rowToParticipant);
+  },
+
+  getParticipantsForThread: async (threadId: string): Promise<ChatParticipant[]> => {
+    const { data, error } = await supabase
+      .from('chat_participants')
+      .select('*')
+      .eq('thread_id', threadId);
+    assertNoError(error, 'getParticipantsForThread');
+    return (data ?? []).map(rowToParticipant);
+  },
+
+  saveParticipant: async (participant: ChatParticipant): Promise<ChatParticipant> => {
+    const { data, error } = await supabase
+      .from('chat_participants')
+      .upsert(participantToRow(participant), { onConflict: 'thread_id,user_id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveParticipant');
+    return rowToParticipant(data);
+  },
+
+  // ── Messages ──────────────────────────────────────────────────────────────
+
+  getMessages: async (threadId?: string): Promise<Message[]> => {
+    let query = supabase.from('messages').select('*').order('created_at');
     if (threadId) {
-      return msgs.filter(m => m.threadId === threadId).sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      query = query.eq('thread_id', threadId);
     }
-    return msgs;
-  },
-  saveMessage: (msg: Message) => {
-    const db = readDb();
-    const idx = db.messages.findIndex(m => m.id === msg.id);
-    if (idx !== -1) {
-      db.messages[idx] = msg;
-    } else {
-      db.messages.push(msg);
-    }
-    writeDb(db);
-    return msg;
-  },
-  unsendMessage: (messageId: string) => {
-    const db = readDb();
-    db.messages = db.messages.map(m => {
-      if (m.id === messageId) {
-        return { ...m, isUnsent: true, content: 'This message was unsent.' };
-      }
-      return m;
-    });
-    writeDb(db);
+    const { data, error } = await query;
+    assertNoError(error, 'getMessages');
+    return (data ?? []).map(rowToMessage);
   },
 
-  // ─── BOC Document Vault Folders ──────────────────────────────────────────
-  getVaultFolders: () => readDb().vaultFolders,
-  getVaultFolderByShipmentId: (shipmentId: string) =>
-    readDb().vaultFolders.find(v => v.shipmentId === shipmentId),
-  saveVaultFolder: (folder: VaultFolder) => {
-    const db = readDb();
-    const idx = db.vaultFolders.findIndex(v => v.id === folder.id);
-    if (idx !== -1) {
-      db.vaultFolders[idx] = folder;
-    } else {
-      db.vaultFolders.push(folder);
-    }
-    writeDb(db);
-    return folder;
+  saveMessage: async (msg: Message): Promise<Message> => {
+    const { data, error } = await supabase
+      .from('messages')
+      .upsert(messageToRow(msg), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveMessage');
+    return rowToMessage(data);
   },
 
-  // ─── Vendor Network ───────────────────────────────────────────────────────
-  getConnectionRequests: () => readDb().connectionRequests,
-  getConnectionRequestById: (id: string) =>
-    readDb().connectionRequests.find(c => c.id === id),
+  unsendMessage: async (messageId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('messages')
+      .update({ is_unsent: true, content: 'This message was unsent.' })
+      .eq('id', messageId);
+    assertNoError(error, 'unsendMessage');
+  },
+
+  // ── BOC Document Vault Folders ────────────────────────────────────────────
+
+  getVaultFolders: async (): Promise<VaultFolder[]> => {
+    const { data, error } = await supabase
+      .from('vault_folders')
+      .select('*')
+      .order('created_at', { ascending: false });
+    assertNoError(error, 'getVaultFolders');
+    return (data ?? []).map(rowToVaultFolder);
+  },
+
+  getVaultFolderByShipmentId: async (shipmentId: string): Promise<VaultFolder | undefined> => {
+    const { data, error } = await supabase
+      .from('vault_folders')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .maybeSingle();
+    assertNoError(error, 'getVaultFolderByShipmentId');
+    return data ? rowToVaultFolder(data) : undefined;
+  },
+
+  saveVaultFolder: async (folder: VaultFolder): Promise<VaultFolder> => {
+    const { data, error } = await supabase
+      .from('vault_folders')
+      .upsert(vaultFolderToRow(folder), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveVaultFolder');
+    return rowToVaultFolder(data);
+  },
+
+  // ── B2B Vendor Network (Connection Requests) ──────────────────────────────
+
+  getConnectionRequests: async (): Promise<ConnectionRequest[]> => {
+    const { data, error } = await supabase.from('connection_requests').select('*');
+    assertNoError(error, 'getConnectionRequests');
+    return (data ?? []).map(rowToConnection);
+  },
+
+  getConnectionRequestById: async (id: string): Promise<ConnectionRequest | undefined> => {
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    assertNoError(error, 'getConnectionRequestById');
+    return data ? rowToConnection(data) : undefined;
+  },
+
   /** All requests where userId is either requester or receiver */
-  getConnectionRequestsForUser: (userId: string) =>
-    readDb().connectionRequests.filter(
-      c => c.requesterId === userId || c.receiverId === userId
-    ),
-  /** IDs of vendors in the Importer's Trusted Network (status === ACCEPTED) */
-  getTrustedVendorIds: (importerId: string): string[] => {
-    const db = readDb();
-    return db.connectionRequests
-      .filter(c => c.requesterId === importerId && c.status === 'ACCEPTED')
-      .map(c => c.receiverId);
+  getConnectionRequestsForUser: async (userId: string): Promise<ConnectionRequest[]> => {
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .select('*')
+      .or(`requester_id.eq.${userId},receiver_id.eq.${userId}`);
+    assertNoError(error, 'getConnectionRequestsForUser');
+    return (data ?? []).map(rowToConnection);
   },
-  saveConnectionRequest: (conn: ConnectionRequest) => {
-    const db = readDb();
-    const idx = db.connectionRequests.findIndex(c => c.id === conn.id);
-    if (idx !== -1) {
-      db.connectionRequests[idx] = conn;
-    } else {
-      db.connectionRequests.push(conn);
-    }
-    writeDb(db);
-    return conn;
+
+  /** IDs of vendors in the Importer's Trusted Network (status === ACCEPTED) */
+  getTrustedVendorIds: async (importerId: string): Promise<string[]> => {
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .select('receiver_id')
+      .eq('requester_id', importerId)
+      .eq('status', 'ACCEPTED');
+    assertNoError(error, 'getTrustedVendorIds');
+    return (data ?? []).map((r: any) => r.receiver_id);
+  },
+
+  saveConnectionRequest: async (conn: ConnectionRequest): Promise<ConnectionRequest> => {
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .upsert(connectionToRow(conn), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveConnectionRequest');
+    return rowToConnection(data);
   },
 };

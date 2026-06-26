@@ -104,6 +104,7 @@ const MILESTONE_LABELS: Record<MilestoneType, string> = {
   CARGO_PICKED_UP_FROM_PORT:       'Cargo Picked Up from Port',
   CARGO_RECEIVED_AT_WAREHOUSE:     'Cargo Received at Warehouse',
   INCOMING_CARGO_STORED:           'Incoming Cargo Stored',
+  FAILED_DELIVERY_ATTEMPT:         'Failed Delivery Attempt',
 };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    const user = dbStore.getUserById(userId);
+    const user = await dbStore.getUserById(userId);
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
@@ -23,11 +23,10 @@ export async function POST(req: NextRequest) {
       companyName: companyName !== undefined ? companyName : user.companyName,
       bankDetails: bankDetails !== undefined ? bankDetails : user.bankDetails,
       stellarWallet: stellarWallet !== undefined ? stellarWallet : user.stellarWallet,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
-    dbStore.saveUser(updatedUser);
-
+    await dbStore.saveUser(updatedUser);
     return NextResponse.json({ success: true, data: updatedUser });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || 'Internal server error' }, { status: 500 });

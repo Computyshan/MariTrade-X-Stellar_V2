@@ -342,7 +342,7 @@ export default function NetworkPage() {
                         </div>
                       </div>
                       {/* KYC badge */}
-                      <BadgeCheck className="w-5 h-5 text-ocean-400 flex-shrink-0 mt-0.5" title="KYC Verified" />
+                      <BadgeCheck className="w-5 h-5 text-ocean-400 flex-shrink-0 mt-0.5" aria-label="KYC Verified" />
                     </div>
 
                     {/* Role + Location */}

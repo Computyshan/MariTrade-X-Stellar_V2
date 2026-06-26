@@ -856,7 +856,7 @@ export default function NewShipmentPage() {
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5"><Package className="w-3.5 h-3.5 text-maritime-400" /> Total Package / Piece Count</label>
                   <div className="flex gap-2">
-                    <input type="number" min="1" placeholder="98" className="w-24 border border-sand-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-maritime-400 flex-shrink-0" value={packageCount} onChange={e => setPackageCount(e.target.value)} />
+                    <input type="number" min="1" placeholder="00" className="w-24 border border-sand-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-maritime-400 flex-shrink-0" value={packageCount} onChange={e => setPackageCount(e.target.value)} />
                     <select className="flex-1 border border-sand-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-maritime-400 bg-white cursor-pointer" value={packagingType} onChange={e => setPackagingType(e.target.value)}>
                       {PACKAGING_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
@@ -865,7 +865,7 @@ export default function NewShipmentPage() {
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5"><Weight className="w-3.5 h-3.5 text-maritime-400" /> Total Gross Weight</label>
                   <div className="flex gap-2">
-                    <input type="number" min="0" step="0.01" placeholder="5200" className="flex-1 border border-sand-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-maritime-400" value={grossWeight} onChange={e => setGrossWeight(e.target.value)} />
+                    <input type="number" min="0" step="0.01" placeholder="0000" className="flex-1 border border-sand-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-maritime-400" value={grossWeight} onChange={e => setGrossWeight(e.target.value)} />
                     <div className="flex gap-1">
                       {(['KG', 'LBS'] as const).map(unit => (
                         <button key={unit} type="button" onClick={() => setWeightUnit(unit)}
@@ -885,7 +885,7 @@ export default function NewShipmentPage() {
               </button>
             </div>
           </div>
-
+          
           {/* AI Sidebar */}
           <div className="lg:col-span-2">
             <div className="bg-maritime-900 text-white p-6 rounded-2xl space-y-4 sticky top-6">

@@ -1,6 +1,7 @@
-import type {Metadata} from 'next';
+import type { Metadata } from 'next';
 import { Inter, Hanken_Grotesk, JetBrains_Mono } from 'next/font/google';
-import './globals.css'; // Global styles
+import './globals.css';
+import AuthProvider from '@/components/AuthProvider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -25,13 +26,14 @@ export const metadata: Metadata = {
   description: 'Secured shipping escrow tracking platform for Filipino SME importers and logistics trust networks.',
 };
 
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable}`}>
       <body suppressHydrationWarning className="bg-[#f7f9fb] text-[#191c1e] font-sans antialiased">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
 }
-

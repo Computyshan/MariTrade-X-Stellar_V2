@@ -10,10 +10,10 @@ import { dbStore } from '@/lib/db';
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await req.json();
     const { status, actorId } = body;
 
@@ -31,7 +31,7 @@ export async function PATCH(
       );
     }
 
-    const conn = dbStore.getConnectionRequestById(id);
+    const conn = await dbStore.getConnectionRequestById(id);
     if (!conn) {
       return NextResponse.json({ success: false, error: 'Connection request not found' }, { status: 404 });
     }
@@ -50,13 +50,8 @@ export async function PATCH(
       );
     }
 
-    const updated = {
-      ...conn,
-      status,
-      updatedAt: new Date().toISOString(),
-    };
-
-    dbStore.saveConnectionRequest(updated);
+    const updated = { ...conn, status, updatedAt: new Date().toISOString() };
+    await dbStore.saveConnectionRequest(updated);
     return NextResponse.json({ success: true, data: updated });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

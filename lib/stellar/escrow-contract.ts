@@ -239,7 +239,7 @@ export class MariTradeEscrowClient {
     }
 
     const assembled = assembleTransaction(tx, simResult);
-    return { built: assembled.toXDR(), result: simResult };
+    return { built: assembled.build().toEnvelope().toXDR().toString('base64'), result: simResult };
   }
 
   // ══════════════════════════════════════════════════════════════════════════

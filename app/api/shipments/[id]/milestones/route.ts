@@ -52,7 +52,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const milestones = dbStore.getMilestones(id);
+  const milestones = await dbStore.getMilestones(id);
   return NextResponse.json({ success: true, data: milestones });
 }
 
@@ -76,21 +76,15 @@ export async function POST(
     }
 
     // Validate shipment exists
-    const shipment = dbStore.getShipmentById(shipmentId);
+    const shipment = await dbStore.getShipmentById(shipmentId);
     if (!shipment) {
-      return NextResponse.json(
-        { success: false, error: 'Shipment not found.' },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: 'Shipment not found.' }, { status: 404 });
     }
 
     // Validate logger exists
-    const logger = dbStore.getUserById(loggedById);
+    const logger = await dbStore.getUserById(loggedById);
     if (!logger) {
-      return NextResponse.json(
-        { success: false, error: 'User not found.' },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
     }
 
     // Enforce role-based milestone permission
@@ -107,23 +101,23 @@ export async function POST(
 
     // Build and persist the milestone event
     const milestone: MilestoneEvent = {
-      id:          `me-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: `me-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       shipmentId,
       loggedById,
-      type:        type as MilestoneType,
+      type: type as MilestoneType,
       description: description ?? undefined,
       evidenceUrl,
-      occurredAt:  occurredAt ?? new Date().toISOString(),
-      verified:    false,
+      occurredAt: occurredAt ?? new Date().toISOString(),
+      verified: false,
     };
 
-    dbStore.saveMilestone(milestone);
+    await dbStore.saveMilestone(milestone);
 
     // Auto-complete any matching priority milestone
-    const priorityMilestones = dbStore.getPriorityMilestones(shipmentId);
+    const priorityMilestones = await dbStore.getPriorityMilestones(shipmentId);
     const matchingPriority = priorityMilestones.find(pm => pm.type === type && !pm.isCompleted);
     if (matchingPriority) {
-      dbStore.updatePriorityMilestoneStatus(shipmentId, type, true);
+      await dbStore.updatePriorityMilestoneStatus(shipmentId, type, true);
     }
 
     return NextResponse.json({ success: true, data: milestone });

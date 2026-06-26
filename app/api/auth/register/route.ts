@@ -1,39 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 import { dbStore } from '@/lib/db';
-import { User, UserType, JobRole } from '@/types';
+import { User } from '@/types';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, fullName, fullAddress, contactNumber, userType, jobRole, companyName } = body;
+    const { email, password, fullName, fullAddress, contactNumber } = body;
 
-    if (!email || !fullName) {
-      return NextResponse.json({ success: false, error: 'Email and full name are required' }, { status: 400 });
+    if (!email || !password || !fullName) {
+      return NextResponse.json(
+        { success: false, error: 'Email, password, and full name are required' },
+        { status: 400 }
+      );
     }
 
-    const existingUsers = dbStore.getUsers();
-    const userExists = existingUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+    // 1. Create Supabase Auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: email.toLowerCase(),
+      password,
+    });
 
-    if (userExists) {
-      return NextResponse.json({ success: false, error: 'User with this email already registered' }, { status: 400 });
+    if (authError) {
+      return NextResponse.json({ success: false, error: authError.message }, { status: 400 });
     }
 
+    const authUser = authData.user;
+    if (!authUser) {
+      return NextResponse.json({ success: false, error: 'Sign-up failed — no user returned' }, { status: 500 });
+    }
+
+    // 2. Insert matching row into our users table using the auth UUID as id
     const newUser: User = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 9),
+      id: authUser.id,
       email: email.toLowerCase(),
       fullName,
       fullAddress: fullAddress || '',
       contactNumber: contactNumber || '',
-      userType: (userType || 'TRADE_PARTY') as UserType,
-      jobRole: (jobRole || 'IMPORTER') as JobRole,
-      companyName: companyName || '',
+      userType: 'TRADE_PARTY',
+      jobRole: 'IMPORTER',
+      companyName: '',
       kycStatus: 'PENDING',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
-    const savedUser = dbStore.saveUser(newUser);
-
+    const savedUser = await dbStore.saveUser(newUser);
     return NextResponse.json({ success: true, data: savedUser });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || 'Internal server error' }, { status: 500 });

@@ -18,7 +18,6 @@ import {
   Upload, 
   AlertCircle,
   Anchor,
-  Sparkles,
   ClipboardList,
   CheckCircle2,
   CircleDot,
@@ -27,7 +26,6 @@ import {
   FileCheck,
   Shield,
   Warehouse,
-  Building2,
   Lock
 } from 'lucide-react';
 import { MilestoneType, JobRole, Shipment, MilestoneEvent } from '@/types';
@@ -36,20 +34,11 @@ import { MilestoneType, JobRole, Shipment, MilestoneEvent } from '@/types';
 const MILESTONE_BY_JOB: Record<JobRole, MilestoneType[]> = {
   IMPORTER: ['DELIVERED_AND_SIGNED_OFF'],
   EXPORTER: ['BILL_OF_LADING_ISSUED'],
-  COMPANY_OWNER: ['DELIVERED_AND_SIGNED_OFF'],
-  TRADER: ['BILL_OF_LADING_ISSUED'],
   FREIGHT_FORWARDER: [
     'BOOKING_CONFIRMED',
     'DOCUMENTS_SUBMITTED_TO_CARRIER',
     'CARGO_READY_FOR_COLLECTION',
     'SPACE_ON_VESSEL_SECURED',
-  ],
-  SHIPPING_LINE_CAPTAIN: [
-    'BILL_OF_LADING_ISSUED',
-    'CONTAINER_LOADED_ON_VESSEL',
-    'VESSEL_DEPARTED_ORIGIN',
-    'VESSEL_ARRIVED_DESTINATION',
-    'CONTAINER_OFFLOADED',
   ],
   CUSTOMS_BROKER: [
     'BOC_ENTRY_FILED',
@@ -64,20 +53,6 @@ const MILESTONE_BY_JOB: Record<JobRole, MilestoneType[]> = {
     'CARGO_STAGED_FOR_PICKUP',
     'CARGO_HANDED_OFF_TO_CARRIER',
     'INCOMING_CARGO_STORED',
-  ],
-  PORT_AUTHORITY_OFFICER: [
-    'VESSEL_CLEARED_TO_DEPART',
-    'CONTAINER_GATED_OUT_ORIGIN',
-    'VESSEL_ARRIVED_AT_BERTH',
-    'CONTAINER_GATED_IN_DESTINATION',
-    'PORT_HOLD_PLACED_OR_LIFTED',
-  ],
-  TRUCKER: [
-    'CARGO_PICKED_UP_FROM_PORT',
-    'IN_TRANSIT_TO_DESTINATION',
-    'ARRIVED_AT_DELIVERY_ADDRESS',
-    'DELIVERED_AND_SIGNED_OFF',
-    'FAILED_DELIVERY_ATTEMPT',
   ],
 };
 
@@ -116,36 +91,16 @@ export default function DashboardHome() {
         setShipments(shipResult.data);
       }
 
-      // Fetch all milestones for feed
-      const msRes = await fetch('/app/api/shipments/milestones-feed', {
-        headers: { 'mock': 'true' }
-      });
-      // We can also query default milestones via simulated endpoint fallback
-      const m1: MilestoneEvent[] = [
-        {
-          id: 'me-feed-1',
-          shipmentId: 'shipment-tokyo-manila-1',
-          loggedById: 'emily-forwarder-id',
-          type: 'BOC_ENTRY_FILED',
-          description: 'Customs declaration successfully registered under cargo MT-2026-00341.',
-          evidenceUrl: '/evidence_boc.jpg',
-          occurredAt: new Date(Date.now() - 4 * 3600000).toISOString(),
-          verified: true
-        },
-        {
-          id: 'me-feed-2',
-          shipmentId: 'shipment-tokyo-manila-1',
-          loggedById: 'carlos-broker-id',
-          type: 'SPACE_ON_VESSEL_SECURED',
-          description: 'Maersk container vessel depart clearance approved.',
-          evidenceUrl: '/evidence_vessel.png',
-          occurredAt: new Date(Date.now() - 12 * 3600000).toISOString(),
-          verified: true
-        }
-      ];
-      setMilestones(m1);
+      // Fetch recent milestones feed from real API
+      const msRes = await fetch('/api/milestones/feed');
+      const msResult = await msRes.json();
+      if (msResult.success) {
+        setMilestones(msResult.data);
+      } else {
+        setMilestones([]);
+      }
     } catch (err) {
-      console.warn('Dashboard fetch failed, loading fallback stores:', err);
+      console.warn('Dashboard fetch failed:', err);
     } finally {
       setLoading(false);
     }
@@ -252,10 +207,6 @@ export default function DashboardHome() {
             <span className="text-gray-300">|</span>
             <span>SYSTEM STATUS: <span className="text-green-500 font-bold">SECURE</span></span>
           </p>
-        </div>
-        <div className="flex items-center gap-1.5 border border-gray-200 bg-white rounded-lg px-3 py-1.5 text-[11px] font-semibold text-gray-500 shadow-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-          <span className="font-mono tracking-widest">[ LEDGER: ACTIVE ]</span>
         </div>
       </div>
 
@@ -410,59 +361,45 @@ export default function DashboardHome() {
 
                 {/* Right column: Port Activity + Support */}
                 <div className="space-y-4">
-                  {/* Port Activity */}
+                  {/* Port Activity — driven by real milestones from Supabase */}
                   <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                     <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100">
                       <h3 className="text-sm font-bold text-[#111c30]">Port Activity</h3>
                       <button className="text-[11px] font-semibold text-blue-500 hover:text-blue-700">VIEW ALL</button>
                     </div>
                     <div className="px-5 py-4 space-y-0 relative">
-                      {/* Timeline line */}
-                      <div className="absolute left-[26px] top-6 bottom-6 w-px bg-gray-100" />
-
-                      {/* Entry 1 */}
-                      <div className="flex gap-4 pb-5">
-                        <div className="w-5 h-5 rounded-full bg-[#111c30] flex items-center justify-center flex-shrink-0 mt-0.5 z-10">
-                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                      {milestones.length === 0 ? (
+                        <div className="py-8 text-center">
+                          <CircleDot className="w-7 h-7 text-gray-200 mx-auto mb-2" />
+                          <p className="text-[11px] text-gray-400 font-mono">NO RECENT PORT ACTIVITY</p>
                         </div>
-                        <div>
-                          <p className="text-[11px] font-bold text-[#111c30] uppercase tracking-wide">BOC ENTRY FILED</p>
-                          <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Customs declaration registered and verified.</p>
-                          <p className="text-[10px] text-blue-500 mt-1 font-medium">
-                            {milestones[0] ? `REF: ${milestones[0].shipmentId?.slice(-10).toUpperCase() || 'MT-2026-00341'}` : 'REF: MT-2026-00341'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Entry 2 */}
-                      <div className="flex gap-4 pb-5">
-                        <div className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-0.5 z-10">
-                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                        </div>
-                        <div>
-                          <p className="text-[11px] font-bold text-[#111c30] uppercase tracking-wide">VESSEL SECURED</p>
-                          <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Container vessel clearance approved at source.</p>
-                        </div>
-                      </div>
-
-                      {/* Entry 3 — dimmed */}
-                      <div className="flex gap-4">
-                        <div className="w-5 h-5 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0 mt-0.5 z-10" />
-                        <div className="opacity-40">
-                          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">KYC VERIFIED</p>
-                          <p className="text-[11px] text-gray-400 mt-0.5">Identity confirmed by global compliance.</p>
-                        </div>
-                      </div>
+                      ) : (
+                        <>
+                          {/* Timeline line */}
+                          <div className="absolute left-[26px] top-6 bottom-6 w-px bg-gray-100" />
+                          {milestones.slice(0, 3).map((me, idx) => (
+                            <div key={me.id} className={`flex gap-4 ${idx < milestones.slice(0, 3).length - 1 ? 'pb-5' : ''}`}>
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 z-10 ${
+                                idx === 0 ? 'bg-[#111c30]' : idx === 1 ? 'bg-gray-300' : 'bg-gray-100 border border-gray-200'
+                              }`}>
+                                <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                              </div>
+                              <div className={idx === 2 ? 'opacity-40' : ''}>
+                                <p className="text-[11px] font-bold text-[#111c30] uppercase tracking-wide">
+                                  {me.type.replace(/_/g, ' ')}
+                                </p>
+                                <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{me.description}</p>
+                                {me.shipmentId && (
+                                  <p className="text-[10px] text-blue-500 mt-1 font-medium">
+                                    REF: {me.shipmentId.slice(-10).toUpperCase()}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
-                  </div>
-
-                  {/* Support Card */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">NEED SUPPORT?</p>
-                    <p className="text-[12px] text-gray-500 leading-relaxed">Our maritime trade agents are available 24/7 for logistics clearance.</p>
-                    <button className="w-full bg-[#111c30] hover:bg-[#1e3a5f] text-white font-bold py-2.5 rounded-lg text-[11px] tracking-wider transition-colors">
-                      CONTACT AGENT
-                    </button>
                   </div>
                 </div>
               </div>
@@ -865,15 +802,10 @@ function MilestoneStep({
 /** Banner showing which milestones the current role can log */
 const ROLE_META: Record<JobRole, { label: string; color: string; icon: React.ReactNode }> = {
   FREIGHT_FORWARDER: { label: 'Freight Forwarder', color: 'bg-blue-50 border-blue-100 text-blue-700', icon: <Truck className="w-4 h-4" /> },
-  SHIPPING_LINE_CAPTAIN: { label: 'Shipping Line Captain', color: 'bg-maritime-50 border-maritime-100 text-maritime-700', icon: <Anchor className="w-4 h-4" /> },
   CUSTOMS_BROKER: { label: 'Customs Broker', color: 'bg-amber-50 border-amber-100 text-amber-700', icon: <FileCheck className="w-4 h-4" /> },
   WAREHOUSE_OPERATOR: { label: 'Warehouse Operator', color: 'bg-purple-50 border-purple-100 text-purple-700', icon: <Warehouse className="w-4 h-4" /> },
-  PORT_AUTHORITY_OFFICER: { label: 'Port Authority Officer', color: 'bg-teal-50 border-teal-100 text-teal-700', icon: <Building2 className="w-4 h-4" /> },
-  TRUCKER: { label: 'Trucker', color: 'bg-orange-50 border-orange-100 text-orange-700', icon: <Truck className="w-4 h-4" /> },
   IMPORTER: { label: 'Importer', color: 'bg-sand-50 border-sand-100 text-sand-700', icon: <Shield className="w-4 h-4" /> },
   EXPORTER: { label: 'Exporter', color: 'bg-sand-50 border-sand-100 text-sand-700', icon: <Shield className="w-4 h-4" /> },
-  COMPANY_OWNER: { label: 'Company Owner', color: 'bg-sand-50 border-sand-100 text-sand-700', icon: <Shield className="w-4 h-4" /> },
-  TRADER: { label: 'Trader', color: 'bg-sand-50 border-sand-100 text-sand-700', icon: <Shield className="w-4 h-4" /> },
 };
 
 function LogisticsScopeBanner({ jobRole }: { jobRole: JobRole }) {

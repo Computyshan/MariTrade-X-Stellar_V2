@@ -21,8 +21,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'userId is required' }, { status: 400 });
     }
 
-    const users = dbStore.getUsers();
-    const connections = dbStore.getConnectionRequestsForUser(userId);
+    const [users, connections] = await Promise.all([
+      dbStore.getUsers(),
+      dbStore.getConnectionRequestsForUser(userId),
+    ]);
 
     const decorated = connections.map(c => {
       const otherPartyId = c.requesterId === userId ? c.receiverId : c.requesterId;
@@ -53,20 +55,18 @@ export async function POST(req: NextRequest) {
     }
 
     if (requesterId === receiverId) {
-      return NextResponse.json(
-        { success: false, error: 'Cannot connect to yourself' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: 'Cannot connect to yourself' }, { status: 400 });
     }
 
-    // Validate both users exist
-    const requester = dbStore.getUserById(requesterId);
-    const receiver = dbStore.getUserById(receiverId);
+    const [requester, receiver] = await Promise.all([
+      dbStore.getUserById(requesterId),
+      dbStore.getUserById(receiverId),
+    ]);
+
     if (!requester || !receiver) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // Validate receiver is a VERIFIED logistics chain user
     if (receiver.userType !== 'LOGISTICS_CHAIN' || receiver.kycStatus !== 'VERIFIED') {
       return NextResponse.json(
         { success: false, error: 'Receiver must be a KYC-verified logistics vendor' },
@@ -75,7 +75,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Check for existing connection (either direction)
-    const existing = dbStore.getConnectionRequests().find(
+    const allConns = await dbStore.getConnectionRequests();
+    const existing = allConns.find(
       c =>
         (c.requesterId === requesterId && c.receiverId === receiverId) ||
         (c.requesterId === receiverId && c.receiverId === requesterId)
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
 
-    dbStore.saveConnectionRequest(newConn);
+    await dbStore.saveConnectionRequest(newConn);
     return NextResponse.json({ success: true, data: newConn }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

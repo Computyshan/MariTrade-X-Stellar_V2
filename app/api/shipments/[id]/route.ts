@@ -1,214 +1,357 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Keypair, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
+import { Server as SorobanServer } from '@stellar/stellar-sdk/rpc';
 import { dbStore } from '@/lib/db';
-import { MilestoneEvent, ShipmentDocument, ShipmentStatus, EscrowStatus } from '@/types';
+import { MilestoneEvent, ShipmentDocument, ShipmentStatus } from '@/types';
+import { getMariTradeEscrowClient, CancellationStage } from '@/lib/stellar/escrow-contract';
 
-// GET Shipment Details and all nested collections
+// ─── Network config ──────────────────────────────────────────────────────────
+const STELLAR_NETWORK = process.env.STELLAR_NETWORK ?? 'testnet';
+const RPC_URL =
+  STELLAR_NETWORK === 'mainnet'
+    ? 'https://mainnet.sorobanrpc.com'
+    : 'https://soroban-testnet.stellar.org';
+const NETWORK_PASSPHRASE =
+  STELLAR_NETWORK === 'mainnet'
+    ? Networks.PUBLIC
+    : Networks.TESTNET;
+const PLATFORM_ADDRESS  = process.env.NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS ?? '';
+const PLATFORM_SECRET   = process.env.PLATFORM_STELLAR_SECRET_KEY ?? '';
+
+// ─── Server-side Stellar signer ───────────────────────────────────────────────
+// Signs and submits a pre-assembled XDR envelope using the platform keypair.
+// Returns the confirmed transaction hash, or null if the secret key is not set.
+async function platformSignAndSubmit(xdr: string): Promise<string | null> {
+  if (!PLATFORM_SECRET || !PLATFORM_ADDRESS) {
+    console.warn('[Stellar] PLATFORM_STELLAR_SECRET_KEY not set — skipping chain call.');
+    return null;
+  }
+
+  try {
+    const keypair = Keypair.fromSecret(PLATFORM_SECRET);
+    const server  = new SorobanServer(RPC_URL);
+
+    // Deserialise the assembled XDR and attach the platform signature
+    const tx = TransactionBuilder.fromXDR(xdr, NETWORK_PASSPHRASE);
+    tx.sign(keypair);
+
+    const sendResult = await server.sendTransaction(tx);
+
+    if (sendResult.status === 'ERROR') {
+      console.error('[Stellar] sendTransaction ERROR:', sendResult.errorResult);
+      return null;
+    }
+
+    const { hash } = sendResult;
+
+    // Poll for confirmation (up to 30 s)
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const check = await server.getTransaction(hash);
+      if (check.status === 'SUCCESS') return hash;
+      if (check.status === 'FAILED') {
+        console.error(`[Stellar] Transaction FAILED on-chain. Hash: ${hash}`);
+        return null;
+      }
+      // NOT_FOUND → still pending
+    }
+
+    console.error(`[Stellar] Transaction timed out. Hash: ${hash}`);
+    return null;
+  } catch (err) {
+    console.error('[Stellar] platformSignAndSubmit error:', err);
+    return null;
+  }
+}
+
+// ─── GET — Shipment details with all nested collections ─────────────────────
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const resolvedParams = await params;
-    const { id } = resolvedParams;
-    const shipment = dbStore.getShipmentById(id);
+    const { id } = await params;
+    const shipment = await dbStore.getShipmentById(id);
 
     if (!shipment) {
-      return NextResponse.json({ success: false, error: 'Shipment not found' }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: 'Shipment not found' },
+        { status: 404 },
+      );
     }
 
-    const milestones = dbStore.getMilestones(shipment.id);
-    const priorityMilestones = dbStore.getPriorityMilestones(shipment.id);
-    const documents = dbStore.getDocuments(shipment.id);
-    const assignments = dbStore.getAssignmentsForShipment(shipment.id);
+    const [milestones, priorityMilestones, documents, assignments] =
+      await Promise.all([
+        dbStore.getMilestones(shipment.id),
+        dbStore.getPriorityMilestones(shipment.id),
+        dbStore.getDocuments(shipment.id),
+        dbStore.getAssignmentsForShipment(shipment.id),
+      ]);
 
     return NextResponse.json({
       success: true,
-      data: {
-        shipment,
-        milestones,
-        priorityMilestones,
-        documents,
-        assignments
-      }
+      data: { shipment, milestones, priorityMilestones, documents, assignments },
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// POST Actions (Milestone logs, Document upload, Accept/Reject, Escrow release, Cancel)
+// ─── POST — All shipment actions ─────────────────────────────────────────────
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const resolvedParams = await params;
-    const { id } = resolvedParams;
-    const shipment = dbStore.getShipmentById(id);
+    const { id } = await params;
+    const shipment = await dbStore.getShipmentById(id);
 
     if (!shipment) {
-      return NextResponse.json({ success: false, error: 'Shipment not found' }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: 'Shipment not found' },
+        { status: 404 },
+      );
     }
 
-    const body = await req.json();
+    const body     = await req.json();
     const { action } = body;
 
     if (!action) {
-      return NextResponse.json({ success: false, error: 'Action parameter is required' }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'Action parameter is required' },
+        { status: 400 },
+      );
     }
 
-    // 1. LOG MILESTONE ACTION
+    // ── 1. LOG MILESTONE ────────────────────────────────────────────────────
     if (action === 'LOG_MILESTONE') {
       const { loggedById, type, description, evidenceUrl } = body;
-      
+
       if (!loggedById || !type || !evidenceUrl) {
-        return NextResponse.json({ success: false, error: 'LoggedById, MilestoneType, and EvidenceUrl are required' }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: 'loggedById, type, and evidenceUrl are required' },
+          { status: 400 },
+        );
       }
 
-      // Add Milestone Event
+      // Persist milestone event
       const newMilestone: MilestoneEvent = {
-        id: 'me_' + Math.random().toString(36).substring(2, 9),
+        id:         'me_' + Math.random().toString(36).substring(2, 9),
         shipmentId: shipment.id,
         loggedById,
         type,
         description,
         evidenceUrl,
         occurredAt: new Date().toISOString(),
-        verified: true
+        verified:   true,
       };
 
-      dbStore.saveMilestone(newMilestone);
+      await dbStore.saveMilestone(newMilestone);
+      await dbStore.updatePriorityMilestoneStatus(shipment.id, type, true);
 
-      // Check if this matches a Priority Milestone and update it
-      dbStore.updatePriorityMilestoneStatus(shipment.id, type, true);
-
-      // Update shipment status mapping based on logged milestones
+      // Update shipment status in DB
       let nextStatus: ShipmentStatus = shipment.status;
-      if (type === 'DELIVERED_AND_SIGNED_OFF') {
-        nextStatus = 'DELIVERED';
-      } else if (type === 'CARGO_PICKED_UP_FROM_PORT' || type === 'IN_TRANSIT_TO_DESTINATION') {
-        nextStatus = 'IN_TRANSIT';
-      } else if (type === 'CUSTOMS_CLEARANCE_APPROVED') {
-        nextStatus = 'CUSTOMS_CLEARANCE';
-      } else if (type === 'VESSEL_ARRIVED_DESTINATION') {
-        nextStatus = 'AT_PORT';
-      }
+      if (type === 'DELIVERED_AND_SIGNED_OFF')                                 nextStatus = 'DELIVERED';
+      else if (type === 'CARGO_PICKED_UP_FROM_PORT' || type === 'IN_TRANSIT_TO_DESTINATION') nextStatus = 'IN_TRANSIT';
+      else if (type === 'CUSTOMS_CLEARANCE_APPROVED')                          nextStatus = 'CUSTOMS_CLEARANCE';
+      else if (type === 'VESSEL_ARRIVED_DESTINATION')                          nextStatus = 'AT_PORT';
 
       const updatedShipment = {
         ...shipment,
         status: nextStatus,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
-      dbStore.saveShipment(updatedShipment);
+      await dbStore.saveShipment(updatedShipment);
 
-      return NextResponse.json({ success: true, data: { milestone: newMilestone, shipment: updatedShipment } });
+      // ── STELLAR: Advance escrow stage based on the logged milestone ─────────
+      // Only attempt if the shipment is already funded on-chain.
+      if (shipment.stellarEscrowId && shipment.referenceCode && PLATFORM_ADDRESS) {
+        const client = getMariTradeEscrowClient(
+          STELLAR_NETWORK as 'testnet' | 'mainnet',
+          PLATFORM_ADDRESS,
+        );
+
+        let stageXdr: string | null = null;
+
+        if (type === 'VESSEL_DEPARTED_ORIGIN') {
+          // PRE_DEPARTURE → IN_TRANSIT
+          try {
+            stageXdr = await client.advanceStage({
+              referenceCode: shipment.referenceCode,
+              platform:      PLATFORM_ADDRESS,
+              newStage:      CancellationStage.InTransit,
+            });
+          } catch (err) {
+            console.error('[Stellar] advanceStage(InTransit) build failed:', err);
+          }
+        } else if (type === 'DELIVERED_AND_SIGNED_OFF') {
+          // IN_TRANSIT → DELIVERED
+          try {
+            stageXdr = await client.advanceStage({
+              referenceCode: shipment.referenceCode,
+              platform:      PLATFORM_ADDRESS,
+              newStage:      CancellationStage.Delivered,
+            });
+          } catch (err) {
+            console.error('[Stellar] advanceStage(Delivered) build failed:', err);
+          }
+        }
+
+        if (stageXdr) {
+          const txHash = await platformSignAndSubmit(stageXdr);
+          if (txHash) {
+            console.log(
+              `[Stellar] Stage advanced for ${shipment.referenceCode}. Milestone: ${type}. Hash: ${txHash}`,
+            );
+          }
+          // Non-blocking: DB record is already updated regardless of chain result.
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        data:    { milestone: newMilestone, shipment: updatedShipment },
+      });
     }
 
-    // 2. UPLOAD DOCUMENT ACTION
+    // ── 2. UPLOAD DOCUMENT ──────────────────────────────────────────────────
     if (action === 'UPLOAD_DOCUMENT') {
       const { fileName, fileUrl, uploadedById } = body;
       if (!fileName || !fileUrl || !uploadedById) {
-        return NextResponse.json({ success: false, error: 'FileName, FileUrl, and UploadedById are required' }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: 'fileName, fileUrl, and uploadedById are required' },
+          { status: 400 },
+        );
       }
 
-      // Check active documents to increase version number
-      const existingDocs = dbStore.getDocuments(shipment.id).filter(d => d.fileName === fileName);
-      const nextVersion = existingDocs.length + 1;
+      const existingDocs = await dbStore.getDocuments(shipment.id);
+      const nextVersion  = existingDocs.filter(d => d.fileName === fileName).length + 1;
 
       const newDoc: ShipmentDocument = {
-        id: 'doc_' + Math.random().toString(36).substring(2, 9),
+        id:         'doc_' + Math.random().toString(36).substring(2, 9),
         shipmentId: shipment.id,
         fileName,
         fileUrl,
         uploadedById,
-        version: nextVersion,
+        version:  nextVersion,
         isLatest: true,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       };
 
-      dbStore.saveDocument(newDoc);
+      await dbStore.saveDocument(newDoc);
       return NextResponse.json({ success: true, data: newDoc });
     }
 
-    // 3. STELLAR ESCROW RELEASE ACTION
+    // ── 3. RELEASE ESCROW ───────────────────────────────────────────────────
+    // Called AFTER the client has already submitted the Soroban release tx.
+    // txHash (optional) comes from the browser; evidenceUrl is always required.
     if (action === 'RELEASE_ESCROW') {
-      const { evidenceUrl } = body; // Importer proof upload required for payout release
+      const { evidenceUrl, txHash } = body;
       if (!evidenceUrl) {
-        return NextResponse.json({ success: false, error: 'Evidence upload proof is required to authorize Stellar escrow release' }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: 'evidenceUrl is required to confirm escrow release' },
+          { status: 400 },
+        );
       }
 
       const updatedShipment = {
         ...shipment,
-        status: 'DELIVERED' as const,
-        escrowStatus: 'RELEASED' as const,
-        updatedAt: new Date().toISOString()
+        status:         'DELIVERED'  as const,
+        escrowStatus:   'RELEASED'   as const,
+        stellarEscrowId: txHash ?? shipment.stellarEscrowId,
+        updatedAt:      new Date().toISOString(),
       };
+      await dbStore.saveShipment(updatedShipment);
 
-      dbStore.saveShipment(updatedShipment);
-
-      // Create a release transaction receipt document automatically
+      // Attach the release receipt as a vault document
       const txReceiptDoc: ShipmentDocument = {
-        id: 'doc_receipt_' + Math.random().toString(36).substring(2, 9),
+        id:         'doc_receipt_' + Math.random().toString(36).substring(2, 9),
         shipmentId: shipment.id,
-        fileName: 'Stellar_Escrow_Release_Receipt.pdf',
-        fileUrl: evidenceUrl,
+        fileName:   'Stellar_Escrow_Release_Receipt.pdf',
+        fileUrl:    evidenceUrl,
         uploadedById: shipment.importerId,
-        version: 1,
-        isLatest: true,
-        createdAt: new Date().toISOString()
+        version:    1,
+        isLatest:   true,
+        createdAt:  new Date().toISOString(),
       };
-      dbStore.saveDocument(txReceiptDoc);
+      await dbStore.saveDocument(txReceiptDoc);
 
       return NextResponse.json({ success: true, data: updatedShipment });
     }
 
-    // 4. EXPORTER ACCEPT ACTION
+    // ── 4. UPDATE STELLAR ESCROW (called after fund() tx is confirmed) ──────
+    // Wires the on-chain tx hash into the DB record and marks the shipment FUNDED.
+    if (action === 'UPDATE_STELLAR_ESCROW') {
+      const { stellarEscrowId, escrowStatus } = body;
+      if (!stellarEscrowId) {
+        return NextResponse.json(
+          { success: false, error: 'stellarEscrowId is required' },
+          { status: 400 },
+        );
+      }
+
+      const updatedShipment = {
+        ...shipment,
+        stellarEscrowId,
+        escrowStatus: (escrowStatus ?? 'FUNDED') as any,
+        updatedAt:    new Date().toISOString(),
+      };
+      await dbStore.saveShipment(updatedShipment);
+
+      return NextResponse.json({ success: true, data: updatedShipment });
+    }
+
+    // ── 5. EXPORTER ACCEPT ──────────────────────────────────────────────────
     if (action === 'EXPORTER_ACCEPT') {
-      const updatedShipment = {
+      const updated = {
         ...shipment,
-        status: 'CONFIRMED' as const,
-        updatedAt: new Date().toISOString()
+        status:    'CONFIRMED' as const,
+        updatedAt: new Date().toISOString(),
       };
-      dbStore.saveShipment(updatedShipment);
-      return NextResponse.json({ success: true, data: updatedShipment });
+      await dbStore.saveShipment(updated);
+      return NextResponse.json({ success: true, data: updated });
     }
 
-    // 5. EXPORTER REJECT ACTION
+    // ── 6. EXPORTER REJECT ──────────────────────────────────────────────────
     if (action === 'EXPORTER_REJECT') {
-      const updatedShipment = {
+      const updated = {
         ...shipment,
-        status: 'CANCELLED' as const,
-        updatedAt: new Date().toISOString()
+        status:    'CANCELLED' as const,
+        updatedAt: new Date().toISOString(),
       };
-      dbStore.saveShipment(updatedShipment);
-      return NextResponse.json({ success: true, data: updatedShipment });
+      await dbStore.saveShipment(updated);
+      return NextResponse.json({ success: true, data: updated });
     }
 
-    // 6. CANCEL SHIPMENT ACTION
+    // ── 7. CANCEL SHIPMENT ──────────────────────────────────────────────────
     if (action === 'CANCEL_SHIPMENT') {
-      const updatedShipment = {
+      const updated = {
         ...shipment,
-        status: 'CANCELLED' as const,
-        escrowStatus: 'REFUNDED' as const,
-        updatedAt: new Date().toISOString()
+        status:       'CANCELLED' as const,
+        escrowStatus: 'REFUNDED'  as const,
+        updatedAt:    new Date().toISOString(),
       };
-      dbStore.saveShipment(updatedShipment);
-      return NextResponse.json({ success: true, data: updatedShipment });
+      await dbStore.saveShipment(updated);
+      return NextResponse.json({ success: true, data: updated });
     }
 
-    // 7. FILE DISPUTE ACTION
+    // ── 8. FILE DISPUTE ─────────────────────────────────────────────────────
     if (action === 'FILE_DISPUTE') {
-      const updatedShipment = {
+      const updated = {
         ...shipment,
-        status: 'DISPUTED' as const,
+        status:       'DISPUTED' as const,
         escrowStatus: 'DISPUTED' as const,
-        updatedAt: new Date().toISOString()
+        updatedAt:    new Date().toISOString(),
       };
-      dbStore.saveShipment(updatedShipment);
-      return NextResponse.json({ success: true, data: updatedShipment });
+      await dbStore.saveShipment(updated);
+      return NextResponse.json({ success: true, data: updated });
     }
 
-    return NextResponse.json({ success: false, error: 'Unsupported shipment action' }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: `Unsupported action: ${action}` },
+      { status: 400 },
+    );
+
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }

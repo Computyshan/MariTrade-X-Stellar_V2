@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
-import { Message, ChatThreadStatus } from '@/types';
+import { Message } from '@/types';
 
-function isTradePartyOnlyThread(threadId: string): boolean {
-  const participants = dbStore.getParticipantsForThread(threadId);
-  const allUsers = dbStore.getUsers();
+async function isTradePartyOnlyThread(threadId: string): Promise<boolean> {
+  const [participants, allUsers] = await Promise.all([
+    dbStore.getParticipantsForThread(threadId),
+    dbStore.getUsers(),
+  ]);
   const participantUsers = participants
     .map(p => allUsers.find(u => u.id === p.userId))
     .filter(Boolean);
 
-  return participantUsers.length === 2 &&
-    participantUsers.every(u => u!.userType === 'TRADE_PARTY');
+  return (
+    participantUsers.length === 2 &&
+    participantUsers.every(u => u!.userType === 'TRADE_PARTY')
+  );
 }
 
 export async function GET(
@@ -20,15 +24,17 @@ export async function GET(
   try {
     const resolvedParams = await params;
     const { id: threadId } = resolvedParams;
-    const thread = dbStore.getThreadById(threadId);
+    const thread = await dbStore.getThreadById(threadId);
 
     if (!thread) {
       return NextResponse.json({ success: false, error: 'Chat thread not found' }, { status: 404 });
     }
 
-    const messages = dbStore.getMessages(threadId);
-    const participants = dbStore.getParticipantsForThread(threadId);
-    const allUsers = dbStore.getUsers();
+    const [messages, participants, allUsers] = await Promise.all([
+      dbStore.getMessages(threadId),
+      dbStore.getParticipantsForThread(threadId),
+      dbStore.getUsers(),
+    ]);
 
     const filledParticipants = participants.map(p => {
       const u = allUsers.find(usr => usr.id === p.userId);
@@ -36,17 +42,13 @@ export async function GET(
         id: p.userId,
         fullName: u?.fullName || 'Unknown',
         jobRole: u?.jobRole || 'IMPORTER',
-        companyName: u?.companyName || ''
+        companyName: u?.companyName || '',
       };
     });
 
     return NextResponse.json({
       success: true,
-      data: {
-        thread,
-        messages,
-        participants: filledParticipants
-      }
+      data: { thread, messages, participants: filledParticipants },
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -60,7 +62,7 @@ export async function POST(
   try {
     const resolvedParams = await params;
     const { id: threadId } = resolvedParams;
-    const thread = dbStore.getThreadById(threadId);
+    const thread = await dbStore.getThreadById(threadId);
 
     if (!thread) {
       return NextResponse.json({ success: false, error: 'Chat thread not found' }, { status: 404 });
@@ -69,9 +71,9 @@ export async function POST(
     const body = await req.json();
     const { action, senderId, content, counterTerms } = body;
 
-    // Action-based switches — escrow/counter offers are Trade Party to Trade Party only
     if (action === 'CONVERT_TO_SHIPMENT' || action === 'COUNTER_TERMS') {
-      if (!isTradePartyOnlyThread(threadId)) {
+      const tradePartyOnly = await isTradePartyOnlyThread(threadId);
+      if (!tradePartyOnly) {
         return NextResponse.json(
           { success: false, error: 'Escrow and counter offers are only available between Trade Party users.' },
           { status: 403 }
@@ -80,20 +82,15 @@ export async function POST(
     }
 
     if (action === 'CONVERT_TO_SHIPMENT') {
-      const updatedThread = {
-        ...thread,
-        status: 'DEAL_AGREED' as const,
-        updatedAt: new Date().toISOString()
-      };
-      dbStore.saveThread(updatedThread);
+      const updatedThread = { ...thread, status: 'DEAL_AGREED' as const, updatedAt: new Date().toISOString() };
+      await dbStore.saveThread(updatedThread);
 
-      // Save a system message to indicate agreement
-      dbStore.saveMessage({
+      await dbStore.saveMessage({
         id: 'msg_sys_' + Math.random().toString(36).substring(2, 9),
         threadId: thread.id,
-        senderId: senderId,
+        senderId,
         content: `📈 IMPORTER clicked "Convert to Shipment". Initial deal terms agreed: Standard USDC Escrow protection requested. Draft shipment record created.`,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       });
 
       return NextResponse.json({ success: true, data: updatedThread });
@@ -101,34 +98,37 @@ export async function POST(
 
     if (action === 'COUNTER_TERMS') {
       const { currentCounterPriceUSD, cargoDescription } = body;
-      const allUsers = dbStore.getUsers();
+      const allUsers = await dbStore.getUsers();
       const sender = allUsers.find(u => u.id === senderId);
       const senderRole = sender ? sender.jobRole.replace(/_/g, ' ') : 'PARTNER';
 
       const updatedThread = {
         ...thread,
         status: 'COUNTER_OFFER' as const,
-        currentCounterPriceUSD: currentCounterPriceUSD !== undefined ? Number(currentCounterPriceUSD) : thread.currentCounterPriceUSD,
+        currentCounterPriceUSD:
+          currentCounterPriceUSD !== undefined ? Number(currentCounterPriceUSD) : thread.currentCounterPriceUSD,
         cargoDescription: cargoDescription !== undefined ? cargoDescription : thread.cargoDescription,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
-      dbStore.saveThread(updatedThread);
+      await dbStore.saveThread(updatedThread);
 
-      // Save a system message with terms description
-      dbStore.saveMessage({
+      await dbStore.saveMessage({
         id: 'msg_sys_' + Math.random().toString(36).substring(2, 9),
         threadId: thread.id,
-        senderId: senderId,
+        senderId,
         content: `⚠️ ${senderRole} submitted a Counter Offer: $${(currentCounterPriceUSD || 0).toLocaleString()} USDC - "${cargoDescription || 'Industrial Commodities'}". Waiting for acceptance.`,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       });
 
       return NextResponse.json({ success: true, data: updatedThread });
     }
 
-    // Default: Send standard chat message (allows content or imageUrl)
+    // Default: Send standard chat message
     if (!senderId || (!content && !body.imageUrl)) {
-      return NextResponse.json({ success: false, error: 'SenderId and either Content or ImageUrl are required' }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'SenderId and either Content or ImageUrl are required' },
+        { status: 400 }
+      );
     }
 
     const newMessage: Message = {
@@ -137,16 +137,11 @@ export async function POST(
       senderId,
       content: content || '',
       imageUrl: body.imageUrl || undefined,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
-    dbStore.saveMessage(newMessage);
-
-    // Update thread updated timestamp
-    dbStore.saveThread({
-      ...thread,
-      updatedAt: new Date().toISOString()
-    });
+    await dbStore.saveMessage(newMessage);
+    await dbStore.saveThread({ ...thread, updatedAt: new Date().toISOString() });
 
     return NextResponse.json({ success: true, data: newMessage });
   } catch (err: any) {
@@ -167,13 +162,12 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Message ID is required' }, { status: 400 });
     }
 
-    const thread = dbStore.getThreadById(threadId);
+    const thread = await dbStore.getThreadById(threadId);
     if (!thread) {
       return NextResponse.json({ success: false, error: 'Chat thread not found' }, { status: 404 });
     }
 
-    dbStore.unsendMessage(messageId);
-
+    await dbStore.unsendMessage(messageId);
     return NextResponse.json({ success: true, message: 'Message successfully unsent.' });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
