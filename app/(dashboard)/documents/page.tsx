@@ -461,11 +461,8 @@ export default function DocumentVaultPage() {
               {[
                 { role: 'Importer / Exporter',       canSee: true,  canUnlock: true,  canDownload: true  },
                 { role: 'Customs Broker',             canSee: true,  canUnlock: true,  canDownload: true  },
-                { role: 'Freight Forwarder',          canSee: false, canUnlock: false, canDownload: false },
-                { role: 'Shipping Line Captain',      canSee: false, canUnlock: false, canDownload: false },
-                { role: 'Warehouse Operator',         canSee: false, canUnlock: false, canDownload: false },
-                { role: 'Port Authority Officer',     canSee: false, canUnlock: false, canDownload: false },
-                { role: 'Trucker',                    canSee: false, canUnlock: false, canDownload: false },
+                { role: 'Freight Forwarder',          canSee: true, canUnlock: true, canDownload: true },
+                { role: 'Warehouse Operator',         canSee: true, canUnlock: true, canDownload: true },
               ].map(r => (
                 <div key={r.role} className="border border-sand-100 rounded-lg p-2.5 space-y-1">
                   <span className="font-bold text-maritime-900 block">{r.role}</span>

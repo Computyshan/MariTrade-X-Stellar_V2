@@ -118,26 +118,29 @@ export default function NetworkPage() {
   };
 
   const fetchDirectory = useCallback(async () => {
+    if (!currentUser?.id) return;
     const res = await authFetch(
       `/api/network/directory?requesterId=${currentUser.id}&search=${encodeURIComponent(search)}`
     );
     const json = await res.json();
     if (json.success) setVendors(json.data);
-  }, [currentUser.id, search]);
+  }, [currentUser?.id, search]);
 
   const fetchConnections = useCallback(async () => {
+    if (!currentUser?.id) return;
     const res = await authFetch(`/api/network/connections?userId=${currentUser.id}`);
     const json = await res.json();
     if (json.success) setConnections(json.data);
-  }, [currentUser.id]);
+  }, [currentUser?.id]);
 
   const refresh = useCallback(async () => {
+    if (!currentUser?.id) return;
     setLoading(true);
     await Promise.all([fetchDirectory(), fetchConnections()]);
     setLoading(false);
-  }, [fetchDirectory, fetchConnections]);
+  }, [fetchDirectory, fetchConnections, currentUser?.id]);
 
-  useEffect(() => { refresh(); }, [currentUser.id]);
+  useEffect(() => { if (currentUser?.id) refresh(); }, [currentUser?.id]);
 
   // Re-run directory search with debounce
   useEffect(() => {

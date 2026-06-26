@@ -52,7 +52,7 @@
  *   created_by_user_id ↔ createdByUserId
  */
 
-import { supabase } from './supabase';
+import { supabase, getSupabaseAdmin } from './supabase';
 import {
   User,
   Shipment,
@@ -414,7 +414,8 @@ export const dbStore = {
   },
 
   saveShipment: async (shipment: Shipment): Promise<Shipment> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('shipments')
       .upsert(shipmentToRow(shipment), { onConflict: 'id' })
       .select()
