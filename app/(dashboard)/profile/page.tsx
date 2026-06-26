@@ -19,10 +19,9 @@ import {
 interface ProfileFormProps {
   currentUser: User;
   setCurrentUser: (user: User) => void;
-  allUsers: User[];
 }
 
-function ProfileForm({ currentUser, setCurrentUser, allUsers }: ProfileFormProps) {
+function ProfileForm({ currentUser, setCurrentUser }: ProfileFormProps) {
   // Form states initialized directly from current user
   const [fullName, setFullName] = useState(currentUser.fullName || '');
   const [contactNumber, setContactNumber] = useState(currentUser.contactNumber || '');
@@ -66,19 +65,9 @@ function ProfileForm({ currentUser, setCurrentUser, allUsers }: ProfileFormProps
       const json = await res.json();
       if (json.success && json.data) {
         setSaveSuccess(true);
-        // Update the client-side session store
+        // BROKEN FIX: use setCurrentUser (returns new object) instead of directly
+        // mutating the object in the allUsers array, which bypasses Zustand and React.
         setCurrentUser(json.data);
-        
-        // Also update the static list in our store if possible so that the dropdown shows the updated name
-        const matchInAll = allUsers.find(u => u.id === currentUser.id);
-        if (matchInAll) {
-          matchInAll.fullName = json.data.fullName;
-          matchInAll.companyName = json.data.companyName;
-          matchInAll.fullAddress = json.data.fullAddress;
-          matchInAll.contactNumber = json.data.contactNumber;
-          matchInAll.bankDetails = json.data.bankDetails;
-          matchInAll.stellarWallet = json.data.stellarWallet;
-        }
       } else {
         setSaveError(json.error || 'Failed to update user profile details.');
       }
@@ -300,7 +289,7 @@ function ProfileForm({ currentUser, setCurrentUser, allUsers }: ProfileFormProps
               <strong className="text-gray-700 font-bold uppercase">{currentUser?.jobRole?.replace(/_/g, ' ')}</strong>
             </div>
             <span className="text-[10px] text-gray-400 italic text-right md:max-w-xs leading-normal">
-              Need to preview a separate job archetype? Match alternative logistics and trade workflows using the <strong>Demo Workspace active profile bar</strong>.
+              Job role is set during onboarding and requires admin review to change.
             </span>
           </div>
 
@@ -344,7 +333,6 @@ export default function ProfilePage() {
             key={currentUser.id} 
             currentUser={currentUser} 
             setCurrentUser={setCurrentUser} 
-            allUsers={allUsers}
           />
         ) : (
           <div className="text-center py-12 text-gray-500">

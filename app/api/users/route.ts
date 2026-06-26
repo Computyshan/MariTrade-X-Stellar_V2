@@ -1,7 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 
-export async function GET() {
+// CRITICAL FIX: added authentication guard
+export async function GET(req: NextRequest) {
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const users = await dbStore.getUsers();
     return NextResponse.json({ success: true, data: users });

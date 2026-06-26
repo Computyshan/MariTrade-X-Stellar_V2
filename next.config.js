@@ -6,7 +6,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  // Allow access to remote image placeholder.
+  // CLEANUP: picsum.photos is used for demo/placeholder avatars only.
+  // Before going to production, migrate to real CDN / Supabase Storage and remove this entry.
   images: {
     remotePatterns: [
       {

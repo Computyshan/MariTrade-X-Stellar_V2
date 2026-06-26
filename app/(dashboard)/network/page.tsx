@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession } from '@/hooks/use-user-session';
+import { authFetch } from '@/hooks/use-user-session';
 import {
   Users,
   Search,
@@ -117,7 +118,7 @@ export default function NetworkPage() {
   };
 
   const fetchDirectory = useCallback(async () => {
-    const res = await fetch(
+    const res = await authFetch(
       `/api/network/directory?requesterId=${currentUser.id}&search=${encodeURIComponent(search)}`
     );
     const json = await res.json();
@@ -125,7 +126,7 @@ export default function NetworkPage() {
   }, [currentUser.id, search]);
 
   const fetchConnections = useCallback(async () => {
-    const res = await fetch(`/api/network/connections?userId=${currentUser.id}`);
+    const res = await authFetch(`/api/network/connections?userId=${currentUser.id}`);
     const json = await res.json();
     if (json.success) setConnections(json.data);
   }, [currentUser.id]);
@@ -147,7 +148,7 @@ export default function NetworkPage() {
   const sendRequest = async (receiverId: string) => {
     setActionLoading(receiverId);
     try {
-      const res = await fetch('/api/network/connections', {
+      const res = await authFetch('/api/network/connections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requesterId: currentUser.id, receiverId }),
@@ -167,7 +168,7 @@ export default function NetworkPage() {
   const respondToRequest = async (connId: string, status: 'ACCEPTED' | 'REJECTED') => {
     setActionLoading(connId);
     try {
-      const res = await fetch(`/api/network/connections/${connId}`, {
+      const res = await authFetch(`/api/network/connections/${connId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, actorId: currentUser.id }),

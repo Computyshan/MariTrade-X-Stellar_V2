@@ -1,5 +1,8 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
+// ─── CRITICAL FIX: corrected model name (was "gemini-3.5-flash" which doesn't exist)
+const GEMINI_MODEL = 'gemini-2.0-flash';
+
 function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -16,27 +19,20 @@ function getGeminiClient() {
 }
 
 // Phase 3: Auto-fill BOC customs form from uploaded invoice text using Gemini structured JSON
-export async function autofillBOCForm(invoiceText: string): Promise<Record<string, string>> {
+export async function autofillBOCForm(invoiceText: string): Promise<Record<string, string> | { error: string }> {
   const ai = getGeminiClient();
+
+  // CRITICAL FIX: removed hardcoded Japan/Dela Cruz mock — now returns an error state
+  // so callers can surface it in the UI instead of silently using fake data.
   if (!ai) {
-    console.warn('GEMINI_API_KEY is not defined, returning mock extracted invoice data.');
-    return {
-      exporterName: 'Tanaka Logistics Corp',
-      importerName: 'Dela Cruz Trading',
-      originCountry: 'Japan',
-      destinationPort: 'Port of Manila (MICP)',
-      cargoDescription: 'Industrial Electric Motors and Replacement Gears',
-      totalValueUSD: '45000',
-      hsCodeSuggested: '8501.52.00',
-      estimatedDutiesPHP: '225000'
-    };
+    return { error: 'GEMINI_API_KEY is not configured. Please set it in your environment variables to use AI autofill.' };
   }
 
   try {
     const prompt = `You are a Philippine Bureau of Customs (BOC) automation agent. Take this raw invoice text and extract the structured import fields as defined in the schema. Ensure fields conform to standard shipping definitions. Raw text: \n\n${invoiceText}`;
     
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -60,17 +56,8 @@ export async function autofillBOCForm(invoiceText: string): Promise<Record<strin
     const text = response.text || '{}';
     return JSON.parse(text);
   } catch (err) {
-    console.error('Gemini invoice extraction failed, returning fallback:', err);
-    return {
-      exporterName: 'Extracted Exporter Ltd',
-      importerName: 'Extracted Importer',
-      originCountry: 'Japan',
-      destinationPort: 'Port of Manila',
-      cargoDescription: 'General Cargo',
-      totalValueUSD: '32000',
-      hsCodeSuggested: '8501.00.00',
-      estimatedDutiesPHP: '160000'
-    };
+    console.error('Gemini invoice extraction failed:', err);
+    return { error: 'AI extraction failed. Please fill in the form manually.' };
   }
 }
 
@@ -83,7 +70,7 @@ export async function estimateFreightCost(params: {
 }): Promise<{ estimatedUSD: number; confidence: string; breakdown: string }> {
   const ai = getGeminiClient();
   if (!ai) {
-    // Return high quality structured mock
+    // Graceful fallback using actual params — not hardcoded values
     const baseAmt = Math.round((params.cargoWeightKg * 0.15) + 1200);
     return {
       estimatedUSD: baseAmt,
@@ -100,7 +87,7 @@ export async function estimateFreightCost(params: {
     Be realistic for marine shipping.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -153,7 +140,7 @@ export async function tagalogAssistant(userMessage: string, context?: string): P
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         systemInstruction,
@@ -186,7 +173,7 @@ export async function typhoonRerouting(params: {
     Analyze and suggest a safe regional rerouting plan to avoid high winds or typhoon storms in Southeast Asia. Return JSON with keys "suggestedRoute" and "reason."`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

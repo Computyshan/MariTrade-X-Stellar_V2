@@ -93,8 +93,11 @@ export async function connectFreighter(): Promise<string> {
   }
 
   try {
-    if (api.requestAccess) return pickAddress(await api.requestAccess());
+    // Prefer getAddress() — it reliably returns { address } in all modern Freighter versions.
+    // Fall back to requestAccess() only if getAddress is unavailable (Freighter v2).
+    // getPublicKey() is the legacy v1 API that returns a plain string.
     if (api.getAddress)    return pickAddress(await api.getAddress());
+    if (api.requestAccess) return pickAddress(await api.requestAccess());
     return await api.getPublicKey!();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

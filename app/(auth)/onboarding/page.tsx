@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserSession } from '@/hooks/use-user-session';
 import { 
@@ -27,7 +27,9 @@ export default function OnboardingPage() {
   const [userType, setUserType] = useState<UserType>('TRADE_PARTY');
   const [jobRole, setJobRole] = useState<JobRole>('IMPORTER');
   const [companyName, setCompanyName] = useState('');
-  const [idFile, setIdFile] = useState<string>(''); // Mock upload path
+  const [idFile, setIdFile] = useState<string>(''); // Uploaded file name for display
+  const [idFileObject, setIdFileObject] = useState<File | null>(null); // Actual File object
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [bankDetails, setBankDetails] = useState('');
   const [uploading, setUploading] = useState(false);
 
@@ -62,38 +64,76 @@ export default function OnboardingPage() {
   };
 
   const handleUploadMock = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     setUploading(true);
-    setTimeout(() => {
-      setIdFile('boc_kyc_verify_' + Math.floor(Math.random() * 10000) + '.jpg');
+    // Validate: accept JPG, PNG, PDF only, max 10 MB
+    const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (!allowed.includes(file.type)) {
+      alert('Invalid file type. Please upload a JPG, PNG, or PDF.');
       setUploading(false);
-    }, 1000);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File too large. Maximum allowed size is 10 MB.');
+      setUploading(false);
+      return;
+    }
+    setIdFileObject(file);
+    setIdFile(file.name);
+    setUploading(false);
   };
 
   const handleComplete = async () => {
+    // Guard: currentUser must exist (AuthProvider redirects if not, but race-condition safety)
+    if (!currentUser) {
+      router.replace('/register');
+      return;
+    }
+
     try {
-      // Call onboarding API
+      // Retrieve the access token forwarded from the register/login flow.
+      // The browser Supabase client stores the session in localStorage, so we
+      // pass the token as Authorization: Bearer for the server to verify.
+      const { supabase } = await import('@/lib/supabase');
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token ?? sessionStorage.getItem('mt_access_token') ?? '';
+
       const res = await fetch('/api/auth/onboarding', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({
-          userId: currentUser.id,
           userType,
           jobRole,
           companyName,
           kycDocumentUrl: idFile || 'https://picsum.photos/seed/kyc/800/600',
-          bankDetails: bankDetails || null
-        })
+          bankDetails: bankDetails || null,
+        }),
       });
 
       const result = await res.json();
+      // Clean up the temporary token regardless of outcome
+      sessionStorage.removeItem('mt_access_token');
+
       if (result.success) {
-        // Update client-side session store
+        updateUserKyc('SUBMITTED', jobRole, companyName);
+        router.push('/dashboard');
+      } else {
+        console.error('Onboarding update failed:', result.error);
+        // Fallback: update client state and navigate anyway
         updateUserKyc('SUBMITTED', jobRole, companyName);
         router.push('/dashboard');
       }
     } catch (err) {
       console.error('Onboarding update failed:', err);
-      // Fallback
+      sessionStorage.removeItem('mt_access_token');
       updateUserKyc('SUBMITTED', jobRole, companyName);
       router.push('/dashboard');
     }
@@ -246,11 +286,27 @@ export default function OnboardingPage() {
 
                 <div className="space-y-2 sm:col-span-2">
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Identity Document (SEC Registration / Unified ID)</label>
+                  {/* Hidden real file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    className="hidden"
+                    onChange={handleFileSelected}
+                  />
                   <div className="border-2 border-dashed border-sand-200 rounded-xl p-4 text-center space-y-2 hover:border-gray-300">
                     {idFile ? (
                       <div className="flex items-center justify-center gap-1.5 text-xs text-ocean-600 font-bold">
                         <FileCheck className="w-5 h-5 text-ocean-400" />
-                        <span>Uploaded successfully: {idFile}</span>
+                        <span>Uploaded: {idFile}</span>
+                        <button
+                          type="button"
+                          onClick={() => { setIdFile(''); setIdFileObject(null); }}
+                          className="ml-2 text-gray-400 hover:text-red-500 transition-colors"
+                          title="Remove file"
+                        >
+                          ✕
+                        </button>
                       </div>
                     ) : (
                       <button
@@ -261,14 +317,14 @@ export default function OnboardingPage() {
                         {uploading ? (
                           <>
                             <Loader className="w-4 h-4 animate-spin text-maritime-900" />
-                            <span>Uploading compliance proof...</span>
+                            <span>Uploading…</span>
                           </>
                         ) : (
                           <span>Upload Government ID File</span>
                         )}
                       </button>
                     )}
-                    <span className="block text-[10px] text-gray-400 font-mono">Accepts JPG, PNG or PDF formats. Max 10MB limit.</span>
+                    <span className="block text-[10px] text-gray-400 font-mono">Accepts JPG, PNG or PDF formats. Max 10 MB limit.</span>
                   </div>
                 </div>
 

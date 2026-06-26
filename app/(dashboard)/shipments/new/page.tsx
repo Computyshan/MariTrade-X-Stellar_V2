@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession } from '@/hooks/use-user-session';
+import { authFetch } from '@/hooks/use-user-session';
 import { useFreighter } from '@/hooks/use-freighter';
 import {
   Ship, ChevronLeft, ChevronRight, Globe, MapPin, Coins,
@@ -266,7 +267,7 @@ export default function NewShipmentPage() {
   useEffect(() => {
     if (step !== 3) return;
     setNetworkLoading(true);
-    fetch(`/api/network/connections?userId=${currentUser.id}`)
+    authFetch(`/api/network/connections?userId=${currentUser.id}`)
       .then(r => r.json())
       .then(json => {
         if (json.success) {
@@ -476,7 +477,7 @@ export default function NewShipmentPage() {
 
     try {
       // ── 1. Create the DB shipment record ────────────────────────────────────
-      const res = await fetch('/api/shipments', {
+      const res = await authFetch('/api/shipments', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
@@ -564,7 +565,7 @@ export default function NewShipmentPage() {
 
       // ── 8. Update DB record with Stellar contract ID + FUNDED status ─────────
       setStellarStep('confirm');
-      await fetch(`/api/shipments/${shipmentId}`, {
+      await authFetch(`/api/shipments/${shipmentId}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({

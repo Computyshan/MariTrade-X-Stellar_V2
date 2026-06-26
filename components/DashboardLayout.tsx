@@ -16,9 +16,12 @@ import {
   Bell,
   UserCircle,
   Bot,
-  Network
+  Network,
+  CheckCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useNotifications } from '@/hooks/use-notifications';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -29,10 +32,12 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
   const pathname = usePathname();
   const router = useRouter();
   const { currentUser, allUsers, setCurrentUser, signOut } = useUserSession();
+  const notif = useNotifications(currentUser?.id);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
-    router.replace('/login');
+    router.replace('/');
   };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showBot, setShowBot] = useState(false);
@@ -114,7 +119,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
           </div>
           <div className="overflow-hidden flex-1">
             <h4 className="text-[11px] font-bold truncate text-white leading-tight">{currentUser.fullName}</h4>
-            <p className="text-[10px] text-white/40 font-medium tracking-wider uppercase truncate mt-0.5">{currentUser.companyName || 'SHAUN TRADING'}</p>
+            <p className="text-[10px] text-white/40 font-medium tracking-wider uppercase truncate mt-0.5">{currentUser.companyName}</p>
           </div>
         </Link>
 
@@ -156,7 +161,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
 
         {/* TOP BAR */}
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
-          {/* Left: Demo workspace pill + mobile menu */}
+          {/* CLEANUP FIX: removed non-functional "DEMO WORKSPACE" pill */}
           <div className="flex items-center gap-3">
             <button
               className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100"
@@ -164,10 +169,6 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-full px-3 py-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-              DEMO WORKSPACE
-            </span>
           </div>
 
           {/* Right: user info + sign out */}
@@ -175,9 +176,96 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
             <span className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-gray-600">
               {currentUser?.jobRole.replace(/_/g, ' ')}
             </span>
-            <button className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors">
-              <Bell className="w-4 h-4" />
-            </button>
+
+            {/* ── Notification Bell ── */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifPanel(v => !v)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors relative"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {notif.unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[9px] font-black rounded-full px-1">
+                    {notif.unreadCount > 9 ? '9+' : notif.unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification dropdown panel */}
+              <AnimatePresence>
+                {showNotifPanel && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowNotifPanel(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-2xl shadow-2xl z-40 overflow-hidden"
+                    >
+                      {/* Panel header */}
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                        <h3 className="text-xs font-black text-gray-900">Notifications</h3>
+                        {notif.unreadCount > 0 && (
+                          <button
+                            onClick={() => notif.markAllRead()}
+                            className="flex items-center gap-1 text-[10px] font-bold text-maritime-400 hover:text-maritime-900 transition-colors"
+                          >
+                            <CheckCheck className="w-3 h-3" /> Mark all read
+                          </button>
+                        )}
+                      </div>
+
+                      {/* List */}
+                      <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-50">
+                        {notif.loading && notif.notifications.length === 0 ? (
+                          <div className="py-8 text-center text-xs text-gray-400">Loading…</div>
+                        ) : notif.notifications.length === 0 ? (
+                          <div className="py-10 text-center">
+                            <Bell className="w-7 h-7 text-gray-200 mx-auto mb-2" />
+                            <p className="text-xs font-bold text-gray-400">You're all caught up</p>
+                            <p className="text-[10px] text-gray-300 mt-0.5">Milestones, messages, and network updates appear here.</p>
+                          </div>
+                        ) : (
+                          notif.notifications.map(n => (
+                            <div
+                              key={n.id}
+                              onClick={() => {
+                                notif.markRead(n.id);
+                                if (n.linkHref) router.push(n.linkHref);
+                                setShowNotifPanel(false);
+                              }}
+                              className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                                !n.isRead ? 'bg-blue-50/60' : ''
+                              }`}
+                            >
+                              {/* Unread dot */}
+                              <div className="flex-shrink-0 mt-1">
+                                {!n.isRead
+                                  ? <div className="w-2 h-2 rounded-full bg-maritime-400" />
+                                  : <div className="w-2 h-2" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-[11px] leading-snug ${!n.isRead ? 'font-bold text-gray-900' : 'font-semibold text-gray-600'}`}>
+                                  {n.title}
+                                </p>
+                                <p className="text-[10px] text-gray-400 mt-0.5 leading-snug line-clamp-2">{n.body}</p>
+                                <p className="text-[9px] text-gray-300 mt-1">
+                                  {new Date(n.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                              {n.linkHref && <ExternalLink className="w-3 h-3 text-gray-300 flex-shrink-0 mt-1" />}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
             <Link href="/profile" className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors">
               <UserCircle className="w-5 h-5" />
             </Link>

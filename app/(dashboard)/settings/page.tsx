@@ -55,7 +55,7 @@ export default function SettingsPage() {
 
             <div className="border-t border-sand-200 pt-3">
               <span className="text-[10px] text-gray-400 block leading-normal">
-                Need to preview a separate scenario? Use the <strong>Demo Workspace Dropdown bar</strong> at the top of the screen to instantaneously exchange profiles.
+                To update your profile details, visit the <strong>My Profile</strong> page from the sidebar.
               </span>
             </div>
           </div>
@@ -70,10 +70,6 @@ export default function SettingsPage() {
 
           <div className="space-y-3 font-mono text-[11px] text-gray-600">
             <div className="flex justify-between border-b border-sand-100 pb-1.5">
-              <span>STELLAR NETWORK:</span>
-              <strong className="text-ocean-600 font-bold">TESTNET (horizon)</strong>
-            </div>
-            <div className="flex justify-between border-b border-sand-100 pb-1.5">
               <span>STABLECOIN ID:</span>
               <strong className="text-maritime-900 font-bold">USDC</strong>
             </div>
@@ -83,11 +79,17 @@ export default function SettingsPage() {
             </div>
             <div className="flex justify-between border-b border-sand-100 pb-1.5">
               <span>GEMINI INSTANCE:</span>
-              <strong className="text-maritime-900 font-bold">gemini-3.5-flash</strong>
+              {/* HARDCODED FIX: derived from env var, not a static string */}
+              <strong className="text-maritime-900 font-bold">
+                {process.env.NEXT_PUBLIC_GEMINI_MODEL ?? 'gemini-2.0-flash'}
+              </strong>
             </div>
             <div className="flex justify-between">
-              <span>LEDGER PING:</span>
-              <strong className="text-green-600 font-bold">ACTIVE (12ms)</strong>
+              <span>STELLAR NETWORK:</span>
+              {/* HARDCODED FIX: derived from env var */}
+              <strong className="text-ocean-600 font-bold uppercase">
+                {process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet'}
+              </strong>
             </div>
           </div>
         </div>

@@ -4,6 +4,28 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import { User, JobRole } from '../types';
 
+/**
+ * Fetches the current Supabase session access token.
+ * Returns an empty string if there is no active session.
+ */
+export async function getAuthToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? '';
+}
+
+/**
+ * Drop-in replacement for fetch() that automatically attaches the
+ * Supabase session token as `Authorization: Bearer <token>`.
+ * Usage: const json = await authFetch('/api/vault/folders').then(r => r.json());
+ */
+export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const token = await getAuthToken();
+  const headers = new Headers(init?.headers ?? {});
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+}
+
+
 interface UserSessionState {
   currentUser: User | null;
   allUsers: User[];

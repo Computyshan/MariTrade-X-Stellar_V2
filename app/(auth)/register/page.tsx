@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Ship, AlertCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useUserSession } from '@/hooks/use-user-session';
 
 export default function RegisterPage() {
@@ -13,7 +14,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [phone, setPhone] = useState('+63 ');
+  const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -41,16 +42,42 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, fullName, fullAddress: address, contactNumber: phone }),
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          fullAddress: address || null,
+          contactNumber: phone.trim() || null,
+        }),
       });
 
       const result = await res.json();
-      if (result.success && result.data) {
-        setCurrentUser(result.data);
-        router.push('/onboarding');
-      } else {
+      if (!result.success) {
         setError(result.error || 'Registration failed.');
+        return;
       }
+
+      // Registration succeeded — sign in immediately to establish a session.
+      // Capture the access_token so it can be forwarded as Authorization: Bearer
+      // to any subsequent API calls (the browser Supabase client stores the
+      // session in localStorage, which is not visible to server-side requireAuth()).
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase(),
+        password,
+      });
+
+      if (signInError || !signInData.session) {
+        // Account created but auto-login failed (e.g. email confirmation required)
+        setError('Account created! Please check your email to confirm your address, then sign in.');
+        return;
+      }
+
+      setCurrentUser(result.data);
+      // Store the token in sessionStorage so the onboarding page can pass it
+      // as Authorization: Bearer when it calls /api/auth/onboarding.
+      sessionStorage.setItem('mt_access_token', signInData.session.access_token);
+
+      router.push('/onboarding');
     } catch {
       setError('Server connection error. Please try again.');
     } finally {
@@ -68,7 +95,7 @@ export default function RegisterPage() {
             <Ship className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-maritime-900 tracking-tight">MariTrade V2</h1>
+            <h1 className="text-2xl font-black text-maritime-900 tracking-tight">MariTrade</h1>
             <p className="text-xs text-gray-500 font-medium">Create your account</p>
           </div>
         </div>

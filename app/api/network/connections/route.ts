@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 import { ConnectionRequest } from '@/types';
 
-/**
- * GET /api/network/connections?userId=<id>
- * Returns all connection requests for a user (both sent and received),
- * with the other party's profile attached.
- *
- * POST /api/network/connections
- * Body: { requesterId, receiverId }
- * Sends a new connection request. Prevents duplicate pending/accepted requests.
- */
-
 export async function GET(req: NextRequest) {
+  // CRITICAL FIX: authenticate every request
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId') || '';
@@ -43,6 +38,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // CRITICAL FIX: authenticate every request
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const body = await req.json();
     const { requesterId, receiverId } = body;
@@ -74,7 +73,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check for existing connection (either direction)
     const allConns = await dbStore.getConnectionRequests();
     const existing = allConns.find(
       c =>

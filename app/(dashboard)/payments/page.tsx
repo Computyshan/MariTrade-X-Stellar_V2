@@ -28,6 +28,10 @@ interface OnChainRecord {
 
 type ChainMap = Record<string, OnChainRecord | 'loading' | 'error' | null>;
 
+// CLEANUP FIX: PHP rate is indicative only. In production, fetch a live rate.
+// Using a named constant so it's easy to spot and replace.
+const PHP_PER_USD_INDICATIVE = 58.7;
+
 const STELLAR_NETWORK =
   (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as 'testnet' | 'mainnet';
 
@@ -244,7 +248,7 @@ export default function EscrowLedger() {
             ${totalLocked.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
           </strong>
           <span className="text-[9px] text-ocean-600 block italic">
-            ₱{(totalLocked * 58.7).toLocaleString()} PHP indicative
+            ₱{(totalLocked * PHP_PER_USD_INDICATIVE).toLocaleString()} PHP indicative
           </span>
           {chainLoading && (
             <span className="text-[9px] text-gray-400 flex items-center gap-1">
@@ -262,7 +266,7 @@ export default function EscrowLedger() {
             ${totalReleased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
           </strong>
           <span className="text-[9px] text-ocean-600 block italic">
-            ₱{(totalReleased * 58.7).toLocaleString()} PHP indicative
+            ₱{(totalReleased * PHP_PER_USD_INDICATIVE).toLocaleString()} PHP indicative
           </span>
         </div>
 

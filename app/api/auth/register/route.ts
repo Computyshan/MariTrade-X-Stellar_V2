@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { dbStore } from '@/lib/db';
+import { supabase, getSupabaseAdmin } from '@/lib/supabase';
 import { User } from '@/types';
+
+// Row → TypeScript mapper (mirrors lib/db.ts)
+function rowToUser(row: any): User {
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    fullAddress: row.full_address ?? undefined,
+    contactNumber: row.contact_number ?? undefined,
+    userType: row.user_type,
+    jobRole: row.job_role,
+    companyName: row.company_name ?? undefined,
+    stellarWallet: row.stellar_wallet ?? undefined,
+    bankDetails: row.bank_details ?? undefined,
+    kycStatus: row.kyc_status,
+    kycDocumentUrl: row.kyc_document_url ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,14 +34,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Create Supabase Auth user
+    // 1. Create Supabase Auth user (anon client is fine here)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: email.toLowerCase(),
       password,
     });
 
     if (authError) {
-      return NextResponse.json({ success: false, error: authError.message }, { status: 400 });
+      // Surface a friendlier message for the rate-limit error
+      const msg = authError.message.toLowerCase().includes('rate limit')
+        ? 'Too many sign-up attempts. Please wait a few minutes and try again.'
+        : authError.message;
+      return NextResponse.json({ success: false, error: msg }, { status: 400 });
+    }
+
+    // Supabase returns a user with identities=[] when the email already exists
+    // but email confirmations are enabled — treat it as "already registered".
+    if (authData.user && authData.user.identities?.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'An account with this email already exists. Please sign in instead.' },
+        { status: 409 }
+      );
     }
 
     const authUser = authData.user;
@@ -30,23 +62,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Sign-up failed — no user returned' }, { status: 500 });
     }
 
-    // 2. Insert matching row into our users table using the auth UUID as id
-    const newUser: User = {
+    // 2. Insert matching row into the users table.
+    //    We use the service-role (admin) client so that RLS doesn’t block the
+    //    insert — at sign-up time the new session isn’t yet established server-side.
+    const adminClient = getSupabaseAdmin();
+
+    const userRow = {
       id: authUser.id,
       email: email.toLowerCase(),
-      fullName,
-      fullAddress: fullAddress || '',
-      contactNumber: contactNumber || '',
-      userType: 'TRADE_PARTY',
-      jobRole: 'IMPORTER',
-      companyName: '',
-      kycStatus: 'PENDING',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      full_name: fullName,
+      full_address: fullAddress || null,
+      contact_number: contactNumber || null,
+      user_type: 'TRADE_PARTY',
+      job_role: 'IMPORTER',
+      company_name: null,
+      kyc_status: 'PENDING',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    const savedUser = await dbStore.saveUser(newUser);
-    return NextResponse.json({ success: true, data: savedUser });
+    const { data: insertedRow, error: insertError } = await adminClient
+      .from('users')
+      .upsert(userRow, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (insertError) {
+      return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, data: rowToUser(insertedRow) });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || 'Internal server error' }, { status: 500 });
   }

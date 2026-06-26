@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession } from '@/hooks/use-user-session';
+import { authFetch } from '@/hooks/use-user-session';
 import {
   FolderLock, FolderOpen, FileText, Lock, Unlock, Download,
   ShieldCheck, Search, Eye, EyeOff, X, AlertTriangle,
@@ -99,7 +100,7 @@ export default function DocumentVaultPage() {
     setLoading(true);
     setFetchErr('');
     try {
-      const res  = await fetch('/api/vault/folders');
+      const res  = await authFetch('/api/vault/folders');
       const json = await res.json();
       if (json.success) {
         setFolders(json.data);

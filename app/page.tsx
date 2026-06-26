@@ -45,7 +45,10 @@ export default function LandingPage() {
     e.preventDefault();
     if (!trackCode.trim()) return;
     const formatted = trackCode.trim().toUpperCase();
-    if (formatted === 'MT-2026-00341' || formatted === 'MT-2026-00122' || formatted.startsWith('MT-')) {
+    // HARDCODED FIX: removed hardcoded reference code whitelist.
+    // Any MT-format code is valid to attempt; the /track/[code] page will show
+    // a not-found state if the shipment doesn't exist in the DB.
+    if (/^MT-\d{4}-\d{5}$/.test(formatted)) {
       router.push(`/track/${formatted}`);
     } else {
       setErrorSearch('Reference code must match format MT-YYYY-NNNNN');
@@ -74,18 +77,17 @@ export default function LandingPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="text-[#45464d] hover:text-black p-1.5 rounded transition-colors relative" title="Notifications">
-            <Bell className="w-4.5 h-4.5" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-secondary" />
-          </button>
-          <button className="text-[#45464d] hover:text-black p-1.5 rounded transition-colors" title="Account">
-            <User className="w-4.5 h-4.5" />
-          </button>
           <Link
-            href="/dashboard"
+            href="/login"
+            className="px-4 py-2 text-[13px] font-semibold text-[#45464d] hover:text-black rounded-md hover:bg-gray-100 transition-colors"
+          >
+            Sign In
+          </Link>
+          <Link
+            href="/register"
             className="flex items-center gap-1.5 px-5 py-2 bg-secondary text-white text-[13px] font-semibold rounded-md hover:bg-[#0047a3] transition-colors shadow-sm"
           >
-            Open Dashboard
+            Register
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -148,7 +150,7 @@ export default function LandingPage() {
             {/* CTA buttons */}
             <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
               <Link
-                href="/dashboard"
+                href="/register"
                 className="px-7 py-3 bg-secondary text-white text-[13px] font-bold rounded-md hover:bg-[#0047a3] transition-colors shadow-lg shadow-secondary/20 flex items-center justify-center gap-2"
               >
                 Start for Free
@@ -156,6 +158,7 @@ export default function LandingPage() {
               </Link>
               <button
                 type="button"
+                onClick={() => window.open('mailto:hello@maritrade.ph?subject=Watch Demo Request', '_blank')}
                 className="px-7 py-3 border border-white/15 text-white text-[13px] font-semibold rounded-md hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
               >
                 Watch Demo
@@ -201,10 +204,11 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Trusted by bar */}
+        {/* Trusted by bar — HARDCODED FIX: changed label to "Built for businesses like" 
+             since these are placeholder names, not real verified partners */}
         <section className="bg-white border-b border-[#e0e3e5] py-5 px-8">
           <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
-            <span className="text-[11px] font-mono text-[#76777d] uppercase tracking-widest whitespace-nowrap">Trusted by</span>
+            <span className="text-[11px] font-mono text-[#76777d] uppercase tracking-widest whitespace-nowrap">Built for businesses like</span>
             <div className="flex flex-wrap justify-center sm:justify-start items-center gap-8 text-[12px] font-bold text-[#45464d] tracking-tight">
               <span className="opacity-60">BINONDO METALS</span>
               <span className="opacity-60">MANILA CARGO CO.</span>
@@ -294,11 +298,12 @@ export default function LandingPage() {
               Ready to protect your next<br />cargo shipment?
             </h2>
             <p className="text-[14px] text-[#7c839b] max-w-md mx-auto leading-relaxed">
-              Join 500+ Filipino businesses using MariTrade to move goods with full payment protection and supply chain transparency.
+              {/* HARDCODED FIX: removed unverified "500+ businesses" and "SEC-registered" claims */}
+              MariTrade digitizes freight shipping with full payment protection and supply chain transparency for Filipino importers, exporters, and logistics operators.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
               <Link
-                href="/dashboard"
+                href="/register"
                 className="px-8 py-3 bg-secondary text-white rounded-md text-[13px] font-bold hover:bg-[#0047a3] transition-colors shadow-lg shadow-secondary/25 flex items-center justify-center gap-2"
               >
                 Get Started — Free
@@ -306,12 +311,13 @@ export default function LandingPage() {
               </Link>
               <button
                 type="button"
+                onClick={() => window.open('mailto:hello@maritrade.ph?subject=Talk to Team Request', '_blank')}
                 className="px-8 py-3 border border-white/15 text-white rounded-md text-[13px] font-semibold hover:bg-white/5 transition-colors"
               >
                 Talk to Our Team
               </button>
             </div>
-            <p className="text-[11px] text-[#76777d] font-mono">No credit card required · SEC-registered platform · BOC-compliant</p>
+            <p className="text-[11px] text-[#76777d] font-mono">No credit card required · Currently in Early Access</p>
           </div>
         </section>
 

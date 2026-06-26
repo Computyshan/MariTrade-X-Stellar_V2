@@ -1,22 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 
 export async function POST(req: NextRequest) {
   try {
+    // Verify the caller has a valid Supabase session.
+    // The userId comes from the verified token — never from the request body.
+    const { user, errorResponse } = await requireAuth(req);
+    if (errorResponse) return errorResponse;
+
     const body = await req.json();
-    const { userId, jobRole, kycDocumentUrl, companyName, bankDetails, userType } = body;
+    const { jobRole, kycDocumentUrl, companyName, bankDetails, userType } = body;
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
-    }
-
-    const user = await dbStore.getUserById(userId);
-    if (!user) {
+    const existingUser = await dbStore.getUserById(user!.id);
+    if (!existingUser) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
     const updatedUser = {
-      ...user,
+      ...existingUser,
       ...(userType && { userType }),
       ...(jobRole && { jobRole }),
       ...(companyName && { companyName }),

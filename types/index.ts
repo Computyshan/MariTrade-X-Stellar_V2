@@ -237,3 +237,25 @@ export interface Message {
   imageUrl?: string;
   isUnsent?: boolean;
 }
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'MILESTONE_LOGGED'       // A logistics partner logged a milestone on your shipment
+  | 'ESCROW_FUNDED'          // Escrow was funded
+  | 'ESCROW_RELEASED'        // Escrow funds were released
+  | 'MESSAGE_RECEIVED'       // New chat message
+  | 'CONNECTION_REQUEST'     // Someone sent you a connection request
+  | 'CONNECTION_ACCEPTED'    // Your connection request was accepted
+  | 'SHIPMENT_STATUS_CHANGE' // Shipment status changed;
+
+export interface AppNotification {
+  id: string;
+  userId: string;              // Recipient
+  type: NotificationType;
+  title: string;
+  body: string;
+  linkHref?: string;           // Optional deep-link inside the app
+  isRead: boolean;
+  createdAt: string;
+}

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 import { Shipment, PriorityMilestone, ShipmentAssignment, VaultFolder } from '@/types';
 
 export async function GET(req: NextRequest) {
+  // CRITICAL FIX: authenticate every request
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const [list, users, assignments] = await Promise.all([
       dbStore.getShipments(),
@@ -30,6 +35,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // CRITICAL FIX: authenticate every request
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const body = await req.json();
     const {
@@ -107,7 +116,7 @@ export async function POST(req: NextRequest) {
     }
     await dbStore.savePriorityMilestones(milestonesList);
 
-    // Create BOC Document Vault Folder
+    // Create BOC Document Vault Folder (password hashing handled in vault route)
     if (vaultFolderName && vaultPassword) {
       const vaultFolder: VaultFolder = {
         id: 'vf_' + Math.random().toString(36).substring(2, 9),

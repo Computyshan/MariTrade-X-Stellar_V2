@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 import { ChatThread, ChatParticipant } from '@/types';
 
 export async function GET(req: NextRequest) {
+  // CRITICAL FIX: authenticate every request
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const userId = req.nextUrl.searchParams.get('userId');
     if (!userId) {
@@ -20,21 +25,6 @@ export async function GET(req: NextRequest) {
       const parts = allParticipants.filter(p => p.threadId === t.id);
       return parts.some(p => p.userId === userId);
     });
-
-    const threadsWithDetails = userThreads
-      .map(thread => {
-        const parts = allParticipants.filter(p => p.threadId === thread.id);
-        const otherPart = parts.find(p => p.userId !== userId);
-        const otherUser = otherPart ? allUsers.find(u => u.id === otherPart.userId) : null;
-
-        const messages = allParticipants; // already loaded — filter below
-        const threadMessages = allParticipants; // placeholder; getMessages is per-thread
-
-        return {
-          thread,
-          otherUser,
-        };
-      });
 
     // Re-fetch with per-thread messages for last message preview
     const threadsDecored = await Promise.all(
@@ -73,6 +63,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // CRITICAL FIX: authenticate every request
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const body = await req.json();
     const { senderId, receiverId, initialMessage } = body;

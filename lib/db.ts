@@ -65,6 +65,7 @@ import {
   Message,
   ConnectionRequest,
   VaultFolder,
+  AppNotification,
 } from '../types';
 
 // ─── Row → TypeScript mappers ─────────────────────────────────────────────────
@@ -717,5 +718,73 @@ export const dbStore = {
       .single();
     assertNoError(error, 'saveConnectionRequest');
     return rowToConnection(data);
+  },
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+
+  getNotificationsForUser: async (userId: string): Promise<AppNotification[]> => {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    assertNoError(error, 'getNotificationsForUser');
+    return (data ?? []).map((row: any): AppNotification => ({
+      id:        row.id,
+      userId:    row.user_id,
+      type:      row.type,
+      title:     row.title,
+      body:      row.body,
+      linkHref:  row.link_href ?? undefined,
+      isRead:    row.is_read,
+      createdAt: row.created_at,
+    }));
+  },
+
+  saveNotification: async (n: AppNotification): Promise<AppNotification> => {
+    const row = {
+      id:         n.id,
+      user_id:    n.userId,
+      type:       n.type,
+      title:      n.title,
+      body:       n.body,
+      link_href:  n.linkHref ?? null,
+      is_read:    n.isRead,
+      created_at: n.createdAt,
+    };
+    const { data, error } = await supabase
+      .from('notifications')
+      .upsert(row, { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveNotification');
+    return {
+      id:        data.id,
+      userId:    data.user_id,
+      type:      data.type,
+      title:     data.title,
+      body:      data.body,
+      linkHref:  data.link_href ?? undefined,
+      isRead:    data.is_read,
+      createdAt: data.created_at,
+    };
+  },
+
+  markNotificationRead: async (notificationId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId);
+    assertNoError(error, 'markNotificationRead');
+  },
+
+  markAllNotificationsRead: async (userId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+    assertNoError(error, 'markAllNotificationsRead');
   },
 };

@@ -26,28 +26,37 @@ export default function LoginPage() {
       setLoading(true);
       setError('');
 
-      // Sign in via Supabase Auth directly on the client
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      // Sign in via Supabase Auth directly on the client.
+      // We capture the session here so we can forward the access_token to the
+      // API route — the browser Supabase client stores the session in localStorage,
+      // NOT as an HTTP cookie, so requireAuth() cannot read it from the cookie
+      // header alone. Passing it as Authorization: Bearer is the reliable bridge.
+      const { data: signInData, error: authError } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase(),
         password,
       });
 
-      if (authError) {
+      if (authError || !signInData.session) {
         setError('Invalid email or password. Please try again.');
         return;
       }
 
-      // Load app-level user row
+      const accessToken = signInData.session.access_token;
+
+      // Load the app-level user row. The server verifies the session via the
+      // Bearer token since the cookie isn't available server-side (localStorage storage).
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
       });
       const result = await res.json();
 
       if (result.success) {
         setCurrentUser(result.data);
-        // Redirect: new users go to onboarding, returning users to dashboard
+        // Redirect: pending KYC users go to onboarding, returning users to dashboard
         if (result.data.kycStatus === 'PENDING') {
           router.push('/onboarding');
         } else {

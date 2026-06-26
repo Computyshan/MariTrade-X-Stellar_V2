@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 
-/**
- * GET /api/vault/folders
- *
- * Returns all BOC Document Vault folders, each decorated with their
- * associated shipment documents and shipment metadata.
- *
- * The password field IS returned — comparison is done client-side in
- * this demo. In production, replace with a POST /verify endpoint that
- * compares against a server-side hash and returns a signed session token.
- */
-export async function GET(_req: NextRequest) {
+// CRITICAL FIX: added authentication guard
+export async function GET(req: NextRequest) {
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const [folders, shipments, documents] = await Promise.all([
       dbStore.getVaultFolders(),
@@ -23,7 +18,11 @@ export async function GET(_req: NextRequest) {
       const shipment = shipments.find(s => s.id === folder.shipmentId) ?? null;
       const docs = documents.filter(d => d.shipmentId === folder.shipmentId);
 
-      return { ...folder, shipment, documents: docs };
+      // CRITICAL FIX: never return plaintext password to the client
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password: _password, ...safeFolder } = folder;
+
+      return { ...safeFolder, shipment, documents: docs };
     });
 
     // Sort newest first

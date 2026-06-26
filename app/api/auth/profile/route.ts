@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 
 export async function POST(req: NextRequest) {
+  // CRITICAL FIX: authenticate every request
+  const { user, errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const body = await req.json();
     const { userId, fullName, fullAddress, contactNumber, companyName, bankDetails, stellarWallet } = body;
@@ -10,19 +15,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    const user = await dbStore.getUserById(userId);
-    if (!user) {
+    // Only allow a user to update their own profile
+    if (user!.id !== userId) {
+      return NextResponse.json({ success: false, error: 'Forbidden — you can only update your own profile.' }, { status: 403 });
+    }
+
+    const existingUser = await dbStore.getUserById(userId);
+    if (!existingUser) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
     const updatedUser = {
-      ...user,
-      fullName: fullName || user.fullName,
-      fullAddress: fullAddress !== undefined ? fullAddress : user.fullAddress,
-      contactNumber: contactNumber !== undefined ? contactNumber : user.contactNumber,
-      companyName: companyName !== undefined ? companyName : user.companyName,
-      bankDetails: bankDetails !== undefined ? bankDetails : user.bankDetails,
-      stellarWallet: stellarWallet !== undefined ? stellarWallet : user.stellarWallet,
+      ...existingUser,
+      fullName: fullName || existingUser.fullName,
+      fullAddress: fullAddress !== undefined ? fullAddress : existingUser.fullAddress,
+      contactNumber: contactNumber !== undefined ? contactNumber : existingUser.contactNumber,
+      companyName: companyName !== undefined ? companyName : existingUser.companyName,
+      bankDetails: bankDetails !== undefined ? bankDetails : existingUser.bankDetails,
+      stellarWallet: stellarWallet !== undefined ? stellarWallet : existingUser.stellarWallet,
       updatedAt: new Date().toISOString(),
     };
 

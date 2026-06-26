@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 
-/**
- * GET /api/network/directory?requesterId=<userId>
- *
- * Returns all VERIFIED logistics-chain users (Customs Brokers & Freight Forwarders),
- * each decorated with the current connection status relative to the requester.
- *
- * Accessible to any authenticated user so Importers can browse the full directory.
- */
+// CRITICAL FIX: authenticate every request
 export async function GET(req: NextRequest) {
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const { searchParams } = new URL(req.url);
     const requesterId = searchParams.get('requesterId') || '';
@@ -20,7 +17,6 @@ export async function GET(req: NextRequest) {
       requesterId ? dbStore.getConnectionRequestsForUser(requesterId) : Promise.resolve([]),
     ]);
 
-    // Only expose VERIFIED logistics vendors in the public directory
     const vendors = users.filter(
       u =>
         u.userType === 'LOGISTICS_CHAIN' &&
