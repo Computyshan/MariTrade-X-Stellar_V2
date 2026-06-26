@@ -17,9 +17,9 @@ export async function GET(req: NextRequest) {
       requesterId ? dbStore.getConnectionRequestsForUser(requesterId) : Promise.resolve([]),
     ]);
 
-    const vendors = users.filter(
+    const members = users.filter(
       u =>
-        u.userType === 'LOGISTICS_CHAIN' &&
+        u.id !== requesterId &&
         u.kycStatus === 'VERIFIED' &&
         (search === '' ||
           u.fullName.toLowerCase().includes(search) ||
@@ -27,14 +27,14 @@ export async function GET(req: NextRequest) {
           u.jobRole.toLowerCase().includes(search))
     );
 
-    const decorated = vendors.map(v => {
+    const decorated = members.map(m => {
       const conn = allConnections.find(
         c =>
-          (c.requesterId === requesterId && c.receiverId === v.id) ||
-          (c.receiverId === requesterId && c.requesterId === v.id)
+          (c.requesterId === requesterId && c.receiverId === m.id) ||
+          (c.receiverId === requesterId && c.requesterId === m.id)
       );
       return {
-        ...v,
+        ...m,
         connectionId: conn?.id ?? null,
         connectionStatus: conn?.status ?? null,
         isSender: conn ? conn.requesterId === requesterId : false,

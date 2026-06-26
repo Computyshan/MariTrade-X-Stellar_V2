@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUserSession } from '@/hooks/use-user-session';
 import { 
-  Ship, 
+  Ship,
   MessageSquare, 
   FileText, 
   CreditCard, 
@@ -102,14 +103,15 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
       <aside className="hidden md:flex flex-col w-[220px] bg-[#111c30] text-white flex-shrink-0 select-none h-screen sticky top-0">
 
         {/* Logo */}
-        <div className="px-5 py-5 flex items-center gap-3 border-b border-white/5">
-          <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center shrink-0">
-            <Ship className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <span className="text-[13px] font-black tracking-widest text-white block leading-none">MARITRADE</span>
-            <span className="text-[9px] text-white/30 tracking-widest font-mono uppercase mt-1 block">GLOBAL SYSTEMS V2.0</span>
-          </div>
+        <div className="px-4 py-4 border-b border-white/5">
+          <Image
+            src="/MariTrade logo.png"
+            alt="MariTrade"
+            width={140}
+            height={52}
+            className="h-10 w-auto object-contain brightness-0 invert"
+            priority
+          />
         </div>
 
         {/* User block */}

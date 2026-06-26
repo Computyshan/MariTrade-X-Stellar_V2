@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Ship, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useUserSession } from '@/hooks/use-user-session';
 
@@ -78,12 +79,17 @@ export default function LoginPage() {
 
         {/* Brand */}
         <div className="flex flex-col items-center text-center space-y-2">
-          <div className="w-12 h-12 bg-maritime-400 rounded-xl flex items-center justify-center">
-            <Ship className="w-6 h-6 text-white" />
-          </div>
+          <Image
+              src="/MariTrade logo.png"
+              alt="MariTrade"
+              width={160}
+              height={64}
+              className="h-14 w-auto object-contain"
+              priority
+            />
           <div>
-            <h1 className="text-2xl font-black text-maritime-900 tracking-tight">MariTrade V2</h1>
-            <p className="text-xs text-gray-500 font-medium">Stellar Blockchain Escrow & Document Control</p>
+            <h1 className="text-2xl font-black text-maritime-900 tracking-tight">MariTrade</h1>
+            <p className="text-xs text-gray-500 font-medium">Shipment Logistics Tracker & MSME Platform</p>
           </div>
         </div>
 

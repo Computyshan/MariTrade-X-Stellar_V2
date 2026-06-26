@@ -451,7 +451,8 @@ export const dbStore = {
   },
 
   saveAssignment: async (assignment: ShipmentAssignment): Promise<ShipmentAssignment> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('shipment_assignments')
       .upsert(assignmentToRow(assignment), { onConflict: 'shipment_id,user_id' })
       .select()
@@ -473,7 +474,8 @@ export const dbStore = {
 
   savePriorityMilestones: async (milestones: PriorityMilestone[]): Promise<void> => {
     if (!milestones.length) return;
-    const { error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
       .from('priority_milestones')
       .upsert(milestones.map(priorityMilestoneToRow), { onConflict: 'shipment_id,type' });
     assertNoError(error, 'savePriorityMilestones');
@@ -514,7 +516,8 @@ export const dbStore = {
   },
 
   saveMilestone: async (milestone: MilestoneEvent): Promise<MilestoneEvent> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('milestone_events')
       .insert(milestoneEventToRow(milestone))
       .select()
@@ -663,7 +666,8 @@ export const dbStore = {
   },
 
   saveVaultFolder: async (folder: VaultFolder): Promise<VaultFolder> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('vault_folders')
       .upsert(vaultFolderToRow(folder), { onConflict: 'id' })
       .select()
@@ -712,7 +716,8 @@ export const dbStore = {
   },
 
   saveConnectionRequest: async (conn: ConnectionRequest): Promise<ConnectionRequest> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('connection_requests')
       .upsert(connectionToRow(conn), { onConflict: 'id' })
       .select()

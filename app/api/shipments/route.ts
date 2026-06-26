@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       id: newId,
       referenceCode,
       importerId,
-      exporterId: exporterId || null,
+      exporterId: exporterId && exporterId.trim() !== '' ? exporterId : undefined,
       description,
       originCountry,
       destinationPort,

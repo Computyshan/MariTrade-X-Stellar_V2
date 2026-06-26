@@ -66,9 +66,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    if (receiver.userType !== 'LOGISTICS_CHAIN' || receiver.kycStatus !== 'VERIFIED') {
+    if (receiver.kycStatus !== 'VERIFIED') {
       return NextResponse.json(
-        { success: false, error: 'Receiver must be a KYC-verified logistics vendor' },
+        { success: false, error: 'Receiver must be a KYC-verified member' },
         { status: 400 }
       );
     }
