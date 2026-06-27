@@ -1302,7 +1302,7 @@ export default function NewShipmentPage() {
             <dl className="text-xs divide-y divide-sand-100">
               {([
                 ['Scope', (
-                  <span className={`font-black px-2 py-0.5 rounded text-[10px] ${shipmentScope === 'OVERSEAS' ? 'bg-maritime-100 text-maritime-700' : 'bg-ocean-50 text-ocean-600'}`}>{shipmentScope}</span>
+                  <span key="scope" className={`font-black px-2 py-0.5 rounded text-[10px] ${shipmentScope === 'OVERSEAS' ? 'bg-maritime-100 text-maritime-700' : 'bg-ocean-50 text-ocean-600'}`}>{shipmentScope}</span>
                 )],
                 ['Cargo',         description],
                 ['Importer',      importerContact || currentUser.fullName],

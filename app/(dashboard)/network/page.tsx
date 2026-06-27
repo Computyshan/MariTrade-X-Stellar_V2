@@ -106,49 +106,51 @@ export default function NetworkPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const currentUserId = currentUser?.id;
+
   const fetchDirectory = useCallback(async () => {
-    if (!currentUser?.id) return;
+    if (!currentUserId) return;
     const res = await authFetch(
-      `/api/network/directory?requesterId=${currentUser.id}&search=${encodeURIComponent(search)}`
+      `/api/network/directory?requesterId=${currentUserId}&search=${encodeURIComponent(search)}`
     );
     const json = await res.json();
     if (json.success) {
       setMembers(json.data);
-      // Only update the total count when no search filter is active
       if (search === '') setTotalMemberCount(json.data.length);
     }
-  }, [currentUser?.id, search]);
+  }, [currentUserId, search]);
 
   const fetchConnections = useCallback(async () => {
-    if (!currentUser?.id) return;
-    const res = await authFetch(`/api/network/connections?userId=${currentUser.id}`);
+    if (!currentUserId) return;
+    const res = await authFetch(`/api/network/connections?userId=${currentUserId}`);
     const json = await res.json();
     if (json.success) setConnections(json.data);
-  }, [currentUser?.id]);
+  }, [currentUserId]);
 
   const refresh = useCallback(async () => {
-    if (!currentUser?.id) return;
+    if (!currentUserId) return;
     setLoading(true);
     await Promise.all([fetchDirectory(), fetchConnections()]);
     setLoading(false);
-  }, [fetchDirectory, fetchConnections, currentUser?.id]);
+  }, [fetchDirectory, fetchConnections, currentUserId]);
 
   // Initial load — run once when user is ready
-  useEffect(() => { if (currentUser?.id) refresh(); }, [currentUser?.id]);
-
-  // Background poll — re-sync connections + directory every 30 s so incoming
-  // requests and accepted connections appear without a manual page refresh.
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (currentUserId) refresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
+
+  // Background poll every 30s
+  useEffect(() => {
+    if (!currentUserId) return;
     const interval = setInterval(() => {
-      // Only poll silently when no action is in flight
       if (!actionLoading) {
         fetchConnections();
         fetchDirectory();
       }
     }, 30_000);
     return () => clearInterval(interval);
-  }, [currentUser?.id, actionLoading, fetchConnections, fetchDirectory]);
+  }, [currentUserId, actionLoading, fetchConnections, fetchDirectory]);
 
   // Search debounce — skip on mount (refresh already ran), only fire on search changes
   const isMounted = React.useRef(false);

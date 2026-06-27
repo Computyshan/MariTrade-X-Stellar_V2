@@ -115,12 +115,14 @@ export default function DocumentVaultPage() {
 
   // auto-focus password field when modal opens
   useEffect(() => {
-    if (modalTarget) {
-      setTimeout(() => passwordInputRef.current?.focus(), 80);
+    if (!modalTarget) return;
+    const timer = setTimeout(() => {
+      passwordInputRef.current?.focus();
       setPasswordInput('');
       setPasswordError('');
       setShowPassword(false);
-    }
+    }, 80);
+    return () => clearTimeout(timer);
   }, [modalTarget]);
 
   // ── SESSION STILL LOADING ───────────────────────────────────────────────────

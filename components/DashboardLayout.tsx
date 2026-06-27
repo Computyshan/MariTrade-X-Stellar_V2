@@ -252,7 +252,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
                         ) : notif.notifications.length === 0 ? (
                           <div className="py-10 text-center">
                             <Bell className="w-7 h-7 text-gray-200 mx-auto mb-2" />
-                            <p className="text-xs font-bold text-gray-400">You're all caught up</p>
+                            <p className="text-xs font-bold text-gray-400">You&apos;re all caught up</p>
                             <p className="text-[10px] text-gray-300 mt-0.5">Milestones, messages, and network updates appear here.</p>
                           </div>
                         ) : (

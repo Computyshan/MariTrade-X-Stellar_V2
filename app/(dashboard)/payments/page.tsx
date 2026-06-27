@@ -73,7 +73,7 @@ export default function EscrowLedger() {
     }
   }, []);
 
-  useEffect(() => { fetchShipments(); }, [fetchShipments]);
+  useEffect(() => { fetchShipments(); }, [fetchShipments]); // eslint-disable-line react-hooks/set-state-in-effect
 
   // ── Query on-chain status for all funded/on-chain shipments ───────────────
   const refreshChainData = useCallback(async (list: Shipment[]) => {
@@ -141,6 +141,7 @@ export default function EscrowLedger() {
   }, []);
 
   // Auto-refresh chain data once shipments load
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (shipments.length > 0) refreshChainData(shipments);
   }, [shipments, refreshChainData]);
