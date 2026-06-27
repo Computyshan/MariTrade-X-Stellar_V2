@@ -139,9 +139,6 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
 
   const folder = MOCK_VAULT_FOLDERS.find((f) => f.id === folderId) ?? null;
 
-  const hasAccess  = canAccessBOCDocuments(currentUser.jobRole);
-  const canDownload = canDownloadDocuments(currentUser.jobRole);
-
   // Auth state
   const [unlocked, setUnlocked]           = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -154,6 +151,23 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
   useEffect(() => {
     if (!unlocked) setTimeout(() => inputRef.current?.focus(), 80);
   }, [unlocked]);
+
+  // ── SESSION STILL LOADING ───────────────────────────────────────────────────
+  // currentUser is null until the Supabase session resolves on mount — render a
+  // lightweight loading state instead of touching currentUser.jobRole too early.
+  if (!currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-24 text-gray-400 text-xs gap-2">
+          <Clock className="w-4 h-4 animate-pulse" />
+          Loading your session…
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const hasAccess  = canAccessBOCDocuments(currentUser.jobRole);
+  const canDownload = canDownloadDocuments(currentUser.jobRole);
 
   // ── NOT FOUND ──────────────────────────────────────────────────────────────────
   if (!folder) {

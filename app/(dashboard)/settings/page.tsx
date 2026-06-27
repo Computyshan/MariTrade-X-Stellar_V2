@@ -14,7 +14,17 @@ import {
 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { currentUser } = useUserSession();
+  const { currentUser, loading } = useUserSession();
+
+  if (loading || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

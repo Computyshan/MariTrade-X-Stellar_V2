@@ -92,9 +92,6 @@ export default function DocumentVaultPage() {
 
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
-  const hasAccess  = canAccessBOCDocuments(currentUser.jobRole);
-  const canDownload = canDownloadDocuments(currentUser.jobRole);
-
   // ── fetch from API ──
   const fetchFolders = useCallback(async () => {
     setLoading(true);
@@ -125,6 +122,23 @@ export default function DocumentVaultPage() {
       setShowPassword(false);
     }
   }, [modalTarget]);
+
+  // ── SESSION STILL LOADING ───────────────────────────────────────────────────
+  // currentUser is null until the Supabase session resolves on mount — render a
+  // lightweight loading state instead of touching currentUser.jobRole too early.
+  if (!currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-24 text-gray-400 text-xs gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin" />
+          Loading your session…
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const hasAccess  = canAccessBOCDocuments(currentUser.jobRole);
+  const canDownload = canDownloadDocuments(currentUser.jobRole);
 
   const filteredFolders = folders.filter(f => {
     const q = searchTerm.toLowerCase();

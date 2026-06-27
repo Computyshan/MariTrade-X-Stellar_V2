@@ -43,6 +43,7 @@
  *   thread_id          ↔ threadId
  *   cargo_description  ↔ cargoDescription
  *   current_counter_price_usd ↔ currentCounterPriceUSD
+ *   currency           ↔ currency
  *   sender_id          ↔ senderId
  *   image_url          ↔ imageUrl
  *   is_unsent          ↔ isUnsent
@@ -66,6 +67,7 @@ import {
   ConnectionRequest,
   VaultFolder,
   AppNotification,
+  ShipmentReceipt,
 } from '../types';
 
 // ─── Row → TypeScript mappers ─────────────────────────────────────────────────
@@ -244,7 +246,6 @@ function rowToThread(row: any): ChatThread {
     status: row.status,
     shipmentId: row.shipment_id ?? undefined,
     cargoDescription: row.cargo_description ?? undefined,
-    currentCounterPriceUSD: row.current_counter_price_usd != null ? Number(row.current_counter_price_usd) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isGroup: row.is_group ?? false,
@@ -258,7 +259,6 @@ function threadToRow(t: ChatThread): any {
     status: t.status,
     shipment_id: t.shipmentId ?? null,
     cargo_description: t.cargoDescription ?? null,
-    current_counter_price_usd: t.currentCounterPriceUSD ?? null,
     created_at: t.createdAt,
     updated_at: t.updatedAt,
     is_group: t.isGroup ?? false,
@@ -349,6 +349,72 @@ function vaultFolderToRow(vf: VaultFolder): any {
     password: vf.password,
     created_by_user_id: vf.createdByUserId,
     created_at: vf.createdAt,
+  };
+}
+
+function rowToReceipt(row: any): ShipmentReceipt {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    status: row.status,
+    cargoDescription: row.cargo_description ?? undefined,
+    shipmentScope: row.shipment_scope ?? undefined,
+    estimatedArrival: row.estimated_arrival ?? undefined,
+    importerContact: row.importer_contact ?? undefined,
+    exporterContact: row.exporter_contact ?? undefined,
+    originCountry: row.origin_country ?? undefined,
+    originAddress: row.origin_address ?? undefined,
+    originPort: row.origin_port ?? undefined,
+    destCountry: row.dest_country ?? undefined,
+    destAddress: row.dest_address ?? undefined,
+    destinationPort: row.destination_port ?? undefined,
+    invoiceCurrency: row.invoice_currency ?? 'USD',
+    invoiceValue: row.invoice_value != null ? Number(row.invoice_value) : undefined,
+    totalValueUSD: row.total_value_usd != null ? Number(row.total_value_usd) : undefined,
+    hsCode: row.hs_code ?? undefined,
+    isDangerousGoods: row.is_dangerous_goods ?? false,
+    packageCount: row.package_count != null ? Number(row.package_count) : undefined,
+    packagingType: row.packaging_type ?? undefined,
+    grossWeight: row.gross_weight != null ? Number(row.gross_weight) : undefined,
+    weightUnit: row.weight_unit ?? 'KG',
+    lastEditedById: row.last_edited_by_id ?? undefined,
+    finalizedById: row.finalized_by_id ?? undefined,
+    finalizedAt: row.finalized_at ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function receiptToRow(r: ShipmentReceipt): any {
+  return {
+    id: r.id,
+    thread_id: r.threadId,
+    status: r.status,
+    cargo_description: r.cargoDescription ?? null,
+    shipment_scope: r.shipmentScope ?? null,
+    estimated_arrival: r.estimatedArrival ?? null,
+    importer_contact: r.importerContact ?? null,
+    exporter_contact: r.exporterContact ?? null,
+    origin_country: r.originCountry ?? null,
+    origin_address: r.originAddress ?? null,
+    origin_port: r.originPort ?? null,
+    dest_country: r.destCountry ?? null,
+    dest_address: r.destAddress ?? null,
+    destination_port: r.destinationPort ?? null,
+    invoice_currency: r.invoiceCurrency ?? 'USD',
+    invoice_value: r.invoiceValue ?? null,
+    total_value_usd: r.totalValueUSD ?? null,
+    hs_code: r.hsCode ?? null,
+    is_dangerous_goods: r.isDangerousGoods ?? false,
+    package_count: r.packageCount ?? null,
+    packaging_type: r.packagingType ?? null,
+    gross_weight: r.grossWeight ?? null,
+    weight_unit: r.weightUnit ?? 'KG',
+    last_edited_by_id: r.lastEditedById ?? null,
+    finalized_by_id: r.finalizedById ?? null,
+    finalized_at: r.finalizedAt ?? null,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt,
   };
 }
 
@@ -622,6 +688,52 @@ export const dbStore = {
       .single();
     assertNoError(error, 'saveParticipant');
     return rowToParticipant(data);
+  },
+
+  // ── Shipment Receipts (Escrow & Offers planner) ────────────────────────────
+
+  getReceiptByThreadId: async (threadId: string): Promise<ShipmentReceipt | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('shipment_receipts')
+      .select('*')
+      .eq('thread_id', threadId)
+      .maybeSingle();
+    assertNoError(error, 'getReceiptByThreadId');
+    return data ? rowToReceipt(data) : undefined;
+  },
+
+  saveReceipt: async (receipt: ShipmentReceipt): Promise<ShipmentReceipt> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('shipment_receipts')
+      .upsert(receiptToRow(receipt), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveReceipt');
+    return rowToReceipt(data);
+  },
+
+  /** Finalized receipts from any thread the given user participates in — used to
+   *  populate the "Pick from a Receipt" picker on the Create Shipment page. */
+  getFinalizedReceiptsForUser: async (userId: string): Promise<ShipmentReceipt[]> => {
+    const admin = getSupabaseAdmin();
+    const { data: participantRows, error: pErr } = await admin
+      .from('chat_participants')
+      .select('thread_id')
+      .eq('user_id', userId);
+    assertNoError(pErr, 'getFinalizedReceiptsForUser:participants');
+    const threadIds = (participantRows ?? []).map((r: any) => r.thread_id);
+    if (threadIds.length === 0) return [];
+
+    const { data, error } = await admin
+      .from('shipment_receipts')
+      .select('*')
+      .in('thread_id', threadIds)
+      .eq('status', 'FINALIZED')
+      .order('finalized_at', { ascending: false });
+    assertNoError(error, 'getFinalizedReceiptsForUser');
+    return (data ?? []).map(rowToReceipt);
   },
 
   // ── Messages ──────────────────────────────────────────────────────────────

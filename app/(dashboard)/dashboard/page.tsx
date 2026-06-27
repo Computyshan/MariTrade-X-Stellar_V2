@@ -251,8 +251,11 @@ export default function DashboardHome() {
                     .reduce((acc, s) => acc + (s.escrowAmountUSD ?? s.totalValueUSD ?? 0), 0);
                   const phpEquiv = (totalEscrow * 58.7).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                   return (
-                    <div className="bg-[#111c30] border border-[#1e3a5f] p-5 rounded-xl shadow-sm col-span-1">
-                      <span className="block text-[10px] text-white/40 uppercase font-medium tracking-widest mb-2">Escrow Holdings</span>
+                  <div
+                      className="border border-white/10 p-5 rounded-xl shadow-sm col-span-1"
+                      style={{ background: 'var(--theme-feature)' }}
+                    >
+                      <span className="block text-[10px] text-white/50 uppercase font-medium tracking-widest mb-2">Escrow Holdings</span>
                       <strong className="text-[28px] text-white font-black leading-none">
                         {totalEscrow.toLocaleString()} <span className="text-sm font-semibold text-white/60">USDC</span>
                       </strong>
@@ -345,8 +348,8 @@ export default function DashboardHome() {
                                       <span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />DELIVERED
                                     </span>
                                   ) : ship.status === 'IN_TRANSIT' ? (
-                                    <span className="inline-flex items-center gap-1.5 bg-[#111c30] text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />IN TRANSIT
+                              <span className="inline-flex items-center gap-1.5 text-white text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: 'var(--theme-accent)', color: '#111c30' }}>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-current/60 inline-block" />IN TRANSIT
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full">
@@ -396,8 +399,8 @@ export default function DashboardHome() {
                           {milestones.slice(0, 3).map((me, idx) => (
                             <div key={me.id} className={`flex gap-4 ${idx < milestones.slice(0, 3).length - 1 ? 'pb-5' : ''}`}>
                               <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 z-10 ${
-                                idx === 0 ? 'bg-[#111c30]' : idx === 1 ? 'bg-gray-300' : 'bg-gray-100 border border-gray-200'
-                              }`}>
+                                idx === 0 ? '' : idx === 1 ? 'bg-gray-300' : 'bg-gray-100 border border-gray-200'
+                              }`} style={idx === 0 ? { background: 'var(--theme-accent)' } : {}}>
                                 <div className="w-1.5 h-1.5 rounded-full bg-white" />
                               </div>
                               <div className={idx === 2 ? 'opacity-40' : ''}>
@@ -644,7 +647,8 @@ function MilestoneStep({
     <div className={`bg-white p-5 space-y-3 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 ${done ? 'bg-ocean-400 text-white' : 'bg-sand-100 text-gray-400 border border-sand-200'}`}>
+          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 ${done ? 'text-white' : 'bg-sand-100 text-gray-400 border border-sand-200'}`}
+            style={done ? { background: 'var(--theme-accent)' } : {}}>
             {done ? '✓' : step}
           </div>
           <div>
@@ -660,18 +664,21 @@ function MilestoneStep({
 }
 
 const ROLE_META: Record<JobRole, { label: string; color: string; icon: React.ReactNode }> = {
-  FREIGHT_FORWARDER: { label: 'Freight Forwarder', color: 'bg-blue-50 border-blue-100 text-blue-700', icon: <Truck className="w-4 h-4" /> },
-  CUSTOMS_BROKER: { label: 'Customs Broker', color: 'bg-amber-50 border-amber-100 text-amber-700', icon: <FileCheck className="w-4 h-4" /> },
-  WAREHOUSE_OPERATOR: { label: 'Warehouse Operator', color: 'bg-purple-50 border-purple-100 text-purple-700', icon: <Warehouse className="w-4 h-4" /> },
-  IMPORTER: { label: 'Importer', color: 'bg-sand-50 border-sand-100 text-sand-700', icon: <Shield className="w-4 h-4" /> },
-  EXPORTER: { label: 'Exporter', color: 'bg-sand-50 border-sand-100 text-sand-700', icon: <Shield className="w-4 h-4" /> },
+  FREIGHT_FORWARDER:  { label: 'Freight Forwarder',  color: 'border text-white', icon: <Truck className="w-4 h-4" /> },
+  CUSTOMS_BROKER:     { label: 'Customs Broker',      color: 'border text-white', icon: <FileCheck className="w-4 h-4" /> },
+  WAREHOUSE_OPERATOR: { label: 'Warehouse Operator',  color: 'border text-white', icon: <Warehouse className="w-4 h-4" /> },
+  IMPORTER:           { label: 'Importer',            color: 'border text-white', icon: <Shield className="w-4 h-4" /> },
+  EXPORTER:           { label: 'Exporter',            color: 'border text-white', icon: <Shield className="w-4 h-4" /> },
 };
 
 function LogisticsScopeBanner({ jobRole }: { jobRole: JobRole }) {
   const milestones = MILESTONE_BY_JOB[jobRole] ?? [];
   const meta = ROLE_META[jobRole];
   return (
-    <div className={`border rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 ${meta.color}`}>
+    <div
+      className={`border rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 ${meta.color}`}
+      style={{ background: 'var(--theme-feature)', borderColor: 'var(--theme-feature-muted)' }}
+    >
       <div className="flex items-center gap-2.5 flex-shrink-0">
         {meta.icon}
         <div>
@@ -679,12 +686,12 @@ function LogisticsScopeBanner({ jobRole }: { jobRole: JobRole }) {
           <p className="text-sm font-extrabold leading-tight">{meta.label}</p>
         </div>
       </div>
-      <div className="hidden sm:block w-px h-8 bg-current opacity-10" />
+      <div className="hidden sm:block w-px h-8 bg-white/20" />
       <div className="flex-1">
         <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5">Your Loggable Milestones</p>
         <div className="flex flex-wrap gap-1.5">
           {milestones.map((m) => (
-            <span key={m} className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-white/60 border border-current/10 tracking-wide">
+            <span key={m} className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-white/15 border border-white/20 tracking-wide">
               {m.replace(/_/g, ' ')}
             </span>
           ))}

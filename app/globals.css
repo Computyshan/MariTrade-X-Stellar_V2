@@ -59,3 +59,43 @@
   --color-sand-100: #F2F1EC;
   --color-sand-200: #E5E3DA;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   PER-USER-TYPE PORTAL THEMES
+   Applied via  data-theme="trade-party" | "logistics-chain"
+   on the root layout wrapper in DashboardLayout.tsx
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── TRADE PARTY  (Importers & Exporters) ───────────────────────
+   Colours drawn from MariTrade-Trade-Party-Logo.png
+   Primary accent : Amber  #F7A800
+   Feature colour : Burgundy / Wine  #7D2050                      */
+[data-theme="trade-party"] {
+  --theme-accent:              #F7A800;
+  --theme-accent-muted:        rgba(247, 168, 0, 0.13);
+  --theme-accent-border:       rgba(247, 168, 0, 0.35);
+  --theme-feature:             #7D2050;
+  --theme-feature-hover:       #621840;
+  --theme-feature-light:       #fdf0f5;
+  --theme-feature-muted:       rgba(125, 32, 80, 0.10);
+  --theme-sidebar-active-bg:   rgba(247, 168, 0, 0.13);
+  --theme-sidebar-active-text: #F7A800;
+  --theme-portal-name:         "Trade Party";
+}
+
+/* ── LOGISTICS CHAIN  (Freight Forwarders, Customs Brokers, WHOps)
+   Colours drawn from MariTrade-Logistic-Chain-Logo.png
+   Primary accent : Teal  #0BAFB0
+   Feature colour : Slate Blue  #5E6EA8                           */
+[data-theme="logistics-chain"] {
+  --theme-accent:              #0BAFB0;
+  --theme-accent-muted:        rgba(11, 175, 176, 0.12);
+  --theme-accent-border:       rgba(11, 175, 176, 0.35);
+  --theme-feature:             #5E6EA8;
+  --theme-feature-hover:       #4a5690;
+  --theme-feature-light:       #f2f3fa;
+  --theme-feature-muted:       rgba(94, 110, 168, 0.10);
+  --theme-sidebar-active-bg:   rgba(11, 175, 176, 0.12);
+  --theme-sidebar-active-text: #0BAFB0;
+  --theme-portal-name:         "Logistics Chain";
+}

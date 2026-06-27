@@ -293,54 +293,76 @@ export default function LandingPage() {
 
             {/* Group selector */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
+
+              {/* ── Trade Party selector ── amber border + burgundy icon */}
               <button
                 type="button"
                 onClick={() => setActiveGroup(activeGroup === 'trade' ? null : 'trade')}
                 className={`flex items-center gap-3 px-6 py-4 rounded-xl border-2 transition-all text-left ${
                   activeGroup === 'trade'
-                    ? 'border-[#F7A800] bg-[#fff8e6]'
+                    ? 'border-[#F7A800] bg-[#fff8e6] shadow-md shadow-[#F7A800]/15'
                     : 'border-[#e0e3e5] bg-[#f7f9fb] hover:border-[#F7A800]/50'
                 }`}
               >
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                  activeGroup === 'trade' ? 'bg-[#F7A800]' : 'bg-[#e0e3e5]'
-                }`}>
-                  <Users className={`w-4.5 h-4.5 ${activeGroup === 'trade' ? 'text-white' : 'text-[#45464d]'}`} />
+                {/* Mini portal logo + icon stacked */}
+                <div className="relative shrink-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                    activeGroup === 'trade' ? 'bg-[#7D2050]' : 'bg-[#e0e3e5]'
+                  }`}>
+                    <Users className={`w-4 h-4 ${activeGroup === 'trade' ? 'text-white' : 'text-[#45464d]'}`} />
+                  </div>
+                  {activeGroup === 'trade' && (
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#F7A800] flex items-center justify-center">
+                      <Image src="/MariTrade-Trade-Party-Logo.png" alt="" width={14} height={14} className="w-3.5 h-3.5 object-contain" />
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <p className="text-[13px] font-bold text-black">Trade Party</p>
-                  <p className="text-[11px] text-[#45464d]">Importer · Exporter</p>
+                  <p className={`text-[13px] font-black leading-tight ${
+                    activeGroup === 'trade' ? 'text-[#7D2050]' : 'text-black'
+                  }`}>Trade Party</p>
+                  <p className="text-[11px] text-[#45464d] mt-0.5">Importer · Exporter</p>
                 </div>
-                <ChevronRight className={`w-4 h-4 ml-auto text-[#45464d] transition-transform ${
-                  activeGroup === 'trade' ? 'rotate-90' : ''
+                <ChevronRight className={`w-4 h-4 ml-6 transition-all ${
+                  activeGroup === 'trade' ? 'text-[#7D2050] rotate-90' : 'text-[#45464d]'
                 }`} />
               </button>
 
+              {/* ── Logistics Chain selector ── teal border + slate icon */}
               <button
                 type="button"
                 onClick={() => setActiveGroup(activeGroup === 'logistics' ? null : 'logistics')}
                 className={`flex items-center gap-3 px-6 py-4 rounded-xl border-2 transition-all text-left ${
                   activeGroup === 'logistics'
-                    ? 'border-[#0BAFB0] bg-[#f0fafa]'
+                    ? 'border-[#0BAFB0] bg-[#f0fafa] shadow-md shadow-[#0BAFB0]/15'
                     : 'border-[#e0e3e5] bg-[#f7f9fb] hover:border-[#0BAFB0]/50'
                 }`}
               >
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                  activeGroup === 'logistics' ? 'bg-[#0BAFB0]' : 'bg-[#e0e3e5]'
-                }`}>
-                  <Truck className={`w-4.5 h-4.5 ${activeGroup === 'logistics' ? 'text-white' : 'text-[#45464d]'}`} />
+                <div className="relative shrink-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                    activeGroup === 'logistics' ? 'bg-[#5E6EA8]' : 'bg-[#e0e3e5]'
+                  }`}>
+                    <Truck className={`w-4 h-4 ${activeGroup === 'logistics' ? 'text-white' : 'text-[#45464d]'}`} />
+                  </div>
+                  {activeGroup === 'logistics' && (
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#0BAFB0] flex items-center justify-center">
+                      <Image src="/MariTrade-Logistic-Chain-Logo.png" alt="" width={14} height={14} className="w-3.5 h-3.5 object-contain" />
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <p className="text-[13px] font-bold text-black">Logistics Chain</p>
-                  <p className="text-[11px] text-[#45464d]">Freight · Customs · Warehouse</p>
+                  <p className={`text-[13px] font-black leading-tight ${
+                    activeGroup === 'logistics' ? 'text-[#5E6EA8]' : 'text-black'
+                  }`}>Logistics Chain</p>
+                  <p className="text-[11px] text-[#45464d] mt-0.5">Freight · Customs · Warehouse</p>
                 </div>
-                <ChevronRight className={`w-4 h-4 ml-auto text-[#45464d] transition-transform ${
-                  activeGroup === 'logistics' ? 'rotate-90' : ''
+                <ChevronRight className={`w-4 h-4 ml-6 transition-all ${
+                  activeGroup === 'logistics' ? 'text-[#5E6EA8] rotate-90' : 'text-[#45464d]'
                 }`} />
               </button>
             </div>
 
-            {/* Trade Party cards */}
+            {/* Trade Party cards — Amber + Burgundy from MariTrade-Trade-Party-Logo */}
             {activeGroup === 'trade' && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
@@ -351,10 +373,9 @@ export default function LandingPage() {
                 {[
                   {
                     role: 'Importer',
-                    icon: <Package className="w-5 h-5 text-[#F7A800]" />,
+                    icon: <Package className="w-5 h-5 text-[#7D2050]" />,
                     tagline: 'You initiate and fund the shipment. MariTrade keeps your payment safe until delivery is verified.',
-                    accentBar: 'bg-[#F7A800]',
-                    stepColor: 'text-[#c98800] bg-[#fff8e6]',
+                    stepBg: 'bg-[#7D2050]',
                     steps: [
                       'Create a shipment record — enter cargo details, route, and expected milestones.',
                       'Assign your logistics partners (freight forwarder, customs broker, warehouse operator) from your network.',
@@ -364,10 +385,9 @@ export default function LandingPage() {
                   },
                   {
                     role: 'Exporter',
-                    icon: <PackageCheck className="w-5 h-5 text-[#F7A800]" />,
+                    icon: <PackageCheck className="w-5 h-5 text-[#7D2050]" />,
                     tagline: 'You prepare and dispatch the goods. MariTrade guarantees you get paid once the importer confirms delivery.',
-                    accentBar: 'bg-[#F7A800]',
-                    stepColor: 'text-[#c98800] bg-[#fff8e6]',
+                    stepBg: 'bg-[#F7A800]',
                     steps: [
                       'Accept a shipment invitation from the importer through your MariTrade dashboard.',
                       'Confirm cargo readiness and coordinate pickup with the assigned freight forwarder.',
@@ -381,23 +401,29 @@ export default function LandingPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.35, delay: i * 0.08, ease: 'easeOut' }}
-                    className="bg-[#f7f9fb] rounded-xl border border-[#F7A800]/25 overflow-hidden"
+                    className="rounded-xl border border-[#7D2050]/20 overflow-hidden shadow-sm"
+                    style={{ background: 'linear-gradient(160deg, #fff8e6 0%, #fdf0f5 100%)' }}
                   >
-                    <div className={`h-1 ${card.accentBar} w-full`} />
+                    {/* Dual-colour top bar: amber → burgundy */}
+                    <div className="h-[3px] w-full" style={{ background: 'linear-gradient(to right, #F7A800, #7D2050)' }} />
                     <div className="p-7">
                       <div className="flex items-start gap-4 mb-5">
-                        <div className="w-10 h-10 rounded-lg bg-[#fff8e6] flex items-center justify-center shrink-0">
+                        {/* Icon backed by a faint burgundy wash */}
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(125,32,80,0.10)' }}>
                           {card.icon}
                         </div>
                         <div>
-                          <h3 className="font-display font-black text-[16px] text-black leading-tight">{card.role}</h3>
-                          <p className="text-[12px] text-[#45464d] mt-1 leading-relaxed">{card.tagline}</p>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-display font-black text-[16px] text-[#7D2050] leading-tight">{card.role}</h3>
+                            <span className="text-[9px] font-black tracking-widest uppercase px-2 py-0.5 rounded-full text-white" style={{ background: '#F7A800' }}>TRADE PARTY</span>
+                          </div>
+                          <p className="text-[12px] text-[#45464d] leading-relaxed">{card.tagline}</p>
                         </div>
                       </div>
                       <ol className="space-y-3">
                         {card.steps.map((step, si) => (
                           <li key={si} className="flex items-start gap-3">
-                            <span className={`shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center mt-0.5 ${card.stepColor}`}>
+                            <span className={`shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center mt-0.5 text-white ${card.stepBg}`}>
                               {si + 1}
                             </span>
                             <span className="text-[13px] text-[#45464d] leading-relaxed">{step}</span>
@@ -410,7 +436,7 @@ export default function LandingPage() {
               </motion.div>
             )}
 
-            {/* Logistics Chain cards */}
+            {/* Logistics Chain cards — Teal + Slate from MariTrade-Logistic-Chain-Logo */}
             {activeGroup === 'logistics' && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
@@ -421,10 +447,9 @@ export default function LandingPage() {
                 {[
                   {
                     role: 'Freight Forwarder',
-                    icon: <Truck className="w-5 h-5 text-[#0BAFB0]" />,
+                    icon: <Truck className="w-5 h-5 text-[#5E6EA8]" />,
                     tagline: 'You move the cargo. Log every checkpoint with proof and keep the whole chain informed in real time.',
-                    accentBar: 'bg-[#0BAFB0]',
-                    stepColor: 'text-[#0a7c7d] bg-[#e6fafa]',
+                    stepBg: 'bg-[#0BAFB0]',
                     steps: [
                       "Accept your assignment from the importer's shipment dashboard.",
                       'Log origin departure with timestamped photos and vessel details.',
@@ -434,10 +459,9 @@ export default function LandingPage() {
                   },
                   {
                     role: 'Customs Broker',
-                    icon: <ClipboardCheck className="w-5 h-5 text-[#0BAFB0]" />,
+                    icon: <ClipboardCheck className="w-5 h-5 text-[#5E6EA8]" />,
                     tagline: 'You clear the cargo. Access the document center and log every BOC milestone with reference numbers.',
-                    accentBar: 'bg-[#0BAFB0]',
-                    stepColor: 'text-[#0a7c7d] bg-[#e6fafa]',
+                    stepBg: 'bg-[#5E6EA8]',
                     steps: [
                       'Access the BOC Document Center for your assigned shipment — read-only, secured.',
                       'Review uploaded shipping documents, packing lists, and import permits.',
@@ -447,10 +471,9 @@ export default function LandingPage() {
                   },
                   {
                     role: 'Warehouse Operator',
-                    icon: <Building2 className="w-5 h-5 text-[#0BAFB0]" />,
+                    icon: <Building2 className="w-5 h-5 text-[#5E6EA8]" />,
                     tagline: 'You receive and store the cargo. Log the final leg of the shipment to trigger escrow release.',
-                    accentBar: 'bg-[#0BAFB0]',
-                    stepColor: 'text-[#0a7c7d] bg-[#e6fafa]',
+                    stepBg: 'bg-[#0BAFB0]',
                     steps: [
                       'Accept the cargo handover from the customs broker once BOC clearance is confirmed.',
                       'Log receiving milestone — include cargo condition notes and photo documentation.',
@@ -464,23 +487,28 @@ export default function LandingPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.35, delay: i * 0.08, ease: 'easeOut' }}
-                    className="bg-[#f7f9fb] rounded-xl border border-[#0BAFB0]/25 overflow-hidden"
+                    className="rounded-xl border border-[#5E6EA8]/20 overflow-hidden shadow-sm"
+                    style={{ background: 'linear-gradient(160deg, #f0fafa 0%, #f2f3fa 100%)' }}
                   >
-                    <div className={`h-1 ${card.accentBar} w-full`} />
+                    {/* Dual-colour top bar: teal → slate */}
+                    <div className="h-[3px] w-full" style={{ background: 'linear-gradient(to right, #0BAFB0, #5E6EA8)' }} />
                     <div className="p-6">
                       <div className="flex items-start gap-3 mb-5">
-                        <div className="w-9 h-9 rounded-lg bg-[#e6fafa] flex items-center justify-center shrink-0">
+                        {/* Icon backed by a faint slate wash */}
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(94,110,168,0.10)' }}>
                           {card.icon}
                         </div>
                         <div>
-                          <h3 className="font-display font-black text-[14px] text-black leading-tight">{card.role}</h3>
-                          <p className="text-[11px] text-[#45464d] mt-1 leading-snug">{card.tagline}</p>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <h3 className="font-display font-black text-[14px] text-[#5E6EA8] leading-tight">{card.role}</h3>
+                          </div>
+                          <p className="text-[11px] text-[#45464d] leading-snug">{card.tagline}</p>
                         </div>
                       </div>
                       <ol className="space-y-2.5">
                         {card.steps.map((step, si) => (
                           <li key={si} className="flex items-start gap-2.5">
-                            <span className={`shrink-0 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center mt-0.5 ${card.stepColor}`}>
+                            <span className={`shrink-0 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center mt-0.5 text-white ${card.stepBg}`}>
                               {si + 1}
                             </span>
                             <span className="text-[12px] text-[#45464d] leading-relaxed">{step}</span>

@@ -101,24 +101,30 @@ export default function EscrowLedger() {
         try {
           const record = await client.getEscrow(s.referenceCode);
 
-          // record is the raw EscrowRecord from the contract:
-          // { status, amount_usdc, confirmed_milestones, required_milestones, ... }
+          // getEscrow returns null when the contract has no record yet
+          if (!record) {
+            setChainMap(prev => ({ ...prev, [s.referenceCode]: 'error' }));
+            return;
+          }
+
+          // EscrowRecord uses camelCase from scValToNative:
+          // { status, amount (strobes), requiredMilestones, confirmedMilestones, ... }
           const statusLabel =
             CONTRACT_STATUS_LABEL[record.status as number] ??
             String(record.status);
 
-          const confirmed = Array.isArray(record.confirmed_milestones)
-            ? record.confirmed_milestones.length
+          const confirmed = Array.isArray(record.confirmedMilestones)
+            ? record.confirmedMilestones.length
             : 0;
-          const required  = Array.isArray(record.required_milestones)
-            ? record.required_milestones.length
+          const required  = Array.isArray(record.requiredMilestones)
+            ? record.requiredMilestones.length
             : 0;
 
           setChainMap(prev => ({
             ...prev,
             [s.referenceCode]: {
               status:         statusLabel,
-              amountUsdc:     Number(record.amount_usdc ?? 0) / 1e7, // strobes → USDC
+              amountUsdc:     Number(record.amount ?? 0) / 1e7, // strobes → USDC
               confirmedCount: confirmed,
               requiredCount:  required,
               canRelease:     confirmed >= required && required > 0,

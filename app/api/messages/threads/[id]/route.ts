@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
-import { Message } from '@/types';
+import { Message, ShipmentReceipt } from '@/types';
+import { SUPPORTED_CURRENCIES } from '@/types';
 
 async function isTradePartyOnlyThread(threadId: string): Promise<boolean> {
   const [participants, allUsers, thread] = await Promise.all([
@@ -40,10 +41,11 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Chat thread not found' }, { status: 404 });
     }
 
-    const [messages, participants, allUsers] = await Promise.all([
+    const [messages, participants, allUsers, receipt] = await Promise.all([
       dbStore.getMessages(threadId),
       dbStore.getParticipantsForThread(threadId),
       dbStore.getUsers(),
+      dbStore.getReceiptByThreadId(threadId),
     ]);
 
     const filledParticipants = participants.map(p => {
@@ -58,7 +60,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: { thread, messages, participants: filledParticipants },
+      data: { thread, messages, participants: filledParticipants, receipt: receipt ?? null },
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -83,7 +85,7 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { action, senderId, content, counterTerms } = body;
+    const { action, senderId, content } = body;
 
     // FIX #1 — Verify senderId in body matches the authenticated JWT user
     if (senderId && senderId !== user!.id) {
@@ -103,56 +105,144 @@ export async function POST(
       );
     }
 
-    if (action === 'CONVERT_TO_SHIPMENT' || action === 'COUNTER_TERMS') {
+    if (action === 'FINALIZE_RECEIPT' || action === 'UPDATE_RECEIPT') {
       const tradePartyOnly = await isTradePartyOnlyThread(threadId);
       if (!tradePartyOnly) {
         return NextResponse.json(
-          { success: false, error: 'Escrow and counter offers are only available between Trade Party users.' },
+          { success: false, error: 'Shipment Receipts are only available between Trade Party users.' },
           { status: 403 }
         );
       }
     }
 
-    if (action === 'CONVERT_TO_SHIPMENT') {
-      const updatedThread = { ...thread, status: 'DEAL_AGREED' as const, updatedAt: new Date().toISOString() };
+    // ── Finalize the receipt: locks it for editing and surfaces it on the
+    //    Create Shipment page so its fields can be used to prefill a new record.
+    if (action === 'FINALIZE_RECEIPT') {
+      const existing = await dbStore.getReceiptByThreadId(threadId);
+      if (!existing) {
+        return NextResponse.json({ success: false, error: 'No receipt to finalize yet — add some details first.' }, { status: 400 });
+      }
+      if (existing.status === 'FINALIZED') {
+        return NextResponse.json({ success: false, error: 'This receipt has already been finalized.' }, { status: 400 });
+      }
+
+      const now = new Date().toISOString();
+      const finalized: ShipmentReceipt = {
+        ...existing,
+        status: 'FINALIZED',
+        finalizedById: senderId,
+        finalizedAt: now,
+        updatedAt: now,
+      };
+      await dbStore.saveReceipt(finalized);
+
+      const updatedThread = { ...thread, status: 'RECEIPT_FINALIZED' as const, updatedAt: now };
       await dbStore.saveThread(updatedThread);
 
-      await dbStore.saveMessage({
-        id: 'msg_sys_' + Math.random().toString(36).substring(2, 9),
-        threadId: thread.id,
-        senderId,
-        content: `📈 IMPORTER clicked "Convert to Shipment". Initial deal terms agreed: Standard USDC Escrow protection requested. Draft shipment record created.`,
-        createdAt: new Date().toISOString(),
-      });
-
-      return NextResponse.json({ success: true, data: updatedThread });
-    }
-
-    if (action === 'COUNTER_TERMS') {
-      const { currentCounterPriceUSD, cargoDescription } = body;
       const allUsers = await dbStore.getUsers();
       const sender = allUsers.find(u => u.id === senderId);
       const senderRole = sender ? sender.jobRole.replace(/_/g, ' ') : 'PARTNER';
 
-      const updatedThread = {
-        ...thread,
-        status: 'COUNTER_OFFER' as const,
-        currentCounterPriceUSD:
-          currentCounterPriceUSD !== undefined ? Number(currentCounterPriceUSD) : thread.currentCounterPriceUSD,
-        cargoDescription: cargoDescription !== undefined ? cargoDescription : thread.cargoDescription,
-        updatedAt: new Date().toISOString(),
-      };
-      await dbStore.saveThread(updatedThread);
-
       await dbStore.saveMessage({
         id: 'msg_sys_' + Math.random().toString(36).substring(2, 9),
         threadId: thread.id,
         senderId,
-        content: `⚠️ ${senderRole} submitted a Counter Offer: $${(currentCounterPriceUSD || 0).toLocaleString()} USDC - "${cargoDescription || 'Industrial Commodities'}". Waiting for acceptance.`,
-        createdAt: new Date().toISOString(),
+        content: `📋 ${senderRole} finalized the Shipment Receipt. It now appears on the Create Shipment page and can be used to prefill a new shipment record.`,
+        createdAt: now,
       });
 
-      return NextResponse.json({ success: true, data: updatedThread });
+      return NextResponse.json({ success: true, data: { thread: updatedThread, receipt: finalized } });
+    }
+
+    // ── Update (or create) the draft receipt. Either Trade Party participant
+    //    can edit it freely while it's still a DRAFT.
+    if (action === 'UPDATE_RECEIPT') {
+      const existing = await dbStore.getReceiptByThreadId(threadId);
+
+      if (existing?.status === 'FINALIZED') {
+        return NextResponse.json(
+          { success: false, error: 'This receipt is finalized and can no longer be edited.' },
+          { status: 403 }
+        );
+      }
+
+      const {
+        currency,
+        invoiceValue,
+        totalValueUSD,
+        packageCount,
+        grossWeight,
+      } = body;
+
+      // Validate currency against the fixed supported list — reject anything else
+      if (currency !== undefined && !SUPPORTED_CURRENCIES.includes(currency)) {
+        return NextResponse.json(
+          { success: false, error: `Unsupported currency "${currency}". Must be one of: ${SUPPORTED_CURRENCIES.join(', ')}.` },
+          { status: 400 }
+        );
+      }
+
+      // Validate numeric fields when provided
+      for (const [label, val] of [
+        ['Invoice value', invoiceValue],
+        ['Total value (USD)', totalValueUSD],
+        ['Package count', packageCount],
+        ['Gross weight', grossWeight],
+      ] as const) {
+        if (val !== undefined && val !== null && val !== '') {
+          const parsed = Number(val);
+          if (!Number.isFinite(parsed) || parsed < 0) {
+            return NextResponse.json(
+              { success: false, error: `${label} must be a valid non-negative number.` },
+              { status: 400 }
+            );
+          }
+        }
+      }
+
+      const now = new Date().toISOString();
+      const merged: ShipmentReceipt = {
+        id: existing?.id ?? 'rcpt_' + Math.random().toString(36).substring(2, 9),
+        threadId,
+        status: 'DRAFT',
+        cargoDescription:  body.cargoDescription  !== undefined ? body.cargoDescription  : existing?.cargoDescription,
+        shipmentScope:     body.shipmentScope      !== undefined ? body.shipmentScope      : existing?.shipmentScope,
+        estimatedArrival:  body.estimatedArrival   !== undefined ? body.estimatedArrival   : existing?.estimatedArrival,
+        importerContact:   body.importerContact    !== undefined ? body.importerContact    : existing?.importerContact,
+        exporterContact:   body.exporterContact     !== undefined ? body.exporterContact     : existing?.exporterContact,
+        originCountry:     body.originCountry      !== undefined ? body.originCountry      : existing?.originCountry,
+        originAddress:     body.originAddress      !== undefined ? body.originAddress      : existing?.originAddress,
+        originPort:        body.originPort         !== undefined ? body.originPort         : existing?.originPort,
+        destCountry:       body.destCountry         !== undefined ? body.destCountry         : existing?.destCountry,
+        destAddress:       body.destAddress         !== undefined ? body.destAddress         : existing?.destAddress,
+        destinationPort:   body.destinationPort     !== undefined ? body.destinationPort     : existing?.destinationPort,
+        invoiceCurrency:   currency                !== undefined ? currency                : (existing?.invoiceCurrency ?? 'USD'),
+        invoiceValue:      invoiceValue             !== undefined ? Number(invoiceValue)     : existing?.invoiceValue,
+        totalValueUSD:     totalValueUSD            !== undefined ? Number(totalValueUSD)    : existing?.totalValueUSD,
+        hsCode:            body.hsCode              !== undefined ? body.hsCode              : existing?.hsCode,
+        isDangerousGoods:  body.isDangerousGoods    !== undefined ? Boolean(body.isDangerousGoods) : (existing?.isDangerousGoods ?? false),
+        packageCount:      packageCount             !== undefined ? Number(packageCount)     : existing?.packageCount,
+        packagingType:     body.packagingType       !== undefined ? body.packagingType       : existing?.packagingType,
+        grossWeight:       grossWeight              !== undefined ? Number(grossWeight)      : existing?.grossWeight,
+        weightUnit:        body.weightUnit          !== undefined ? body.weightUnit          : (existing?.weightUnit ?? 'KG'),
+        lastEditedById:    senderId,
+        finalizedById:     existing?.finalizedById,
+        finalizedAt:       existing?.finalizedAt,
+        createdAt:         existing?.createdAt ?? now,
+        updatedAt:         now,
+      };
+      const saved = await dbStore.saveReceipt(merged);
+
+      // Keep the thread status + cargo blurb in sync for the sidebar preview
+      const updatedThread = {
+        ...thread,
+        status: thread.status === 'RECEIPT_FINALIZED' ? thread.status : ('RECEIPT_DRAFT' as const),
+        cargoDescription: saved.cargoDescription ?? thread.cargoDescription,
+        updatedAt: now,
+      };
+      await dbStore.saveThread(updatedThread);
+
+      return NextResponse.json({ success: true, data: { thread: updatedThread, receipt: saved } });
     }
 
     // Default: Send standard chat message

@@ -96,13 +96,16 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
     );
   }
 
+  const isTradeParty = currentUser.userType === 'TRADE_PARTY';
+  const themeAttr   = isTradeParty ? 'trade-party' : 'logistics-chain';
+
   return (
-    <div className="min-h-screen bg-[#f0f2f5] text-gray-900 font-sans flex">
+    <div data-theme={themeAttr} className="min-h-screen bg-[#f0f2f5] text-gray-900 font-sans flex">
 
       {/* ── SIDEBAR ── */}
       <aside className="hidden md:flex flex-col w-[220px] bg-[#111c30] text-white flex-shrink-0 select-none h-screen sticky top-0">
 
-        {/* Logo */}
+        {/* Main MariTrade logo — always shown, always the master brand */}
         <div className="px-4 py-4 border-b border-white/5">
           <Image
             src="/MariTrade logo.png"
@@ -112,6 +115,23 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
             className="h-10 w-auto object-contain brightness-0 invert"
             priority
           />
+        </div>
+
+        {/* Portal badge — shows which branch this user belongs to */}
+        <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2.5">
+          <Image
+            src={isTradeParty ? '/MariTrade-Trade-Party-Logo.png' : '/MariTrade-Logistic-Chain-Logo.png'}
+            alt={isTradeParty ? 'Trade Party Portal' : 'Logistics Chain Portal'}
+            width={20}
+            height={20}
+            className="h-5 w-auto object-contain flex-shrink-0"
+          />
+          <span
+            className="text-[9px] font-black tracking-widest uppercase leading-none"
+            style={{ color: 'var(--theme-sidebar-active-text)' }}
+          >
+            {isTradeParty ? 'Trade Party' : 'Logistics Chain'}
+          </span>
         </div>
 
         {/* User block */}
@@ -136,9 +156,13 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[12px] font-semibold transition-all duration-150 ${
                   isActive
-                    ? 'bg-white/10 text-white'
+                    ? ''
                     : 'text-white/50 hover:bg-white/5 hover:text-white/80'
                 }`}
+                style={isActive ? {
+                  backgroundColor: 'var(--theme-sidebar-active-bg)',
+                  color: 'var(--theme-sidebar-active-text)',
+                } : {}}
               >
                 <IconComp className="w-[15px] h-[15px] shrink-0" />
                 <span>{item.name}</span>
@@ -151,7 +175,8 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         <div className="px-4 py-4 border-t border-white/5">
           <Link
             href="/shipments/new"
-            className="w-full border border-white/20 text-white/80 hover:bg-white/10 hover:text-white font-bold py-2.5 rounded-lg text-[11px] tracking-wider transition-all flex items-center justify-center gap-1.5 uppercase"
+            className="w-full text-white/80 hover:bg-white/10 hover:text-white font-bold py-2.5 rounded-lg text-[11px] tracking-wider transition-all flex items-center justify-center gap-1.5 uppercase border"
+            style={{ borderColor: 'var(--theme-accent-border)' }}
           >
             + NEW SHIPMENT
           </Link>
@@ -212,7 +237,8 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
                         {notif.unreadCount > 0 && (
                           <button
                             onClick={() => notif.markAllRead()}
-                            className="flex items-center gap-1 text-[10px] font-bold text-maritime-400 hover:text-maritime-900 transition-colors"
+                            className="flex items-center gap-1 text-[10px] font-bold hover:opacity-70 transition-opacity"
+                            style={{ color: 'var(--theme-accent)' }}
                           >
                             <CheckCheck className="w-3 h-3" /> Mark all read
                           </button>
@@ -245,7 +271,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
                               {/* Unread dot */}
                               <div className="flex-shrink-0 mt-1">
                                 {!n.isRead
-                                  ? <div className="w-2 h-2 rounded-full bg-maritime-400" />
+                                  ? <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--theme-accent)' }} />
                                   : <div className="w-2 h-2" />}
                               </div>
                               <div className="flex-1 min-w-0">
@@ -343,7 +369,8 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
       <div className="fixed bottom-6 right-6 z-40">
         <button
           onClick={() => setShowBot(prev => !prev)}
-          className="bg-[#111c30] hover:bg-[#1e3a5f] text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105"
+          className="text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105 hover:brightness-110"
+          style={{ background: 'var(--theme-feature)' }}
         >
           {showBot ? <X className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
         </button>
@@ -355,7 +382,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
               className="absolute bottom-14 right-0 w-80 bg-white border border-gray-200 rounded-xl shadow-2xl flex flex-col overflow-hidden max-h-[440px]"
             >
-              <div className="bg-[#111c30] text-white p-4 flex items-center gap-2">
+              <div className="text-white p-4 flex items-center gap-2" style={{ background: 'var(--theme-feature)' }}>
                 <Bot className="w-4 h-4" />
                 <div>
                   <h3 className="font-bold text-xs">MariBot</h3>
@@ -365,11 +392,14 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
               <div className="flex-1 p-3 space-y-2 overflow-y-auto h-60 text-xs bg-gray-50">
                 {botHistory.map((item, index) => (
                   <div key={index} className={`flex ${item.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs ${
-                      item.sender === 'user'
-                        ? 'bg-[#111c30] text-white'
-                        : 'bg-white text-gray-700 border border-gray-200'
-                    }`}>{item.text}</div>
+                    <div
+                      className={`max-w-[85%] rounded-lg px-3 py-2 text-xs ${
+                        item.sender === 'user'
+                          ? 'text-white'
+                          : 'bg-white text-gray-700 border border-gray-200'
+                      }`}
+                      style={item.sender === 'user' ? { background: 'var(--theme-feature)' } : {}}
+                    >{item.text}</div>
                   </div>
                 ))}
                 {botLoading && (
@@ -386,7 +416,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
                   value={botMessage}
                   onChange={(e) => setBotMessage(e.target.value)}
                 />
-                <button type="submit" className="bg-[#111c30] text-white px-3 py-1.5 rounded-lg text-xs font-medium">
+                <button type="submit" className="text-white px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--theme-feature)' }}>
                   Send
                 </button>
               </form>

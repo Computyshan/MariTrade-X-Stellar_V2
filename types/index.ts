@@ -28,7 +28,33 @@ export type ShipmentStatus =
 
 export type EscrowStatus = 'UNFUNDED' | 'FUNDED' | 'RELEASED' | 'REFUNDED' | 'DISPUTED';
 
-export type ChatThreadStatus = 'OPEN' | 'DEAL_AGREED' | 'COUNTER_OFFER' | 'CLOSED';
+export type ChatThreadStatus = 'OPEN' | 'RECEIPT_FINALIZED' | 'RECEIPT_DRAFT' | 'CLOSED';
+
+// ─── Negotiation currency ───────────────────────────────────────────────────
+
+export type Currency = 'USD' | 'PHP' | 'EUR' | 'GBP' | 'JPY' | 'CNY' | 'SGD';
+
+export const SUPPORTED_CURRENCIES: Currency[] = ['USD', 'PHP', 'EUR', 'GBP', 'JPY', 'CNY', 'SGD'];
+
+export const CURRENCY_LABELS: Record<Currency, string> = {
+  USD: 'US Dollar',
+  PHP: 'Philippine Peso',
+  EUR: 'Euro',
+  GBP: 'British Pound',
+  JPY: 'Japanese Yen',
+  CNY: 'Chinese Yuan',
+  SGD: 'Singapore Dollar',
+};
+
+export const CURRENCY_SYMBOLS: Record<Currency, string> = {
+  USD: '$',
+  PHP: '₱',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  CNY: '¥',
+  SGD: 'S$',
+};
 
 export type MilestoneType =
   // ─── 🏢 Freight Forwarder milestones ───
@@ -192,12 +218,61 @@ export interface ChatThread {
   status: ChatThreadStatus;
   shipmentId?: string;
   cargoDescription?: string;
-  currentCounterPriceUSD?: number;
   createdAt: string;
   updatedAt: string;
   // Group chat fields
   isGroup?: boolean;
   groupName?: string;
+}
+
+// ─── Shipment Receipt — collaborative shipment-creation planner ───────────
+// Lives on a (Trade Party) chat thread. Both the importer and the exporter
+// can edit the same receipt while they chat; once either side finalizes it,
+// it becomes read-only and shows up as a pickable card on the
+// "Create Shipment" page so its fields can be used to prefill the form.
+
+export type ReceiptStatus = 'DRAFT' | 'FINALIZED';
+
+export interface ShipmentReceipt {
+  id: string;
+  threadId: string;
+  status: ReceiptStatus;
+
+  // ── Cargo ──
+  cargoDescription?: string;
+  shipmentScope?: ShipmentScope;
+  estimatedArrival?: string;
+
+  // ── Parties ──
+  importerContact?: string;
+  exporterContact?: string;
+
+  // ── Route ──
+  originCountry?: string;
+  originAddress?: string;
+  originPort?: string;
+  destCountry?: string;
+  destAddress?: string;
+  destinationPort?: string;
+
+  // ── Commercial value ──
+  invoiceCurrency?: Currency;
+  invoiceValue?: number;
+  totalValueUSD?: number;
+  hsCode?: string;
+
+  // ── Physical specifications ──
+  isDangerousGoods?: boolean;
+  packageCount?: number;
+  packagingType?: string;
+  grossWeight?: number;
+  weightUnit?: 'KG' | 'LBS';
+
+  lastEditedById?: string;
+  finalizedById?: string;
+  finalizedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ChatParticipant {

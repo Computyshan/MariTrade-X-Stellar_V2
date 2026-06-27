@@ -38,8 +38,27 @@ import {
   Building2,
   Phone,
   MapPin,
+  Receipt,
+  Globe,
+  Package,
+  Weight,
+  Calendar,
+  AlertTriangle,
+  ToggleLeft,
+  ToggleRight,
+  Ship,
 } from 'lucide-react';
-import { ChatThread, Message, User as UserType, JobRole } from '@/types';
+import {
+  ChatThread,
+  Message,
+  User as UserType,
+  JobRole,
+  Currency,
+  SUPPORTED_CURRENCIES,
+  CURRENCY_SYMBOLS,
+  ShipmentReceipt,
+  ShipmentScope,
+} from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,10 +122,30 @@ function getRoleColor(role: string): string {
   return JOB_ROLE_COLOR[role] || 'bg-gray-100 text-gray-700 border-gray-200';
 }
 
+// Currency-aware money formatter — falls back to USD if the thread has no currency set yet
+function formatMoney(amount: number | null | undefined, currency?: string | null): string {
+  const cur = (currency as Currency) || 'USD';
+  const symbol = CURRENCY_SYMBOLS[cur] ?? '$';
+  if (amount == null) return '—';
+  return `${symbol}${amount.toLocaleString()} ${cur}`;
+}
+
+// Sanitize free-typed price input: digits + at most one decimal point, no other characters.
+// This replaces the native number-spinner input so there's no scroll-to-change, no 'e'/'+'/'-'
+// characters, and full control over what the field accepts.
+function sanitizePriceInput(raw: string): string {
+  let cleaned = raw.replace(/[^0-9.]/g, '');
+  const firstDot = cleaned.indexOf('.');
+  if (firstDot !== -1) {
+    cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+  }
+  return cleaned;
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ChatNegotiationCenter() {
-  const { currentUser, allUsers, refreshAllUsers } = useUserSession();
+  const { currentUser, allUsers, refreshAllUsers, loading: sessionLoading } = useUserSession();
 
   const [threads, setThreads]               = useState<ChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState('');
@@ -124,15 +163,23 @@ export default function ChatNegotiationCenter() {
   const [lightboxImage, setLightboxImage]   = useState<string | null>(null);
 
   const [replyText, setReplyText]           = useState('');
-  const [proposedPrice, setProposedPrice]   = useState('');
-  const [proposedDesc, setProposedDesc]     = useState('');
+  const [receipt, setReceipt]               = useState<ShipmentReceipt | null>(null);
+
+  // BUG FIX — background polling (fetchMessagesOfThread) used to overwrite the
+  // receipt form fields every 4s from the server's last-saved values, wiping out
+  // whatever the user was mid-typing in the receipt panel. This ref tracks whether
+  // the user has touched the receipt fields since the panel opened, so the poll can
+  // skip re-seeding them while there are unsaved local edits.
+  const receiptDirtyRef = useRef(false);
 
   const [submittingMsg, setSubmittingMsg]   = useState(false);
-  const [proposingCounter, setProposingCounter] = useState(false);
+  const [savingReceipt, setSavingReceipt]   = useState(false);
+  const [finalizingReceipt, setFinalizingReceipt] = useState(false);
+  const [receiptError, setReceiptError]     = useState<string | null>(null);
   const [showChecklistPopover, setShowChecklistPopover] = useState(false);
   const [showImagePicker, setShowImagePicker]   = useState(false);
   const [selectedImage, setSelectedImage]   = useState<string | null>(null);
-  const [showNegotiationPanel, setShowNegotiationPanel] = useState(false);
+  const [showReceiptPanel, setShowReceiptPanel] = useState(false);
 
   // Toast for network-gate errors
   const [toast, setToast] = useState<{ type: 'error' | 'info'; msg: string } | null>(null);
@@ -148,6 +195,33 @@ export default function ChatNegotiationCenter() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef   = useRef<HTMLInputElement>(null);
+
+  // ── Auth guard — render nothing until the session resolves ──────────────
+  if (sessionLoading) {
+    return (
+      <DashboardLayout flush={true}>
+        <div className="flex h-screen w-full items-center justify-center">
+          <div className="text-center space-y-3">
+            <div className="w-6 h-6 border-2 border-[#0058be] border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-[11px] text-gray-400 font-mono">Loading session...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <DashboardLayout flush={true}>
+        <div className="flex h-screen w-full items-center justify-center">
+          <div className="text-center space-y-3">
+            <p className="text-sm font-bold text-gray-700">Session expired</p>
+            <p className="text-[11px] text-gray-400">Please sign in again to continue.</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const showToast = (type: 'error' | 'info', msg: string) => {
     setToast({ type, msg });
@@ -213,18 +287,19 @@ export default function ChatNegotiationCenter() {
       const json = await res.json();
       if (json.success && json.data) {
         setMessages(json.data.messages || []);
-        setProposedPrice(
-          json.data.thread.currentCounterPriceUSD != null
-            ? String(json.data.thread.currentCounterPriceUSD)
-            : ''
-        );
-        setProposedDesc(json.data.thread.cargoDescription || '');
+
+        // BUG FIX — only re-seed the receipt panel from the server when the user
+        // hasn't started editing it locally. Without this guard, the 4s background poll
+        // would stomp on in-progress typing in the receipt panel every few seconds.
+        if (!receiptDirtyRef.current) {
+          setReceipt(json.data.receipt || null);
+        }
+
         setThreads(prev => prev.map(t => t.id === id ? {
           ...t,
           // Only spread fields that exist on ChatThread itself — do NOT
           // overwrite otherParticipant / lastMessage which come from fetchThreads
           status: json.data.thread.status,
-          currentCounterPriceUSD: json.data.thread.currentCounterPriceUSD,
           cargoDescription: json.data.thread.cargoDescription,
           updatedAt: json.data.thread.updatedAt,
         } : t));
@@ -240,6 +315,12 @@ export default function ChatNegotiationCenter() {
     if (selectedThreadId) fetchMessagesOfThread(selectedThreadId);
     else setMessages([]);
   }, [selectedThreadId]);
+
+  // Reset the "dirty" guard whenever the user switches threads or closes the panel,
+  // so the next thread/open starts from a clean, server-synced state.
+  useEffect(() => {
+    receiptDirtyRef.current = false;
+  }, [selectedThreadId, showReceiptPanel]);
 
   // Polling
   useEffect(() => {
@@ -266,7 +347,7 @@ export default function ChatNegotiationCenter() {
   const isTradePartyThread = isTradePartyOnlyConversation((activeThread as any)?.otherParticipant?.id);
 
   useEffect(() => {
-    if (!isTradePartyThread) setShowNegotiationPanel(false);
+    if (!isTradePartyThread) setShowReceiptPanel(false);
   }, [selectedThreadId, isTradePartyThread]);
 
   useEffect(() => {
@@ -356,42 +437,92 @@ export default function ChatNegotiationCenter() {
     finally { setSubmittingMsg(false); }
   };
 
-  const handleProposeCounter = async (e: React.FormEvent) => {
+  const handleUpdateReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedThreadId || !isTradePartyThread) return;
+    if (!selectedThreadId || !isTradePartyThread || !receipt) return;
+    setReceiptError(null);
+
     try {
-      setProposingCounter(true);
+      setSavingReceipt(true);
       const res  = await authFetch(`/api/messages/threads/${selectedThreadId}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          action: 'COUNTER_TERMS',
+          action: 'UPDATE_RECEIPT',
           senderId: currentUser.id,
-          counterTerms: `Value: ${proposedPrice} - Description: ${proposedDesc}`,
-          currentCounterPriceUSD: Number(proposedPrice),
-          cargoDescription: proposedDesc,
+          cargoDescription: receipt.cargoDescription,
+          shipmentScope: receipt.shipmentScope,
+          estimatedArrival: receipt.estimatedArrival,
+          importerContact: receipt.importerContact,
+          exporterContact: receipt.exporterContact,
+          originCountry: receipt.originCountry,
+          originAddress: receipt.originAddress,
+          originPort: receipt.originPort,
+          destCountry: receipt.destCountry,
+          destAddress: receipt.destAddress,
+          destinationPort: receipt.destinationPort,
+          currency: receipt.invoiceCurrency,
+          invoiceValue: receipt.invoiceValue,
+          totalValueUSD: receipt.totalValueUSD,
+          hsCode: receipt.hsCode,
+          isDangerousGoods: receipt.isDangerousGoods,
+          packageCount: receipt.packageCount,
+          packagingType: receipt.packagingType,
+          grossWeight: receipt.grossWeight,
+          weightUnit: receipt.weightUnit,
         }),
       });
       const json = await res.json();
-      if (json.success) { fetchThreads(); fetchMessagesOfThread(selectedThreadId); }
-    } catch { console.warn('Counter offer failed'); }
-    finally { setProposingCounter(false); }
+      if (json.success) {
+        receiptDirtyRef.current = false;
+        setReceipt(json.data.receipt);
+        fetchThreads(false, true);
+      } else {
+        setReceiptError(json.error || 'Failed to save the receipt.');
+      }
+    } catch { setReceiptError('Network error — please try again.'); }
+    finally { setSavingReceipt(false); }
   };
 
-  const handleAcceptFinalTerms = async () => {
+  const handleFinalizeReceipt = async () => {
     if (!selectedThreadId || !isTradePartyThread) return;
-    if (!confirm('Lock these terms and generate the Stellar multi-sign Escrow contract?')) return;
-    const res  = await authFetch(`/api/messages/threads/${selectedThreadId}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'CONVERT_TO_SHIPMENT', senderId: currentUser.id }),
+    if (!confirm('Finalize this Shipment Receipt? It will become read-only and appear on the Create Shipment page for both parties.')) return;
+    setFinalizingReceipt(true);
+    try {
+      const res  = await authFetch(`/api/messages/threads/${selectedThreadId}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'FINALIZE_RECEIPT', senderId: currentUser.id }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setReceipt(json.data.receipt);
+        fetchThreads();
+        fetchMessagesOfThread(selectedThreadId);
+      } else {
+        setReceiptError(json.error || 'Failed to finalize the receipt.');
+      }
+    } catch { setReceiptError('Network error — please try again.'); }
+    finally { setFinalizingReceipt(false); }
+  };
+
+  // Updates a single receipt field locally (marks the draft dirty so polling
+  // won't stomp on it), initializing an empty draft receipt if one doesn't exist yet.
+  const updateReceiptField = (field: keyof ShipmentReceipt, value: any) => {
+    receiptDirtyRef.current = true;
+    setReceipt(prev => {
+      const base: ShipmentReceipt = prev ?? {
+        id: '',
+        threadId: selectedThreadId,
+        status: 'DRAFT',
+        invoiceCurrency: 'USD',
+        weightUnit: 'KG',
+        isDangerousGoods: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      return { ...base, [field]: value };
     });
-    const json = await res.json();
-    if (json.success) {
-      alert('Deal accepted! Shipment contract and reference generated.');
-      fetchThreads();
-      fetchMessagesOfThread(selectedThreadId);
-    }
   };
 
   // Only allow messaging trusted network members
@@ -539,16 +670,24 @@ export default function ChatNegotiationCenter() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Deal checklist — Trade Party threads only */}
+            {/* Receipt checklist — Trade Party threads only */}
             {isTradePartyThread && activeThread && (() => {
-              const isDealAgreed    = activeThread.status === 'DEAL_AGREED';
-              const isCounterOffer  = activeThread.status === 'COUNTER_OFFER';
-              const hasPrice        = activeThread.currentCounterPriceUSD != null;
-              const hasCargo        = !!(activeThread.cargoDescription?.trim());
+              const isFinalized   = activeThread.status === 'RECEIPT_FINALIZED';
+              const isDraft       = activeThread.status === 'RECEIPT_DRAFT';
+              const hasCargo      = !!(receipt?.cargoDescription?.trim());
+              const hasRoute      = !!(receipt?.originCountry?.trim() && receipt?.destinationPort?.trim());
+              const hasValue      = receipt?.invoiceValue != null;
+
+              // STRICT SEQUENTIAL GATING — each step requires the previous step too.
+              const step1Done = true;
+              const step2Done = step1Done && hasCargo;
+              const step3Done = step2Done && hasRoute && hasValue;
+              const step4Done = step3Done && isFinalized;
+
               const stepsTotal      = 4;
-              const stepsDone       = [true, hasPrice || hasCargo, isCounterOffer || isDealAgreed, isDealAgreed].filter(Boolean).length;
+              const stepsDone       = [step1Done, step2Done, step3Done, step4Done].filter(Boolean).length;
               const pct             = Math.round((stepsDone / stepsTotal) * 100);
-              const pendingCount    = isDealAgreed ? 0 : stepsTotal - stepsDone;
+              const pendingCount    = isFinalized ? 0 : stepsTotal - stepsDone;
 
               const step = (done: boolean, label: string, sub: string) => (
                 <div className="flex gap-2.5 items-start">
@@ -569,7 +708,7 @@ export default function ChatNegotiationCenter() {
                     type="button"
                     onClick={() => setShowChecklistPopover(p => !p)}
                     className="relative bg-white border border-gray-200 hover:border-gray-300 p-1.5 rounded-lg flex items-center justify-center text-gray-600 cursor-pointer active:scale-95 transition-all"
-                    title="View Deal Checklist"
+                    title="View Receipt Checklist"
                   >
                     <ClipboardList className="w-4 h-4 text-gray-500" />
                     {pendingCount > 0 && (
@@ -583,7 +722,7 @@ export default function ChatNegotiationCenter() {
                     <div className="absolute right-0 mt-2.5 w-80 bg-white shadow-2xl rounded-xl border border-gray-200 z-50 overflow-hidden">
                       <div className="p-3 bg-[#111c30] flex items-center justify-between text-white">
                         <h5 className="font-extrabold flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-mono">
-                          <ClipboardList className="w-3.5 h-3.5" /> Deal Checklist
+                          <ClipboardList className="w-3.5 h-3.5" /> Receipt Checklist
                         </h5>
                         <button onClick={() => setShowChecklistPopover(false)} className="text-white hover:text-red-400 cursor-pointer">
                           <X className="w-4 h-4" />
@@ -591,40 +730,40 @@ export default function ChatNegotiationCenter() {
                       </div>
 
                       {/* Cargo summary if available */}
-                      {(hasPrice || hasCargo) && (
+                      {(hasValue || hasCargo) && (
                         <div className="px-4 pt-3 pb-2 bg-slate-50 border-b border-gray-100">
                           {hasCargo && (
-                            <p className="text-[10px] text-gray-600 font-semibold truncate">📦 {activeThread.cargoDescription}</p>
+                            <p className="text-[10px] text-gray-600 font-semibold truncate">📦 {receipt?.cargoDescription}</p>
                           )}
-                          {hasPrice && (
+                          {hasValue && (
                             <p className="text-[11px] font-black text-[#0058be] font-mono mt-0.5">
-                              ${activeThread.currentCounterPriceUSD!.toLocaleString()} USDC
+                              {formatMoney(receipt?.invoiceValue, receipt?.invoiceCurrency)}
                             </p>
                           )}
                         </div>
                       )}
 
                       <div className="p-4 space-y-3">
-                        {step(true,
-                          'Deal Initiated',
+                        {step(step1Done,
+                          'Receipt Started',
                           'Conversation opened between Trade Parties')}
-                        {step(hasPrice || hasCargo,
-                          'Terms Proposed',
-                          hasPrice || hasCargo
-                            ? `${(activeThread.currentCounterPriceUSD ?? 0).toLocaleString()} USDC · ${activeThread.cargoDescription ?? 'cargo described'}`
-                            : 'No counter offer submitted yet')}
-                        {step(isCounterOffer || isDealAgreed,
-                          'Counter Offer Active',
-                          isCounterOffer
-                            ? 'Awaiting counterparty acceptance'
-                            : isDealAgreed
-                              ? 'Terms were agreed'
-                              : 'Use NEGOTIATE to submit terms')}
-                        {step(isDealAgreed,
-                          'Escrow Secured',
-                          isDealAgreed
-                            ? `${(activeThread.currentCounterPriceUSD ?? 0).toLocaleString()} USDC locked in Stellar Vault`
-                            : 'Accept final terms to lock escrow')}
+                        {step(step2Done,
+                          'Cargo Described',
+                          step2Done
+                            ? `${receipt?.cargoDescription}`
+                            : 'Add a cargo description to continue')}
+                        {step(step3Done,
+                          'Route & Value Set',
+                          !step2Done
+                            ? 'Complete "Cargo Described" first'
+                            : step3Done
+                              ? `${receipt?.originCountry} → ${receipt?.destinationPort} · ${formatMoney(receipt?.invoiceValue, receipt?.invoiceCurrency)}`
+                              : 'Fill in route and invoice value in the Shipment Receipt panel')}
+                        {step(step4Done,
+                          'Receipt Finalized',
+                          step4Done
+                            ? 'Ready to prefill a new shipment record'
+                            : 'Finalize the receipt to unlock it on Create Shipment')}
 
                         <div className="pt-2 border-t border-gray-100">
                           <div className="flex justify-between items-center mb-1">
@@ -637,9 +776,9 @@ export default function ChatNegotiationCenter() {
                               style={{ width: `${pct}%` }}
                             />
                           </div>
-                          {isDealAgreed && (
+                          {isFinalized && (
                             <p className="text-center text-[9px] font-extrabold mt-2 text-green-600 uppercase font-mono tracking-wider">
-                              ✓ Deal Complete — Escrow Active
+                              ✓ Receipt Finalized — Ready for Shipment
                             </p>
                           )}
                         </div>
@@ -845,11 +984,13 @@ export default function ChatNegotiationCenter() {
                                     <CheckCircle2 className="w-2.5 h-2.5" /> Trusted Network
                                   </span>
                                 )}
-                                {isTradeOnly && t.status === 'COUNTER_OFFER' && (t as any).currentCounterPriceUSD != null && (
+                                {isTradeOnly && t.status === 'RECEIPT_DRAFT' && receipt?.invoiceValue != null && t.id === selectedThreadId && (
                                   <div className="mt-2 bg-[#0d1524] rounded-lg p-2 border border-[#1f2d47]">
                                     <div className="flex justify-between items-center text-[8px] font-extrabold text-[#818ea1] uppercase">
-                                      <span>Counter Offer</span>
-                                      <span className="text-[#a4ccff]">${(t as any).currentCounterPriceUSD?.toLocaleString()} USDC</span>
+                                      <span>Receipt Draft</span>
+                                      <span className="text-[#a4ccff]">
+                                        {formatMoney(receipt?.invoiceValue, receipt?.invoiceCurrency)}
+                                      </span>
                                     </div>
                                   </div>
                                 )}
@@ -888,10 +1029,10 @@ export default function ChatNegotiationCenter() {
                                 )}
                                 {isTradeOnly && (
                                   <span className={`px-1.5 py-0.5 text-[8px] font-extrabold rounded uppercase tracking-wide
-                                    ${t.status === 'DEAL_AGREED'   ? 'bg-green-50 text-green-700'
-                                    : t.status === 'COUNTER_OFFER' ? 'bg-amber-50 text-amber-700'
+                                    ${t.status === 'RECEIPT_FINALIZED'   ? 'bg-green-50 text-green-700'
+                                    : t.status === 'RECEIPT_DRAFT' ? 'bg-amber-50 text-amber-700'
                                     : 'bg-slate-100 text-slate-600'}`}>
-                                    {t.status === 'DEAL_AGREED' ? 'Deal Agreed' : t.status === 'COUNTER_OFFER' ? 'Counter' : 'Open'}
+                                    {t.status === 'RECEIPT_FINALIZED' ? 'Receipt Finalized' : t.status === 'RECEIPT_DRAFT' ? 'Receipt Draft' : 'Open'}
                                   </span>
                                 )}
                               </div>
@@ -1019,15 +1160,15 @@ export default function ChatNegotiationCenter() {
               )}
             </div>
 
-            {/* Negotiate button — Trade Party threads only */}
+            {/* Shipment Receipt button — Trade Party threads only */}
             {isTradePartyThread && activeThread && (
               <div className="p-3 bg-white border-t border-gray-200 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowNegotiationPanel(p => !p)}
+                  onClick={() => setShowReceiptPanel(p => !p)}
                   className="w-full bg-[#0058be] hover:bg-[#004395] text-white font-black py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 transition-all uppercase tracking-wider text-[10px] cursor-pointer active:scale-[0.98]"
                 >
-                  <Handshake className="w-4 h-4" /> NEGOTIATE
+                  <Receipt className="w-4 h-4" /> SHIPMENT RECEIPT
                 </button>
               </div>
             )}
@@ -1274,92 +1415,219 @@ export default function ChatNegotiationCenter() {
                   </div>
                 </div>
 
-                {/* Negotiation panel — Trade Party only */}
-                {showNegotiationPanel && isTradePartyThread && (
-                  <div className="w-72 border-l border-gray-200 bg-white flex flex-col h-full shrink-0 overflow-y-auto">
-                    <div className="p-4 border-b border-gray-150 bg-white flex items-center justify-between shrink-0">
+                {/* Shipment Receipt panel — Trade Party only */}
+                {showReceiptPanel && isTradePartyThread && (
+                  <div className="w-80 border-l border-gray-200 bg-white flex flex-col h-full shrink-0 overflow-y-auto">
+                    <div className="p-4 border-b border-gray-150 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
                       <h4 className="font-extrabold text-gray-900 flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-mono">
-                        <Coins className="w-4 h-4 text-[#0058be]" /> Escrow &amp; Offer
+                        <Receipt className="w-4 h-4 text-[#0058be]" /> Shipment Receipt
                       </h4>
-                      <button onClick={() => setShowNegotiationPanel(false)} className="text-gray-400 hover:text-gray-900 cursor-pointer">
+                      <button onClick={() => setShowReceiptPanel(false)} className="text-gray-400 hover:text-gray-900 cursor-pointer">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="p-4 space-y-4">
-                      <div className="bg-white border-2 border-gray-950 p-4 rounded-xl relative">
-                        <div className="flex justify-between items-center mb-1.5">
-                          <span className="text-[8.5px] text-[#76777d] font-mono font-black uppercase tracking-wider">Current Target Cost</span>
-                          <Lock className="w-3 h-3 text-gray-400" />
-                        </div>
-                        <h2 className="text-2xl font-black text-gray-950 font-mono leading-none mb-1">
-                          {activeThread.currentCounterPriceUSD != null ? `$${activeThread.currentCounterPriceUSD.toLocaleString()}` : '—'}{' '}
-                          <span className="text-[10px] font-extrabold text-gray-400">USDC</span>
-                        </h2>
-                        <div className="flex items-center gap-1 text-green-600">
-                          <CheckCircle className="w-3 h-3 text-green-500 fill-green-50" />
-                          <span className="text-[8.5px] font-bold uppercase tracking-wider font-mono">Synced on Stellar Chain</span>
-                        </div>
-                      </div>
 
-                      {activeThread.status === 'DEAL_AGREED' ? (
-                        <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl text-center space-y-1">
-                          <span className="block text-[10px] uppercase font-extrabold text-green-800 tracking-wider">✓ Secured In Escrow</span>
-                          <p className="text-[9.5px] text-green-600 leading-normal">
-                            ${activeThread.currentCounterPriceUSD?.toLocaleString() ?? '0'} USDC locked in Stellar Multi-Sign Vault.
+                    {(() => {
+                      const isFinalized = receipt?.status === 'FINALIZED';
+                      const r = receipt;
+                      const field = (key: keyof ShipmentReceipt, value: any) => updateReceiptField(key, value);
+                      const inputCls = `w-full border rounded-lg px-2.5 py-1.5 text-[11px] outline-none transition-colors
+                        ${isFinalized ? 'bg-slate-50 text-slate-500 border-slate-200 cursor-not-allowed' : 'bg-white border-gray-200 focus:border-[#0058be]'}`;
+
+                      return (
+                        <form onSubmit={handleUpdateReceipt} className="p-4 space-y-4">
+                          <p className="text-[10px] text-gray-400 leading-relaxed">
+                            A shared planner both of you can fill in while you chat. Once finalized, it
+                            shows up on the <strong>Create Shipment</strong> page and can prefill a new record.
                           </p>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleAcceptFinalTerms}
-                          className="w-full bg-[#00A651] hover:bg-green-700 text-white font-extrabold p-3 rounded-lg flex flex-col items-center gap-0.5 transition-all cursor-pointer"
-                        >
-                          <span className="text-[11px] font-black">ACCEPT &amp; SECURE ESCROW</span>
-                          <span className="text-[7.5px] opacity-80 uppercase font-mono tracking-widest">Stellar contract swap</span>
-                        </button>
-                      )}
 
-                      <div className="h-px bg-gray-100" />
+                          {isFinalized && (
+                            <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl text-center space-y-1">
+                              <span className="block text-[10px] uppercase font-extrabold text-green-800 tracking-wider flex items-center justify-center gap-1">
+                                <CheckCircle className="w-3.5 h-3.5" /> Receipt Finalized
+                              </span>
+                              <p className="text-[9.5px] text-green-600 leading-normal">
+                                Read-only — visible on the Create Shipment page for both parties.
+                              </p>
+                            </div>
+                          )}
 
-                      <form onSubmit={handleProposeCounter} className="space-y-3.5 text-left">
-                        <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono">Propose Counter_Offer</h5>
-                        <div className="space-y-2.5">
-                          <div>
-                            <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Target Value USD</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-[11px] font-mono">$</span>
-                              <input
-                                type="number"
-                                className="w-full bg-white border border-gray-200 rounded-xl py-2 pl-6 pr-3 text-[11px] font-mono font-bold focus:border-gray-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                value={proposedPrice}
-                                onChange={e => setProposedPrice(e.target.value)}
-                                min="0"
-                                step="any"
-                                onKeyDown={e => e.key === 'Enter' && e.preventDefault()}
-                              />
+                          {receiptError && (
+                            <p className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+                              {receiptError}
+                            </p>
+                          )}
+
+                          {/* Cargo */}
+                          <div className="space-y-2.5">
+                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                              <Package className="w-3 h-3" /> Cargo
+                            </h5>
+                            <div>
+                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Cargo Description</label>
+                              <textarea rows={2} disabled={isFinalized} className={inputCls + ' resize-none'}
+                                placeholder="e.g. 40ft container of high-precision automobile spares"
+                                value={r?.cargoDescription || ''} onChange={e => field('cargoDescription', e.target.value)} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Scope</label>
+                                <select disabled={isFinalized} className={inputCls} value={r?.shipmentScope || ''}
+                                  onChange={e => field('shipmentScope', e.target.value as ShipmentScope)}>
+                                  <option value="">—</option>
+                                  <option value="OVERSEAS">Overseas</option>
+                                  <option value="NATIONWIDE">Nationwide</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">ETA</label>
+                                <input type="date" disabled={isFinalized} className={inputCls}
+                                  value={r?.estimatedArrival ? r.estimatedArrival.substring(0, 10) : ''}
+                                  onChange={e => field('estimatedArrival', e.target.value)} />
+                              </div>
                             </div>
                           </div>
-                          <div>
-                            <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Negotiation Message</label>
-                            <textarea
-                              rows={3}
-                              className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-[11px] text-gray-800 placeholder-gray-400 focus:border-gray-400 focus:outline-none resize-y min-h-[64px]"
-                              placeholder="e.g. Can we settle on intermediate port clearance standard terms..."
-                              value={proposedDesc}
-                              onChange={e => setProposedDesc(e.target.value)}
-                            />
+
+                          {/* Parties */}
+                          <div className="space-y-2.5">
+                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                              <Building2 className="w-3 h-3" /> Parties
+                            </h5>
+                            <div>
+                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Importer Contact</label>
+                              <input type="text" disabled={isFinalized} className={inputCls} placeholder="e.g. Binondo Metals Importing Inc."
+                                value={r?.importerContact || ''} onChange={e => field('importerContact', e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Exporter Contact</label>
+                              <input type="text" disabled={isFinalized} className={inputCls} placeholder="e.g. Osaka Trading Ltd."
+                                value={r?.exporterContact || ''} onChange={e => field('exporterContact', e.target.value)} />
+                            </div>
                           </div>
-                        </div>
-                        <button
-                          type="submit"
-                          disabled={proposingCounter}
-                          className="w-full bg-[#111c30] hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg text-[10px] transition-all cursor-pointer flex items-center justify-center gap-1 uppercase tracking-wider disabled:opacity-60"
-                        >
-                          {proposingCounter ? 'Syncing...' : 'TRANSMIT COUNTER'}
-                          <RefreshCw className={`w-3 h-3 ${proposingCounter ? 'animate-spin' : ''}`} />
-                        </button>
-                      </form>
-                    </div>
+
+                          {/* Route */}
+                          <div className="space-y-2.5">
+                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                              <Globe className="w-3 h-3" /> Route
+                            </h5>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <div className="w-1.5 h-1.5 rounded-full bg-maritime-400 shrink-0" />
+                              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Origin</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input type="text" disabled={isFinalized} className={inputCls} placeholder="Country"
+                                value={r?.originCountry || ''} onChange={e => field('originCountry', e.target.value)} />
+                              <input type="text" disabled={isFinalized} className={inputCls} placeholder="Port"
+                                value={r?.originPort || ''} onChange={e => field('originPort', e.target.value)} />
+                            </div>
+                            <input type="text" disabled={isFinalized} className={inputCls} placeholder="Origin address"
+                              value={r?.originAddress || ''} onChange={e => field('originAddress', e.target.value)} />
+
+                            <div className="flex items-center gap-1.5 mb-1 mt-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-ocean-400 shrink-0" />
+                              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Destination</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input type="text" disabled={isFinalized} className={inputCls} placeholder="Country"
+                                value={r?.destCountry || ''} onChange={e => field('destCountry', e.target.value)} />
+                              <input type="text" disabled={isFinalized} className={inputCls} placeholder="Port"
+                                value={r?.destinationPort || ''} onChange={e => field('destinationPort', e.target.value)} />
+                            </div>
+                            <input type="text" disabled={isFinalized} className={inputCls} placeholder="Destination address"
+                              value={r?.destAddress || ''} onChange={e => field('destAddress', e.target.value)} />
+                          </div>
+
+                          {/* Commercial value */}
+                          <div className="space-y-2.5">
+                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                              <Coins className="w-3 h-3" /> Commercial Value
+                            </h5>
+                            <div>
+                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Invoice Value</label>
+                              <div className="flex gap-1.5">
+                                <select disabled={isFinalized} className={inputCls + ' shrink-0 w-20'} value={r?.invoiceCurrency || 'USD'}
+                                  onChange={e => field('invoiceCurrency', e.target.value as Currency)}>
+                                  {SUPPORTED_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                                </select>
+                                <input type="text" inputMode="decimal" disabled={isFinalized} className={inputCls} placeholder="0.00"
+                                  value={r?.invoiceValue ?? ''} onChange={e => field('invoiceValue', sanitizePriceInput(e.target.value))} />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">HS Code</label>
+                              <input type="text" disabled={isFinalized} className={inputCls} placeholder="e.g. 8517.12"
+                                value={r?.hsCode || ''} onChange={e => field('hsCode', e.target.value)} />
+                            </div>
+                          </div>
+
+                          {/* Physical specifications */}
+                          <div className="space-y-2.5">
+                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                              <Weight className="w-3 h-3" /> Physical Specs
+                            </h5>
+                            <button type="button" disabled={isFinalized}
+                              onClick={() => field('isDangerousGoods', !r?.isDangerousGoods)}
+                              className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all
+                                ${isFinalized ? 'cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'}
+                                ${r?.isDangerousGoods ? 'border-coral-400 bg-coral-50' : 'border-gray-200'}`}>
+                              <span className="text-[10px] font-bold text-gray-700 flex items-center gap-1.5">
+                                <AlertTriangle className={`w-3.5 h-3.5 ${r?.isDangerousGoods ? 'text-coral-400' : 'text-gray-300'}`} /> Dangerous Goods
+                              </span>
+                              {r?.isDangerousGoods ? <ToggleRight className="w-4 h-4 text-coral-400" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
+                            </button>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Packages</label>
+                                <input type="text" inputMode="numeric" disabled={isFinalized} className={inputCls} placeholder="0"
+                                  value={r?.packageCount ?? ''} onChange={e => field('packageCount', e.target.value.replace(/\D/g, ''))} />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Type</label>
+                                <input type="text" disabled={isFinalized} className={inputCls} placeholder="Cartons"
+                                  value={r?.packagingType || ''} onChange={e => field('packagingType', e.target.value)} />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Gross Weight</label>
+                                <input type="text" inputMode="decimal" disabled={isFinalized} className={inputCls} placeholder="0"
+                                  value={r?.grossWeight ?? ''} onChange={e => field('grossWeight', sanitizePriceInput(e.target.value))} />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Unit</label>
+                                <select disabled={isFinalized} className={inputCls} value={r?.weightUnit || 'KG'}
+                                  onChange={e => field('weightUnit', e.target.value as 'KG' | 'LBS')}>
+                                  <option value="KG">KG</option>
+                                  <option value="LBS">LBS</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          {!isFinalized && (
+                            <div className="space-y-2 pt-1">
+                              <button
+                                type="submit"
+                                disabled={savingReceipt}
+                                className="w-full bg-[#111c30] hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg text-[10px] transition-all cursor-pointer flex items-center justify-center gap-1 uppercase tracking-wider disabled:opacity-60"
+                              >
+                                {savingReceipt ? 'Saving...' : 'SAVE RECEIPT'}
+                                <RefreshCw className={`w-3 h-3 ${savingReceipt ? 'animate-spin' : ''}`} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleFinalizeReceipt}
+                                disabled={finalizingReceipt || !receipt}
+                                className="w-full bg-[#00A651] hover:bg-green-700 text-white font-extrabold py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                <span className="text-[11px] font-black">{finalizingReceipt ? 'FINALIZING...' : 'FINALIZE RECEIPT'}</span>
+                              </button>
+                            </div>
+                          )}
+                        </form>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
