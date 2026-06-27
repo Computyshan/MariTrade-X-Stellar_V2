@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const members = users.filter(
       u =>
         u.id !== requesterId &&
-        u.kycStatus === 'VERIFIED' &&
+        (u.kycStatus === 'VERIFIED' || u.kycStatus === 'SUBMITTED') &&
         (search === '' ||
           u.fullName.toLowerCase().includes(search) ||
           (u.companyName || '').toLowerCase().includes(search) ||

@@ -679,13 +679,15 @@ export const dbStore = {
   // ── B2B Vendor Network (Connection Requests) ──────────────────────────────
 
   getConnectionRequests: async (): Promise<ConnectionRequest[]> => {
-    const { data, error } = await supabase.from('connection_requests').select('*');
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.from('connection_requests').select('*');
     assertNoError(error, 'getConnectionRequests');
     return (data ?? []).map(rowToConnection);
   },
 
   getConnectionRequestById: async (id: string): Promise<ConnectionRequest | undefined> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('connection_requests')
       .select('*')
       .eq('id', id)
@@ -696,7 +698,8 @@ export const dbStore = {
 
   /** All requests where userId is either requester or receiver */
   getConnectionRequestsForUser: async (userId: string): Promise<ConnectionRequest[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('connection_requests')
       .select('*')
       .or(`requester_id.eq.${userId},receiver_id.eq.${userId}`);

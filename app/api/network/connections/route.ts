@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAuth } from '@/lib/auth-guard';
 import { ConnectionRequest } from '@/types';
 
@@ -66,9 +67,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    if (receiver.kycStatus !== 'VERIFIED') {
+    if (receiver.kycStatus !== 'VERIFIED' && receiver.kycStatus !== 'SUBMITTED') {
       return NextResponse.json(
-        { success: false, error: 'Receiver must be a KYC-verified member' },
+        { success: false, error: 'Receiver must have completed KYC onboarding' },
         { status: 400 }
       );
     }
@@ -80,11 +81,18 @@ export async function POST(req: NextRequest) {
         (c.requesterId === receiverId && c.receiverId === requesterId)
     );
 
-    if (existing && (existing.status === 'PENDING' || existing.status === 'ACCEPTED')) {
-      return NextResponse.json(
-        { success: false, error: 'A connection request already exists between these users' },
-        { status: 409 }
-      );
+    if (existing) {
+      if (existing.status === 'PENDING' || existing.status === 'ACCEPTED') {
+        return NextResponse.json(
+          { success: false, error: 'A connection request already exists between these users' },
+          { status: 409 }
+        );
+      }
+      // REJECTED — delete the old row so a fresh request can be created
+      if (existing.status === 'REJECTED') {
+        const admin = getSupabaseAdmin();
+        await admin.from('connection_requests').delete().eq('id', existing.id);
+      }
     }
 
     const newConn: ConnectionRequest = {
@@ -97,6 +105,23 @@ export async function POST(req: NextRequest) {
     };
 
     await dbStore.saveConnectionRequest(newConn);
+
+    // Fire a notification to the receiver so it shows up in their bell + Pending tab
+    try {
+      await dbStore.saveNotification({
+        id: 'notif_' + Math.random().toString(36).substring(2, 10),
+        userId: receiverId,
+        type: 'CONNECTION_REQUEST',
+        title: 'New connection request',
+        body: `${requester.fullName}${requester.companyName ? ' (' + requester.companyName + ')' : ''} wants to connect with you on MariNet.`,
+        linkHref: '/network',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (_) {
+      // Non-fatal — connection was saved, notification failure shouldn't block the response
+    }
+
     return NextResponse.json({ success: true, data: newConn }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

@@ -11,6 +11,7 @@ import {
   Clock,
   UserPlus,
   UserCheck,
+  UserMinus,
   XCircle,
   Shield,
   Building2,
@@ -87,21 +88,6 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function ConnectionBadge({ status }: { status: ConnectionStatus }) {
-  if (!status) return null;
-  const cfg = {
-    ACCEPTED: { label: 'Connected', icon: <CheckCircle2 className="w-3.5 h-3.5" />, className: 'text-ocean-600 bg-ocean-50 border-ocean-100' },
-    PENDING:  { label: 'Pending',   icon: <Clock className="w-3.5 h-3.5" />,        className: 'text-amber-600 bg-amber-50 border-amber-100' },
-    REJECTED: { label: 'Declined',  icon: <XCircle className="w-3.5 h-3.5" />,      className: 'text-coral-600 bg-coral-50 border-coral-100' },
-  }[status];
-  if (!cfg) return null;
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${cfg.className}`}>
-      {cfg.icon} {cfg.label}
-    </span>
-  );
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function NetworkPage() {
@@ -109,6 +95,7 @@ export default function NetworkPage() {
   const [activeTab, setActiveTab] = useState<Tab>('directory');
   const [search, setSearch] = useState('');
   const [members, setMembers] = useState<MemberEntry[]>([]);
+  const [totalMemberCount, setTotalMemberCount] = useState(0);
   const [connections, setConnections] = useState<ConnectionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -125,7 +112,11 @@ export default function NetworkPage() {
       `/api/network/directory?requesterId=${currentUser.id}&search=${encodeURIComponent(search)}`
     );
     const json = await res.json();
-    if (json.success) setMembers(json.data);
+    if (json.success) {
+      setMembers(json.data);
+      // Only update the total count when no search filter is active
+      if (search === '') setTotalMemberCount(json.data.length);
+    }
   }, [currentUser?.id, search]);
 
   const fetchConnections = useCallback(async () => {
@@ -142,15 +133,27 @@ export default function NetworkPage() {
     setLoading(false);
   }, [fetchDirectory, fetchConnections, currentUser?.id]);
 
+  // Initial load — run once when user is ready
   useEffect(() => { if (currentUser?.id) refresh(); }, [currentUser?.id]);
 
+  // Search debounce — skip on mount (refresh already ran), only fire on search changes
+  const isMounted = React.useRef(false);
   useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
     const t = setTimeout(fetchDirectory, 350);
     return () => clearTimeout(t);
-  }, [search, fetchDirectory]);
+  }, [search]);
 
   const sendRequest = async (receiverId: string) => {
     if (!currentUser?.id) return;
+    // Immediately mark as pending in local state to block re-clicks
+    setMembers(prev =>
+      prev.map(m =>
+        m.id === receiverId
+          ? { ...m, connectionStatus: 'PENDING' as const, connectionId: 'optimistic', isSender: true }
+          : m
+      )
+    );
     setActionLoading(receiverId);
     try {
       const res = await authFetch('/api/network/connections', {
@@ -163,6 +166,14 @@ export default function NetworkPage() {
         showToast('success', 'Connection request sent!');
         await refresh();
       } else {
+        // Revert optimistic update on failure
+        setMembers(prev =>
+          prev.map(m =>
+            m.id === receiverId
+              ? { ...m, connectionStatus: null, connectionId: null, isSender: false }
+              : m
+          )
+        );
         showToast('error', json.error || 'Failed to send request.');
       }
     } finally {
@@ -185,6 +196,38 @@ export default function NetworkPage() {
         await refresh();
       } else {
         showToast('error', json.error || 'Action failed.');
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const removeConnection = async (connId: string, memberId: string, mode: 'cancel' | 'remove') => {
+    if (!currentUser?.id || !connId) return;
+    // Optimistically clear local state immediately
+    if (memberId) {
+      setMembers(prev =>
+        prev.map(m =>
+          m.id === memberId
+            ? { ...m, connectionStatus: null, connectionId: null, isSender: false }
+            : m
+        )
+      );
+    }
+    setActionLoading(connId);
+    try {
+      const res = await authFetch(`/api/network/connections/${connId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorId: currentUser.id }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast('success', mode === 'cancel' ? 'Request cancelled.' : 'Removed from your MariNet.');
+        await refresh();
+      } else {
+        showToast('error', json.error || 'Action failed.');
+        await refresh(); // re-sync on failure
       }
     } finally {
       setActionLoading(null);
@@ -244,9 +287,9 @@ export default function NetworkPage() {
       {/* Summary Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Connections',   value: trustedNetwork.length,                          color: 'text-ocean-600',    bg: 'bg-ocean-50 border-ocean-100' },
-          { label: 'Pending',       value: pendingSent.length + pendingReceived.length,     color: 'text-amber-600',    bg: 'bg-amber-50 border-amber-100' },
-          { label: 'Members Found', value: members.length,                                 color: 'text-maritime-600', bg: 'bg-maritime-50 border-maritime-100' },
+          { label: 'Connections',   value: trustedNetwork.length,    color: 'text-ocean-600',    bg: 'bg-ocean-50 border-ocean-100' },
+          { label: 'Pending',       value: pendingSent.length + pendingReceived.length, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100' },
+          { label: 'Total Members', value: totalMemberCount,          color: 'text-maritime-600', bg: 'bg-maritime-50 border-maritime-100' },
         ].map(stat => (
           <div key={stat.label} className={`border rounded-xl p-4 ${stat.bg}`}>
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{stat.label}</p>
@@ -341,7 +384,6 @@ export default function NetworkPage() {
                     </div>
 
                     <div className="mt-auto pt-3 border-t border-sand-100 flex items-center justify-between gap-3">
-                      <ConnectionBadge status={connStatus} />
                       {isSelf && (
                         <span className="text-[10px] text-gray-400 font-bold">You</span>
                       )}
@@ -355,14 +397,47 @@ export default function NetworkPage() {
                           Connect
                         </button>
                       )}
-                      {connStatus === 'ACCEPTED' && (
-                        <span className="text-[10px] text-ocean-500 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> In your MariNet
-                        </span>
+                      {connStatus === 'REJECTED' && !isSelf && (
+                        <button
+                          onClick={() => sendRequest(member.id)}
+                          disabled={isLoadingThis}
+                          className="flex items-center gap-1.5 bg-maritime-400 hover:bg-maritime-900 text-white text-[11px] font-black px-3 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                        >
+                          {isLoadingThis ? <RefreshCw className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                          Connect
+                        </button>
+                      )}
+                      {connStatus === 'ACCEPTED' && !isSelf && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-ocean-500 font-bold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> In your MariNet
+                          </span>
+                          <button
+                            onClick={() => removeConnection(member.connectionId!, member.id, 'remove')}
+                            disabled={actionLoading === member.connectionId}
+                            className="flex items-center gap-1 border border-sand-200 hover:bg-coral-50 hover:border-coral-200 text-gray-400 hover:text-coral-600 text-[10px] font-bold px-2 py-1 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                          >
+                            <UserMinus className="w-3 h-3" /> Remove
+                          </button>
+                        </div>
                       )}
                       {connStatus === 'PENDING' && member.isSender && (
-                        <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" /> Awaiting response
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> Awaiting response
+                          </span>
+                          <button
+                            onClick={() => removeConnection(member.connectionId!, member.id, 'cancel')}
+                            disabled={actionLoading === member.connectionId}
+                            className="flex items-center gap-1 border border-sand-200 hover:bg-coral-50 hover:border-coral-200 text-gray-400 hover:text-coral-600 text-[10px] font-bold px-2 py-1 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                          >
+                            <X className="w-3 h-3" /> Cancel
+                          </button>
+                        </div>
+                      )}
+                      {connStatus === 'PENDING' && !member.isSender && !isSelf && (
+                        <span className="text-[10px] text-maritime-600 font-bold flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" /> Wants to connect
                         </span>
                       )}
                     </div>
@@ -436,9 +511,19 @@ export default function NetworkPage() {
                       <p className="text-xs font-black text-maritime-900">{conn.otherParty?.fullName}</p>
                       <p className="text-[10px] text-gray-500">{conn.otherParty?.companyName} · {JOB_ROLE_LABELS[conn.otherParty?.jobRole as JobRole] ?? ''}</p>
                     </div>
-                    <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1 flex-shrink-0">
-                      <Clock className="w-3.5 h-3.5" /> Pending
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" /> Pending
+                      </span>
+                      <button
+                        onClick={() => removeConnection(conn.id, conn.otherParty?.id ?? '', 'cancel')}
+                        disabled={actionLoading === conn.id}
+                        className="flex items-center gap-1 border border-amber-200 hover:bg-coral-50 hover:border-coral-200 text-amber-600 hover:text-coral-600 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                      >
+                        {actionLoading === conn.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -479,8 +564,18 @@ export default function NetworkPage() {
                 if (!member) return null;
                 return (
                   <div key={conn.id} className="bg-white border border-ocean-200 rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
-                    <div className="flex items-center gap-1.5 text-[10px] font-black text-ocean-600 uppercase tracking-wider">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> MariNet Member
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black text-ocean-600 uppercase tracking-wider">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> MariNet Member
+                      </div>
+                      <button
+                        onClick={() => removeConnection(conn.id, member.id, 'remove')}
+                        disabled={actionLoading === conn.id}
+                        className="flex items-center gap-1 border border-sand-200 hover:bg-coral-50 hover:border-coral-200 text-gray-400 hover:text-coral-600 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                      >
+                        {actionLoading === conn.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />}
+                        Remove
+                      </button>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="w-11 h-11 rounded-xl bg-maritime-900 text-white flex items-center justify-center font-black text-sm flex-shrink-0">
