@@ -93,9 +93,6 @@ export async function connectFreighter(): Promise<string> {
   }
 
   try {
-    // Prefer getAddress() — it reliably returns { address } in all modern Freighter versions.
-    // Fall back to requestAccess() only if getAddress is unavailable (Freighter v2).
-    // getPublicKey() is the legacy v1 API that returns a plain string.
     if (api.getAddress)    return pickAddress(await api.getAddress());
     if (api.requestAccess) return pickAddress(await api.requestAccess());
     return await api.getPublicKey!();
@@ -135,9 +132,25 @@ export async function signXdrWithFreighter(
 }
 
 /**
+ * Thrown specifically when Stellar rejects a transaction for a stale/incorrect
+ * sequence number (txBadSeq). This is recoverable by rebuilding the transaction
+ * with a fresh simulation (which re-fetches the account's current sequence)
+ * and resubmitting — see `signAndSubmitWithRetry` below.
+ */
+export class BadSequenceError extends Error {}
+
+function isBadSeqResult(detail: any): boolean {
+  return detail?.result?._switch?.name === 'txBadSeq';
+}
+
+/**
  * Submit a signed XDR envelope to the Stellar RPC and poll for confirmation.
  * Resolves with the transaction hash on SUCCESS.
- * Rejects on ERROR / FAILED / 30-second timeout.
+ * Rejects on ERROR / FAILED / 60-second timeout.
+ *
+ * Soroban contract invocations can take longer than classic Stellar txs —
+ * NOT_FOUND and PENDING both mean "still processing", so we keep polling.
+ * We use a 2 s cadence for 60 polls = up to 2 minutes total.
  */
 export async function submitTransaction(
   signedXdr: string,
@@ -145,28 +158,41 @@ export async function submitTransaction(
 ): Promise<string> {
   const network = NETWORKS[networkName];
   const server  = new Server(network.rpcUrl);
-  const tx      = TransactionBuilder.fromXDR(signedXdr, network.passphrase);
+  const tx      = TransactionBuilder.fromXDR(signedXdr, network.networkPassphrase);
 
   const sendResult = await server.sendTransaction(tx);
 
   if (sendResult.status === 'ERROR') {
+    const detail = (sendResult as any).errorResult ?? (sendResult as any).error ?? 'unknown';
+    if (isBadSeqResult(detail)) {
+      throw new BadSequenceError(
+        `Transaction rejected by Stellar (stale sequence number): ${JSON.stringify(detail)}`,
+      );
+    }
     throw new Error(
-      `Transaction rejected by Stellar: ${JSON.stringify(sendResult.errorResult ?? 'unknown')}`,
+      `Transaction rejected by Stellar: ${JSON.stringify(detail)}`,
     );
   }
 
   const { hash } = sendResult;
 
-  // Poll up to 30 s (1 s cadence)
-  for (let i = 0; i < 30; i++) {
-    await new Promise(r => setTimeout(r, 1000));
+  // Poll up to 2 min (2 s cadence × 60 polls).
+  // NOT_FOUND = tx not yet ingested; PENDING = ingested but not yet applied.
+  // Both are transient — keep polling until SUCCESS, FAILED, or timeout.
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000));
     const check = await server.getTransaction(hash);
     if (check.status === 'SUCCESS') return hash;
-    if (check.status === 'FAILED')  throw new Error(`Transaction failed on-chain. Hash: ${hash}`);
-    // NOT_FOUND → still pending, keep polling
+    if (check.status === 'FAILED') {
+      const resultXdr = (check as any).resultXdr ?? (check as any).resultMetaXdr ?? '';
+      throw new Error(`Transaction failed on-chain. Hash: ${hash}${resultXdr ? ` · Result: ${resultXdr}` : ''}`);
+    }
+    // NOT_FOUND or PENDING — keep waiting
   }
 
-  throw new Error(`Transaction timed out waiting for confirmation. Hash: ${hash}`);
+  throw new Error(
+    `Transaction timed out after 2 minutes. It may still confirm — check: https://stellar.expert/explorer/${networkName}/tx/${hash}`,
+  );
 }
 
 /**
@@ -177,6 +203,47 @@ export async function signAndSubmit(
   xdr: string,
   networkName: NetworkName,
 ): Promise<string> {
-  const signed = await signXdrWithFreighter(xdr, NETWORKS[networkName].passphrase);
+  const signed = await signXdrWithFreighter(xdr, NETWORKS[networkName].networkPassphrase);
   return submitTransaction(signed, networkName);
+}
+
+/**
+ * Build (or rebuild), sign, and submit a Soroban contract call — automatically
+ * retrying with a freshly-simulated transaction if Stellar rejects it for a
+ * stale sequence number (txBadSeq).
+ *
+ * Why this is needed: each contract method call (e.g. `client.create_escrow(...)`)
+ * builds a transaction using the account's sequence number *at build time*. If
+ * the RPC node's view of the account hasn't caught up yet — which can happen
+ * right after a previous transaction in the same flow was just confirmed — the
+ * pre-built sequence number is stale by the time Freighter signs and submits it,
+ * and Stellar rejects it with txBadSeq. Reusing the same XDR can't fix this;
+ * the only fix is to re-simulate against the account's current sequence and
+ * resubmit, which is what `buildTx` lets us do on each retry.
+ *
+ * @param buildTx      A function that builds (or rebuilds) the AssembledTransaction,
+ *                     e.g. `() => client.fund({ reference_code, importer })`.
+ * @param networkName  "testnet" or "mainnet"
+ * @param maxRetries   How many times to rebuild + resubmit on txBadSeq (default 2)
+ */
+export async function signAndSubmitWithRetry(
+  buildTx: () => Promise<{ toXDR(): string }>,
+  networkName: NetworkName,
+  maxRetries = 4,
+): Promise<string> {
+  let attempt = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const tx = await buildTx();
+    try {
+      return await signAndSubmit(tx.toXDR(), networkName);
+    } catch (err) {
+      if (!(err instanceof BadSequenceError) || attempt >= maxRetries) throw err;
+      attempt++;
+      // Backoff grows each retry (2s, 3.5s, 5s, 6.5s…) to give the RPC
+      // node's account view time to catch up to the ledger that just closed.
+      // Rebuilding from scratch re-simulates and fetches a current sequence.
+      await new Promise(r => setTimeout(r, 2000 + (attempt - 1) * 1500));
+    }
+  }
 }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Keypair, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
 import { Server as SorobanServer } from '@stellar/stellar-sdk/rpc';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
+import { notifyUser, notifyUsers } from '@/lib/notify';
 import { MilestoneEvent, ShipmentDocument, ShipmentStatus } from '@/types';
 import { getMariTradeEscrowClient, CancellationStage } from '@/lib/stellar/escrow-contract';
 
@@ -44,16 +46,16 @@ async function platformSignAndSubmit(xdr: string): Promise<string | null> {
 
     const { hash } = sendResult;
 
-    // Poll for confirmation (up to 30 s)
-    for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 1000));
+    // Poll for confirmation (up to 2 min, 2 s cadence)
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 2000));
       const check = await server.getTransaction(hash);
       if (check.status === 'SUCCESS') return hash;
       if (check.status === 'FAILED') {
         console.error(`[Stellar] Transaction FAILED on-chain. Hash: ${hash}`);
         return null;
       }
-      // NOT_FOUND → still pending
+      // NOT_FOUND or PENDING → keep waiting
     }
 
     console.error(`[Stellar] Transaction timed out. Hash: ${hash}`);
@@ -69,6 +71,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const { id } = await params;
     const shipment = await dbStore.getShipmentById(id);
@@ -102,6 +107,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const { id } = await params;
     const shipment = await dbStore.getShipmentById(id);
@@ -176,24 +184,26 @@ export async function POST(
         if (type === 'VESSEL_DEPARTED_ORIGIN') {
           // PRE_DEPARTURE → IN_TRANSIT
           try {
-            stageXdr = await client.advanceStage({
-              referenceCode: shipment.referenceCode,
-              platform:      PLATFORM_ADDRESS,
-              newStage:      CancellationStage.InTransit,
+            const tx = await client.advance_stage({
+              reference_code: shipment.referenceCode,
+              platform:       PLATFORM_ADDRESS,
+              new_stage:      CancellationStage.InTransit,
             });
+            stageXdr = tx.toXDR();
           } catch (err) {
-            console.error('[Stellar] advanceStage(InTransit) build failed:', err);
+            console.error('[Stellar] advance_stage(InTransit) build failed:', err);
           }
         } else if (type === 'DELIVERED_AND_SIGNED_OFF') {
           // IN_TRANSIT → DELIVERED
           try {
-            stageXdr = await client.advanceStage({
-              referenceCode: shipment.referenceCode,
-              platform:      PLATFORM_ADDRESS,
-              newStage:      CancellationStage.Delivered,
+            const tx = await client.advance_stage({
+              reference_code: shipment.referenceCode,
+              platform:       PLATFORM_ADDRESS,
+              new_stage:      CancellationStage.Delivered,
             });
+            stageXdr = tx.toXDR();
           } catch (err) {
-            console.error('[Stellar] advanceStage(Delivered) build failed:', err);
+            console.error('[Stellar] advance_stage(Delivered) build failed:', err);
           }
         }
 
@@ -297,6 +307,39 @@ export async function POST(
         updatedAt:    new Date().toISOString(),
       };
       await dbStore.saveShipment(updatedShipment);
+
+      // Notify everyone on this shipment that escrow is now funded on-chain.
+      // This fires only here, the moment the real Stellar fund() tx is
+      // confirmed, not at initial DB-record creation (which is optimistic).
+      if ((escrowStatus ?? 'FUNDED') === 'FUNDED') {
+        const assignments = await dbStore.getAssignmentsForShipment(shipment.id);
+        const shipmentLink = `/shipments/${shipment.id}`;
+
+        await notifyUser({
+          userId:   shipment.importerId,
+          type:     'ESCROW_FUNDED',
+          title:    'Escrow funded on Stellar',
+          body:     `Your deposit for shipment ${shipment.referenceCode} is now locked in the Soroban escrow contract.`,
+          linkHref: shipmentLink,
+        });
+
+        if (shipment.exporterId) {
+          await notifyUser({
+            userId:   shipment.exporterId,
+            type:     'ESCROW_FUNDED',
+            title:    'Escrow funded - shipment ready',
+            body:     `Escrow for shipment ${shipment.referenceCode} has been funded. Funds are locked on Stellar until release conditions are met.`,
+            linkHref: shipmentLink,
+          });
+        }
+
+        await notifyUsers(assignments.map(a => a.userId), {
+          type:     'ESCROW_FUNDED',
+          title:    'Shipment escrow funded',
+          body:     `Escrow for shipment ${shipment.referenceCode} is funded. You can begin logging milestone events.`,
+          linkHref: shipmentLink,
+        });
+      }
 
       return NextResponse.json({ success: true, data: updatedShipment });
     }

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession } from '@/hooks/use-user-session';
+import { authFetch } from '@/hooks/use-user-session';
 import { User } from '@/types';
 import { 
   User as UserIcon, 
@@ -48,7 +49,7 @@ function ProfileForm({ currentUser, setCurrentUser }: ProfileFormProps) {
     }
 
     try {
-      const res = await fetch('/api/auth/profile', {
+      const res = await authFetch('/api/auth/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -312,7 +313,17 @@ function ProfileForm({ currentUser, setCurrentUser }: ProfileFormProps) {
 }
 
 export default function ProfilePage() {
-  const { currentUser, setCurrentUser, allUsers } = useUserSession();
+  const { currentUser, setCurrentUser, allUsers, loading } = useUserSession();
+
+  if (loading || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

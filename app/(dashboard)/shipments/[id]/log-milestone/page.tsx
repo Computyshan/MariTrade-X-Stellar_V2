@@ -3,7 +3,7 @@
 import React, { useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useUserSession } from '@/hooks/use-user-session';
+import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import {
   ChevronLeft,
   Ship,
@@ -116,7 +116,7 @@ interface PageProps {
 export default function LogMilestonePage({ params }: PageProps) {
   const { id: shipmentId } = use(params);
   const router = useRouter();
-  const { currentUser } = useUserSession();
+  const { currentUser, loading } = useUserSession();
 
   const [selectedMilestone, setSelectedMilestone] = useState<MilestoneType | ''>('');
   const [description, setDescription]             = useState('');
@@ -125,6 +125,16 @@ export default function LogMilestonePage({ params }: PageProps) {
   const [submitting, setSubmitting]               = useState(false);
   const [success, setSuccess]                     = useState(false);
   const [error, setError]                         = useState('');
+
+  if (loading || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const role             = currentUser.jobRole;
   const meta             = ROLE_META[role];
@@ -152,7 +162,7 @@ export default function LogMilestonePage({ params }: PageProps) {
     setError('');
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/shipments/${shipmentId}/milestones`, {
+      const res = await authFetch(`/api/shipments/${shipmentId}/milestones`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -436,7 +446,7 @@ export default function LogMilestonePage({ params }: PageProps) {
             </div>
 
             <div className="border-t border-maritime-700 pt-4 text-[10px] text-maritime-400 leading-relaxed">
-              Milestones logged here are appended to the shipment's immutable event ledger.
+              Milestones logged here are appended to the shipment&apos;s immutable event ledger.
               Priority milestones gate the Stellar escrow release.
             </div>
           </div>

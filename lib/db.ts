@@ -53,7 +53,7 @@
  *   created_by_user_id ↔ createdByUserId
  */
 
-import { supabase, getSupabaseAdmin } from './supabase';
+import { getSupabaseAdmin } from './supabase';
 import {
   User,
   Shipment,
@@ -433,19 +433,22 @@ export const dbStore = {
   // ── Users ──────────────────────────────────────────────────────────────────
 
   getUsers: async (): Promise<User[]> => {
-    const { data, error } = await supabase.from('users').select('*').order('created_at');
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.from('users').select('*').order('created_at');
     assertNoError(error, 'getUsers');
     return (data ?? []).map(rowToUser);
   },
 
   getUserById: async (id: string): Promise<User | undefined> => {
-    const { data, error } = await supabase.from('users').select('*').eq('id', id).maybeSingle();
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.from('users').select('*').eq('id', id).maybeSingle();
     assertNoError(error, 'getUserById');
     return data ? rowToUser(data) : undefined;
   },
 
   getUserByEmail: async (email: string): Promise<User | undefined> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('users')
       .select('*')
       .ilike('email', email)
@@ -455,7 +458,8 @@ export const dbStore = {
   },
 
   saveUser: async (user: User): Promise<User> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('users')
       .upsert(userToRow(user), { onConflict: 'id' })
       .select()
@@ -467,14 +471,16 @@ export const dbStore = {
   // ── Shipments ─────────────────────────────────────────────────────────────
 
   getShipments: async (): Promise<Shipment[]> => {
-    const { data, error } = await supabase.from('shipments').select('*').order('created_at', { ascending: false });
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.from('shipments').select('*').order('created_at', { ascending: false });
     assertNoError(error, 'getShipments');
     return (data ?? []).map(rowToShipment);
   },
 
   getShipmentById: async (id: string): Promise<Shipment | undefined> => {
     // Accepts both the UUID id and the human-readable reference_code
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('shipments')
       .select('*')
       .or(`id.eq.${id},reference_code.eq.${id}`)
@@ -497,13 +503,15 @@ export const dbStore = {
   // ── Shipment Assignments ──────────────────────────────────────────────────
 
   getAssignments: async (): Promise<ShipmentAssignment[]> => {
-    const { data, error } = await supabase.from('shipment_assignments').select('*');
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.from('shipment_assignments').select('*');
     assertNoError(error, 'getAssignments');
     return (data ?? []).map(rowToAssignment);
   },
 
   getAssignmentsForShipment: async (shipmentId: string): Promise<ShipmentAssignment[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('shipment_assignments')
       .select('*')
       .eq('shipment_id', shipmentId);
@@ -512,7 +520,8 @@ export const dbStore = {
   },
 
   getAssignmentsForUser: async (userId: string): Promise<ShipmentAssignment[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('shipment_assignments')
       .select('*')
       .eq('user_id', userId);
@@ -534,7 +543,8 @@ export const dbStore = {
   // ── Priority Milestones ───────────────────────────────────────────────────
 
   getPriorityMilestones: async (shipmentId: string): Promise<PriorityMilestone[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('priority_milestones')
       .select('*')
       .eq('shipment_id', shipmentId);
@@ -556,7 +566,8 @@ export const dbStore = {
     type: string,
     isCompleted: boolean
   ): Promise<void> => {
-    const { error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
       .from('priority_milestones')
       .update({ is_completed: isCompleted })
       .eq('shipment_id', shipmentId)
@@ -567,7 +578,8 @@ export const dbStore = {
   // ── Milestone Events ──────────────────────────────────────────────────────
 
   getMilestones: async (shipmentId: string): Promise<MilestoneEvent[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('milestone_events')
       .select('*')
       .eq('shipment_id', shipmentId)
@@ -577,7 +589,8 @@ export const dbStore = {
   },
 
   getAllMilestones: async (): Promise<MilestoneEvent[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('milestone_events')
       .select('*')
       .order('occurred_at');
@@ -599,7 +612,8 @@ export const dbStore = {
   // ── Shipment Documents ────────────────────────────────────────────────────
 
   getDocuments: async (shipmentId?: string): Promise<ShipmentDocument[]> => {
-    let query = supabase.from('shipment_documents').select('*').order('created_at');
+    const admin = getSupabaseAdmin();
+    let query = admin.from('shipment_documents').select('*').order('created_at');
     if (shipmentId) {
       query = query.eq('shipment_id', shipmentId);
     }
@@ -609,15 +623,16 @@ export const dbStore = {
   },
 
   saveDocument: async (doc: ShipmentDocument): Promise<ShipmentDocument> => {
+    const admin = getSupabaseAdmin();
     // Mark older versions of the same file as not-latest before inserting
     if (doc.isLatest) {
-      await supabase
+      await admin
         .from('shipment_documents')
         .update({ is_latest: false })
         .eq('shipment_id', doc.shipmentId)
         .eq('file_name', doc.fileName);
     }
-    const { data, error } = await supabase
+    const { data, error } = await admin
       .from('shipment_documents')
       .insert(documentToRow(doc))
       .select()
@@ -790,7 +805,8 @@ export const dbStore = {
   // ── BOC Document Vault Folders ────────────────────────────────────────────
 
   getVaultFolders: async (): Promise<VaultFolder[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('vault_folders')
       .select('*')
       .order('created_at', { ascending: false });
@@ -799,7 +815,8 @@ export const dbStore = {
   },
 
   getVaultFolderByShipmentId: async (shipmentId: string): Promise<VaultFolder | undefined> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('vault_folders')
       .select('*')
       .eq('shipment_id', shipmentId)
@@ -852,7 +869,8 @@ export const dbStore = {
 
   /** IDs of vendors in the Importer's Trusted Network (status === ACCEPTED) */
   getTrustedVendorIds: async (importerId: string): Promise<string[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('connection_requests')
       .select('receiver_id')
       .eq('requester_id', importerId)

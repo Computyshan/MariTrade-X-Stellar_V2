@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
+import { notifyUser, notifyUsers } from '@/lib/notify';
 import { Shipment, PriorityMilestone, ShipmentAssignment, VaultFolder } from '@/types';
 
 export async function GET(req: NextRequest) {
@@ -98,6 +99,30 @@ export async function POST(req: NextRequest) {
         };
         await dbStore.saveAssignment(assignment);
       }
+    }
+
+    // ── Notify everyone newly attached to this shipment ────────────────────
+    // Best-effort: failures here are logged inside notify.ts and never block
+    // the response — the shipment is already saved by this point.
+    const shipmentLink = `/shipments/${newId}`;
+
+    if (newShipment.exporterId) {
+      await notifyUser({
+        userId:   newShipment.exporterId,
+        type:     'SHIPMENT_ASSIGNED',
+        title:    'Added as exporter on a new shipment',
+        body:     `You've been named exporter on shipment ${referenceCode} (${description}). Funds will route to your Stellar wallet on release.`,
+        linkHref: shipmentLink,
+      });
+    }
+
+    if (Array.isArray(selectedLogisticsUsers) && selectedLogisticsUsers.length > 0) {
+      await notifyUsers(selectedLogisticsUsers, {
+        type:     'SHIPMENT_ASSIGNED',
+        title:    'Assigned to a new shipment',
+        body:     `You've been assigned to shipment ${referenceCode} (${description}). You can now log milestone events for it.`,
+        linkHref: shipmentLink,
+      });
     }
 
     // Save Priority Milestones

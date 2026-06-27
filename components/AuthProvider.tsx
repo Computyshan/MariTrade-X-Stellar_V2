@@ -11,7 +11,7 @@ const PUBLIC_PATHS = ['/login', '/register', '/track', '/'];
 const AUTH_ONLY_PATHS = ['/onboarding']; // logged-in only, but not redirected to dashboard
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { currentUser, loading, init } = useUserSession();
+  const { currentUser, loading, init, refreshAllUsers } = useUserSession();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -20,6 +20,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const unsub = init();
     return unsub;
   }, []);
+
+  // Populate allUsers once the session is resolved
+  useEffect(() => {
+    if (currentUser) refreshAllUsers();
+  }, [currentUser?.id]);
 
   // Redirect logic after loading is resolved
   useEffect(() => {

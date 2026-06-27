@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 import { MilestoneEvent, MilestoneType, JobRole } from '@/types';
 
 // ─── Role permission map ───────────────────────────────────────────────────────
@@ -48,9 +49,12 @@ const ROLE_MILESTONES: Record<JobRole, MilestoneType[]> = {
 // ─── GET /api/shipments/[id]/milestones ───────────────────────────────────────
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   const { id } = await params;
   const milestones = await dbStore.getMilestones(id);
   return NextResponse.json({ success: true, data: milestones });
@@ -62,6 +66,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const { id: shipmentId } = await params;
     const body = await req.json();

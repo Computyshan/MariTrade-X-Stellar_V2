@@ -325,6 +325,7 @@ export type NotificationType =
   | 'MESSAGE_RECEIVED'       // New chat message
   | 'CONNECTION_REQUEST'     // Someone sent you a connection request
   | 'CONNECTION_ACCEPTED'    // Your connection request was accepted
+  | 'SHIPMENT_ASSIGNED'      // You were assigned/added as a party to a shipment
   | 'SHIPMENT_STATUS_CHANGE' // Shipment status changed;
 
 export interface AppNotification {

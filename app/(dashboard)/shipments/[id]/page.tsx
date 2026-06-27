@@ -5,7 +5,7 @@ import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useUserSession } from '@/hooks/use-user-session';
+import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import { useFreighter } from '@/hooks/use-freighter';
 import {
   Ship,
@@ -32,7 +32,7 @@ import {
 import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument } from '@/types';
 import { canAccessBOCDocuments } from '@/lib/permissions/documents';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
-import { signAndSubmit } from '@/lib/stellar/freighter';
+import { signAndSubmitWithRetry } from '@/lib/stellar/freighter';
 
 type PageParams = { id: string };
 
@@ -45,7 +45,7 @@ const STELLAR_NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') a
 export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const { currentUser } = useUserSession();
+  const { currentUser, loading: sessionLoading } = useUserSession();
   const freighter = useFreighter();
   const shipmentId = resolvedParams.id;
 
@@ -59,29 +59,31 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   } | null>(null);
 
   const [errorText, setErrorText] = useState('');
-
-  // Escrow release form
   const [releaseOpen,    setReleaseOpen]    = useState(false);
   const [releaseProofUrl, setReleaseProofUrl] = useState('');
-
-  // Stellar working state
   const [stellarWorking, setStellarWorking] = useState(false);
   const [stellarStep,    setStellarStep]    = useState('');
   const [stellarHash,    setStellarHash]    = useState('');
   const [stellarError,   setStellarError]   = useState('');
-
-  // On-chain canRelease gate (fetched lazily)
   const [chainCanRelease, setChainCanRelease] = useState<boolean | null>(null);
   const [checkingRelease, setCheckingRelease] = useState(false);
-
-  // BOC Vault auth gate
   const [bocAuthOpen, setBocAuthOpen] = useState(false);
+
+  if (sessionLoading || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const fetchDetails = async () => {
     try {
       setLoading(true);
       setErrorText('');
-      const res  = await fetch(`/api/shipments/${shipmentId}`);
+      const res  = await authFetch(`/api/shipments/${shipmentId}`);
       const json = await res.json();
       if (json.success && json.data) {
         setData(json.data);
@@ -106,7 +108,10 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   useEffect(() => {
     if (!data?.shipment || data.shipment.escrowStatus !== 'FUNDED') return;
     if (!data.shipment.referenceCode) return;
-    if (!data.shipment.stellarEscrowId) return; // not yet on-chain
+    // Only query the chain if the escrow ID is a real tx hash (64 hex chars),
+    // not the placeholder value set during DB record creation.
+    if (!data.shipment.stellarEscrowId) return;
+    if (data.shipment.stellarEscrowId.length !== 64) return;
 
     const walletKey = freighter.publicKey
       ?? process.env.NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS
@@ -115,8 +120,8 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
     setCheckingRelease(true);
     const client = getMariTradeEscrowClient(STELLAR_NETWORK, walletKey);
-    client.canRelease(data.shipment.referenceCode)
-      .then(setChainCanRelease)
+    client.can_release({ reference_code: data.shipment.referenceCode })
+      .then(tx => tx.result?.isOk() ? setChainCanRelease(tx.result.unwrap()) : setChainCanRelease(null))
       .catch(() => setChainCanRelease(null))
       .finally(() => setCheckingRelease(false));
   }, [data?.shipment?.escrowStatus, data?.shipment?.referenceCode, freighter.publicKey]);
@@ -128,7 +133,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       setStellarWorking(true);
       setStellarStep('Locking multisig hashes…');
       setTimeout(async () => {
-        const res = await fetch(`/api/shipments/${data.shipment.id}`, {
+        const res = await authFetch(`/api/shipments/${data.shipment.id}`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ action: 'EXPORTER_ACCEPT' }),
@@ -161,7 +166,8 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       // Gate: confirm on-chain that all milestones are done
       setStellarStep('Verifying milestone gate on Stellar…');
       const client = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
-      const canRelease = await client.canRelease(data.shipment.referenceCode);
+      const canReleaseTx = await client.can_release({ reference_code: data.shipment.referenceCode });
+      const canRelease = canReleaseTx.result?.isOk() ? canReleaseTx.result.unwrap() : false;
 
       if (!canRelease) {
         setStellarError('Not all required milestones are confirmed on-chain yet. Release is still locked.');
@@ -170,16 +176,18 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
       // Build and sign the release transaction
       setStellarStep('Sign the release transaction in Freighter…');
-      const releaseXdr = await client.release({
-        referenceCode: data.shipment.referenceCode,
-        importer:      importerAddress,
-      });
-      const txHash = await signAndSubmit(releaseXdr, STELLAR_NETWORK);
+      const txHash = await signAndSubmitWithRetry(
+        () => client.release({
+          reference_code: data.shipment.referenceCode,
+          importer:       importerAddress,
+        }),
+        STELLAR_NETWORK,
+      );
       setStellarHash(txHash);
 
       // Sync the DB record
       setStellarStep('Updating shipment record…');
-      const res     = await fetch(`/api/shipments/${data.shipment.id}`, {
+      const res     = await authFetch(`/api/shipments/${data.shipment.id}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
@@ -209,7 +217,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     if (!data) return;
     if (!confirm('Are you sure you want to cancel the cargo shipment and request a Stellar escrow refund?')) return;
     try {
-      const res     = await fetch(`/api/shipments/${data.shipment.id}`, {
+      const res     = await authFetch(`/api/shipments/${data.shipment.id}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ action: 'CANCEL_SHIPMENT' }),

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useUserSession } from '@/hooks/use-user-session';
+import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import { 
   Ship, 
   Plus, 
@@ -17,7 +17,7 @@ import {
 import { Shipment } from '@/types';
 
 export default function ShipmentsList() {
-  const { currentUser } = useUserSession();
+  const { currentUser, loading: sessionLoading } = useUserSession();
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -26,7 +26,7 @@ export default function ShipmentsList() {
     const load = async () => {
       try {
         setLoading(true);
-        const res = await fetch('/api/shipments');
+        const res = await authFetch('/api/shipments');
         const json = await res.json();
         if (json.success) {
           setShipments(json.data);
@@ -39,6 +39,16 @@ export default function ShipmentsList() {
     };
     load();
   }, []);
+
+  if (sessionLoading || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const filtered = shipments.filter(s => 
     s.referenceCode.toLowerCase().includes(searchTerm.toLowerCase()) ||

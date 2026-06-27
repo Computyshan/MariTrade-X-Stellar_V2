@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { ShipmentScope, MilestoneType, JobRole } from '@/types';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
-import { signAndSubmit } from '@/lib/stellar/freighter';
+import { signAndSubmitWithRetry } from '@/lib/stellar/freighter';
 import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ const MILESTONE_LABELS: Record<MilestoneType, string> = {
 const STEPS = [
   { label: 'Cargo Details', icon: ClipboardCheck },
   { label: 'Documents',     icon: FileText },
-  { label: 'Logistics',     icon: Users },
+  { label: 'Logistics & Exporter', icon: Users },
   { label: 'Fund Escrow',   icon: Wallet },
 ];
 
@@ -187,7 +187,7 @@ function PhilippinesBadge() {
 
 export default function NewShipmentPage() {
   const router = useRouter();
-  const { currentUser, allUsers } = useUserSession();
+  const { currentUser, allUsers, loading } = useUserSession();
   const freighter = useFreighter();
   const [step, setStep] = useState(1);
   const [errorText, setErrorText] = useState('');
@@ -223,7 +223,8 @@ export default function NewShipmentPage() {
   const [grossWeight,      setGrossWeight]      = useState('');
   const [weightUnit,       setWeightUnit]       = useState<'KG' | 'LBS'>('KG');
 
-  const exporterId = 'dav4d-exporter-id';
+  const [selectedExporterId, setSelectedExporterId] = useState<string | null>(null);
+  const [exporterSearch,     setExporterSearch]     = useState('');
   const [aiText,    setAiText]    = useState('');
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -238,7 +239,7 @@ export default function NewShipmentPage() {
   const [pwCopied,         setPwCopied]         = useState(false);
   const [nameCopied,       setNameCopied]       = useState(false);
 
-  // ── Step 3 · LOGISTICS ──────────────────────────────────────────────────────
+  // ── Step 3 · EXPORTER + LOGISTICS ─────────────────────────────────────────
   const [assignedUserIds,    setAssignedUserIds]    = useState<string[]>([]);
   const [priorityMilestones, setPriorityMilestones] = useState<MilestoneType[]>(DEFAULT_PRIORITY_MILESTONES);
   const [logisticsSearch,    setLogisticsSearch]    = useState('');
@@ -253,6 +254,56 @@ export default function NewShipmentPage() {
   const [escrowSuccess, setEscrowSuccess] = useState(false);
   const [stellarStep,   setStellarStep]   = useState(''); // current step label
   const [txHash,        setTxHash]        = useState('');
+
+  if (loading || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ── Oracle rate fetcher (declared before the useEffect that calls it) ────────
+  const fetchOracleRate = async (currency: string) => {
+    setOracleLoading(true);
+    try {
+      if (currency === 'USD') {
+        setOracleRate({ rate: 1, label: '1 USD = 1.0002 USDC (Stellar peg)' });
+        setTotalValueUSD(invoiceValue);
+      } else {
+        const res  = await fetch(`https://open.er-api.com/v6/latest/${currency}`);
+        const data = await res.json();
+        const toUSD = data?.rates?.USD ?? null;
+        if (toUSD) {
+          const usdcVal = (Number(invoiceValue) * toUSD * 1.0002).toFixed(2);
+          setOracleRate({ rate: toUSD, label: `1 ${currency} = ${toUSD.toFixed(6)} USD ≈ ${(toUSD * 1.0002).toFixed(6)} USDC` });
+          setTotalValueUSD(usdcVal);
+        }
+      }
+    } catch {
+      setOracleRate(null);
+    } finally {
+      setOracleLoading(false);
+    }
+  };
+
+  // ── PHP rate fetcher (declared before the useEffect that calls it) ───────────
+  const fetchPhpRate = async () => {
+    setRateLoading(true);
+    setRateError(false);
+    try {
+      const res  = await fetch('https://open.er-api.com/v6/latest/USD');
+      const data = await res.json();
+      if (data?.rates?.PHP) setPhpRate(data.rates.PHP);
+      else setRateError(true);
+    } catch {
+      setRateError(true);
+    } finally {
+      setRateLoading(false);
+    }
+  };
 
   // ── Auto-suggest vault folder name when Step 2 becomes active ───────────────
   useEffect(() => {
@@ -272,7 +323,7 @@ export default function NewShipmentPage() {
       .then(json => {
         if (json.success) {
           const acceptedIds: string[] = json.data
-            .filter((c: { status: string; direction: string; otherParty?: { id: string } }) => c.status === 'ACCEPTED' && c.direction === 'SENT')
+            .filter((c: { status: string }) => c.status === 'ACCEPTED')
             .map((c: { otherParty?: { id: string } }) => c.otherParty?.id)
             .filter(Boolean);
           setTrustedNetworkIds(acceptedIds);
@@ -302,29 +353,6 @@ export default function NewShipmentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceCurrency, invoiceValue]);
 
-  const fetchOracleRate = async (currency: string) => {
-    setOracleLoading(true);
-    try {
-      if (currency === 'USD') {
-        setOracleRate({ rate: 1, label: '1 USD = 1.0002 USDC (Stellar peg)' });
-        setTotalValueUSD(invoiceValue);
-      } else {
-        const res  = await fetch(`https://open.er-api.com/v6/latest/${currency}`);
-        const data = await res.json();
-        const toUSD = data?.rates?.USD ?? null;
-        if (toUSD) {
-          const usdcVal = (Number(invoiceValue) * toUSD * 1.0002).toFixed(2);
-          setOracleRate({ rate: toUSD, label: `1 ${currency} = ${toUSD.toFixed(6)} USD ≈ ${(toUSD * 1.0002).toFixed(6)} USDC` });
-          setTotalValueUSD(usdcVal);
-        }
-      }
-    } catch {
-      setOracleRate(null);
-    } finally {
-      setOracleLoading(false);
-    }
-  };
-
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (hsRef.current && !hsRef.current.contains(e.target as Node)) setHsDropOpen(false);
@@ -341,21 +369,6 @@ export default function NewShipmentPage() {
     if (step === 4 && shipmentScope === 'NATIONWIDE') fetchPhpRate();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, shipmentScope]);
-
-  const fetchPhpRate = async () => {
-    setRateLoading(true);
-    setRateError(false);
-    try {
-      const res  = await fetch('https://open.er-api.com/v6/latest/USD');
-      const data = await res.json();
-      if (data?.rates?.PHP) setPhpRate(data.rates.PHP);
-      else setRateError(true);
-    } catch {
-      setRateError(true);
-    } finally {
-      setRateLoading(false);
-    }
-  };
 
   const handleAutofill = async () => {
     if (!aiText.trim()) return;
@@ -450,9 +463,11 @@ export default function NewShipmentPage() {
         return false;
       }
     }
-    if (step === 3 && priorityMilestones.length === 0) {
-      setErrorText('Select at least one priority milestone for escrow release.');
-      return false;
+    if (step === 3) {
+      if (!selectedExporterId)
+        { setErrorText('Please select an exporter for this shipment.'); return false; }
+      if (priorityMilestones.length === 0)
+        { setErrorText('Select at least one priority milestone for escrow release.'); return false; }
     }
     return true;
   };
@@ -482,7 +497,7 @@ export default function NewShipmentPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           importerId:             currentUser.id,
-          exporterId,
+          exporterId: selectedExporterId,
           description,
           totalValueUSD:          Number(totalValueUSD),
           originCountry,
@@ -523,7 +538,7 @@ export default function NewShipmentPage() {
       const importerAddress = freighter.publicKey ?? await freighter.connect();
 
       // ── 3. Resolve on-chain addresses ───────────────────────────────────────
-      const exporterUser    = allUsers.find(u => u.id === exporterId);
+      const exporterUser    = allUsers.find(u => u.id === selectedExporterId);
       const exporterAddress = exporterUser?.stellarWallet ?? PLATFORM_ADDRESS;
 
       const logisticsAddresses = assignedUserIds
@@ -531,36 +546,52 @@ export default function NewShipmentPage() {
         .filter((addr): addr is string => Boolean(addr));
 
       // ── 4. Build escrow client ────────────────────────────────────────────────
-      const client            = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
-      const requiredMilestones = dbMilestonesToContractEnums(priorityMilestones);
+      const client             = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
+      const required_milestones = dbMilestonesToContractEnums(priorityMilestones);
+
+      // Convert USD amount to USDC strobes (1 USDC = 10,000,000 strobes)
+      const amount = BigInt(Math.round(Number(totalValueUSD) * 10_000_000));
 
       // ── 5. createEscrow (Freighter signs tx #1) ───────────────────────────────
       setStellarStep('create');
-      const createXdr = await client.createEscrow({
-        referenceCode,
-        importer:             importerAddress,
-        exporter:             exporterAddress,
-        amountUsd:            Number(totalValueUSD),
-        requiredMilestones,
-        partialRefundPercent: 80,
-      });
-      await signAndSubmit(createXdr, STELLAR_NETWORK);
+      await signAndSubmitWithRetry(
+        () => client.create_escrow({
+          reference_code:      referenceCode,
+          importer:            importerAddress,
+          exporter:            exporterAddress,
+          amount,
+          required_milestones,
+          partial_refund_bps:  8000, // 80% refund if cancelled pre-departure
+        }),
+        STELLAR_NETWORK,
+      );
 
       // ── 6. assignLogisticsUsers (Freighter signs tx #2) ─────────────────────
       if (logisticsAddresses.length > 0) {
+        // Brief settle delay before building the next tx — gives the RPC
+        // node a moment to register the previous transaction's new sequence
+        // number before we fetch the account again. Cuts down on first-try
+        // txBadSeq errors (the retry logic in signAndSubmitWithRetry still
+        // covers anything this doesn't catch).
+        await new Promise(r => setTimeout(r, 1500));
         setStellarStep('assign');
-        const assignXdr = await client.assignLogisticsUsers({
-          referenceCode,
-          importer: importerAddress,
-          users:    logisticsAddresses,
-        });
-        await signAndSubmit(assignXdr, STELLAR_NETWORK);
+        await signAndSubmitWithRetry(
+          () => client.assign_logistics_users({
+            reference_code: referenceCode,
+            importer:       importerAddress,
+            users:          logisticsAddresses,
+          }),
+          STELLAR_NETWORK,
+        );
       }
 
       // ── 7. fund (Freighter signs tx #3 — transfers USDC into vault) ──────────
+      await new Promise(r => setTimeout(r, 1500));
       setStellarStep('fund');
-      const fundXdr = await client.fund({ referenceCode, importer: importerAddress });
-      const fundHash = await signAndSubmit(fundXdr, STELLAR_NETWORK);
+      const fundHash = await signAndSubmitWithRetry(
+        () => client.fund({ reference_code: referenceCode, importer: importerAddress }),
+        STELLAR_NETWORK,
+      );
       setTxHash(fundHash);
 
       // ── 8. Update DB record with Stellar contract ID + FUNDED status ─────────
@@ -576,16 +607,13 @@ export default function NewShipmentPage() {
       });
 
       setEscrowSuccess(true);
-      setTimeout(() => router.push(`/shipments/${shipmentId}`), 2500);
+      router.push(`/shipments/${shipmentId}`);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Stellar transaction failed.';
       setErrorText(msg);
-      // If the DB record was created but chain failed, we still redirect so the
-      // user can see their shipment and retry funding from the detail page.
-      if (shipmentId) {
-        setTimeout(() => router.push(`/shipments/${shipmentId}`), 3000);
-      }
+      // If the DB record was created but chain failed, show a link to the shipment
+      // rather than auto-redirecting — the user needs to see the error first.
     } finally {
       setEscrowLoading(false);
       setStellarStep('');
@@ -1101,10 +1129,92 @@ export default function NewShipmentPage() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          STEP 3 — Logistics & Priority Milestones
+          STEP 3 — Logistics, Exporter & Priority Milestones
       ══════════════════════════════════════════════════════════════════════ */}
       {step === 3 && (
         <div className="space-y-6">
+
+          {/* EXPORTER PICKER */}
+          <div className="bg-white border-2 border-ocean-100 p-6 rounded-2xl space-y-4">
+            <h3 className="font-extrabold text-sm text-maritime-900 flex items-center gap-2 border-b border-sand-100 pb-3">
+              <Building2 className="w-5 h-5 text-ocean-400" /> Select Exporter <span className="text-coral-400">*</span>
+            </h3>
+            <p className="text-xs text-gray-500">Search for a registered MariTrade user with the Exporter role. They will be the counterparty who receives USDC when funds are released.</p>
+            <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-[11px] text-amber-700">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-500" />
+              <span>The exporter must have a <strong>Stellar wallet address</strong> saved in their MariTrade profile before they can be selected. Ask them to go to <strong>My Profile → Stellar Public Wallet Key</strong> and save their Freighter address (starts with G…).</span>
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search by name, company, or email…"
+                className="w-full border border-sand-200 rounded-lg pl-8 pr-3 py-2 text-xs outline-none focus:border-ocean-400"
+                value={exporterSearch}
+                onChange={e => setExporterSearch(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {(() => {
+                const exporters = allUsers.filter(u =>
+                  u.jobRole === 'EXPORTER' &&
+                  u.id !== currentUser.id &&
+                  (exporterSearch === '' ||
+                    u.fullName.toLowerCase().includes(exporterSearch.toLowerCase()) ||
+                    (u.companyName || '').toLowerCase().includes(exporterSearch.toLowerCase()) ||
+                    (u.email || '').toLowerCase().includes(exporterSearch.toLowerCase()))
+                );
+                if (exporters.length === 0) return (
+                  <div className="py-6 text-center border border-dashed border-sand-200 rounded-xl bg-sand-50">
+                    <Building2 className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-gray-500">{exporterSearch ? 'No exporters match your search' : 'No exporters registered yet'}</p>
+                  </div>
+                );
+                return exporters.map(user => {
+                  const selected = selectedExporterId === user.id;
+                  const hasWallet = Boolean(user.stellarWallet);
+                  return (
+                    <button key={user.id}
+                      onClick={() => hasWallet && setSelectedExporterId(selected ? null : user.id)}
+                      disabled={!hasWallet}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border-2 text-left transition-all ${
+                        !hasWallet
+                          ? 'border-sand-200 bg-sand-50 opacity-60 cursor-not-allowed'
+                          : selected
+                          ? 'border-ocean-400 bg-ocean-50 cursor-pointer'
+                          : 'border-sand-200 hover:border-ocean-200 cursor-pointer'
+                      }`}>
+                      <div>
+                        <p className="text-xs font-bold text-maritime-900">{user.fullName}</p>
+                        <p className={`text-[10px] ${hasWallet ? 'text-gray-500' : 'text-coral-400 font-semibold'}`}>
+                          {user.companyName} · {hasWallet ? '🔗 Stellar wallet linked' : '⚠️ No Stellar wallet — cannot be selected'}
+                        </p>
+                      </div>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        selected ? 'bg-ocean-400 text-white' : 'bg-sand-100 text-gray-400'
+                      }`}>
+                        {selected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                      </div>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+            {selectedExporterId && (() => {
+              const exp = allUsers.find(u => u.id === selectedExporterId);
+              return exp ? (
+                <div className="flex items-center gap-3 bg-ocean-50 border border-ocean-200 rounded-xl px-4 py-3">
+                  <Check className="w-4 h-4 text-ocean-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-black text-ocean-700">{exp.fullName}</p>
+                    <p className="text-[10px] text-ocean-500">{exp.companyName} — selected as exporter</p>
+                  </div>
+                  <button onClick={() => setSelectedExporterId(null)} className="ml-auto text-gray-400 hover:text-coral-400 transition-colors"><X className="w-4 h-4" /></button>
+                </div>
+              ) : null;
+            })()}
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white border border-sand-200 p-6 rounded-2xl space-y-4">
               <h3 className="font-extrabold text-sm text-maritime-900 flex items-center gap-2 border-b border-sand-100 pb-3">
@@ -1196,7 +1306,7 @@ export default function NewShipmentPage() {
                 )],
                 ['Cargo',         description],
                 ['Importer',      importerContact || currentUser.fullName],
-                ['Exporter',      exporterContact || 'Not specified'],
+                ['Exporter',      (() => { const exp = allUsers.find(u => u.id === selectedExporterId); return exp ? `${exp.fullName} (${exp.companyName})` : exporterContact || 'Not specified'; })()],
                 ['Route',         `${originCountry}${originPort ? ` (${originPort})` : ''} → ${destinationPort}${destCountry ? `, ${destCountry}` : ''}`],
                 ['ETA',           estimatedArrival || 'Not specified'],
                 ['Invoice',       `${invoiceValue} ${invoiceCurrency}${totalValueUSD ? ` ≈ ${Number(totalValueUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDC` : ''}`],
