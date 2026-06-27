@@ -136,6 +136,20 @@ export default function NetworkPage() {
   // Initial load — run once when user is ready
   useEffect(() => { if (currentUser?.id) refresh(); }, [currentUser?.id]);
 
+  // Background poll — re-sync connections + directory every 30 s so incoming
+  // requests and accepted connections appear without a manual page refresh.
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const interval = setInterval(() => {
+      // Only poll silently when no action is in flight
+      if (!actionLoading) {
+        fetchConnections();
+        fetchDirectory();
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id, actionLoading, fetchConnections, fetchDirectory]);
+
   // Search debounce — skip on mount (refresh already ran), only fire on search changes
   const isMounted = React.useRef(false);
   useEffect(() => {

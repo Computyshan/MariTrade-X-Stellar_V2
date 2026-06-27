@@ -5,13 +5,18 @@ import { ChatThread, ChatParticipant } from '@/types';
 
 export async function GET(req: NextRequest) {
   // CRITICAL FIX: authenticate every request
-  const { errorResponse } = await requireAuth(req);
+  const { user, errorResponse } = await requireAuth(req);
   if (errorResponse) return errorResponse;
 
   try {
     const userId = req.nextUrl.searchParams.get('userId');
     if (!userId) {
       return NextResponse.json({ success: false, error: 'UserId query parameter is required' }, { status: 400 });
+    }
+
+    // FIX #4 — Verify ?userId matches the authenticated JWT user
+    if (userId !== user!.id) {
+      return NextResponse.json({ success: false, error: 'Forbidden — userId does not match your session.' }, { status: 403 });
     }
 
     const [allThreads, allParticipants, allUsers] = await Promise.all([
@@ -26,31 +31,49 @@ export async function GET(req: NextRequest) {
       return parts.some(p => p.userId === userId);
     });
 
-    // Re-fetch with per-thread messages for last message preview
-    const threadsDecored = await Promise.all(
-      userThreads.map(async thread => {
-        const parts = allParticipants.filter(p => p.threadId === thread.id);
-        const otherPart = parts.find(p => p.userId !== userId);
-        const otherUser = otherPart ? allUsers.find(u => u.id === otherPart.userId) : null;
+    // #8 — Batch-fetch last message per thread (single query replaces N+1 pattern)
+    const lastMessageMap = await dbStore.getLastMessagePerThread(userThreads.map(t => t.id));
 
-        const messages = await dbStore.getMessages(thread.id);
-        const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+    const threadsDecored = userThreads.map(thread => {
+      const parts = allParticipants.filter(p => p.threadId === thread.id);
 
+      if (thread.isGroup) {
+        // Group thread — return all members except self as groupParticipants
+        const groupParticipants = parts
+          .map(p => allUsers.find(u => u.id === p.userId))
+          .filter(Boolean)
+          .map(u => ({
+            id: u!.id,
+            fullName: u!.fullName,
+            jobRole: u!.jobRole,
+            companyName: u!.companyName,
+          }));
         return {
           ...thread,
-          otherParticipant: otherUser
-            ? {
-                id: otherUser.id,
-                fullName: otherUser.fullName,
-                email: otherUser.email,
-                jobRole: otherUser.jobRole,
-                companyName: otherUser.companyName,
-              }
-            : null,
-          lastMessage,
+          otherParticipant: null,
+          groupParticipants,
+          lastMessage: lastMessageMap[thread.id] ?? null,
         };
-      })
-    );
+      }
+
+      // DM thread — existing behaviour
+      const otherPart = parts.find(p => p.userId !== userId);
+      const otherUser = otherPart ? allUsers.find(u => u.id === otherPart.userId) : null;
+      return {
+        ...thread,
+        otherParticipant: otherUser
+          ? {
+              id: otherUser.id,
+              fullName: otherUser.fullName,
+              email: otherUser.email,
+              jobRole: otherUser.jobRole,
+              companyName: otherUser.companyName,
+            }
+          : null,
+        groupParticipants: null,
+        lastMessage: lastMessageMap[thread.id] ?? null,
+      };
+    });
 
     const sorted = threadsDecored.sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
@@ -69,10 +92,65 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { senderId, receiverId, initialMessage } = body;
+    const { senderId, receiverId, initialMessage, isGroup, groupName, memberIds } = body;
 
+    // ── Group thread creation ─────────────────────────────────────────────────
+    if (isGroup) {
+      if (!senderId || !groupName?.trim()) {
+        return NextResponse.json({ success: false, error: 'senderId and groupName are required for group chats.' }, { status: 400 });
+      }
+
+      // FIX #2 — Verify senderId matches the authenticated JWT user
+      if (senderId !== user!.id) {
+        return NextResponse.json({ success: false, error: 'Forbidden — senderId does not match your session.' }, { status: 403 });
+      }
+      const allMemberIds: string[] = Array.from(new Set([senderId, ...(memberIds ?? [])]));
+      if (allMemberIds.length < 2) {
+        return NextResponse.json({ success: false, error: 'A group chat needs at least one other member.' }, { status: 400 });
+      }
+
+      const threadId = 'thr_' + Math.random().toString(36).substring(2, 9);
+      const newThread: ChatThread = {
+        id: threadId,
+        status: 'OPEN',
+        isGroup: true,
+        groupName: groupName.trim(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await dbStore.saveThread(newThread);
+
+      await Promise.all(
+        allMemberIds.map((uid: string) =>
+          dbStore.saveParticipant({
+            id: 'cp_' + Math.random().toString(36).substring(2, 9),
+            threadId,
+            userId: uid,
+          })
+        )
+      );
+
+      // System message announcing the group
+      const sender = await dbStore.getUserById(senderId);
+      await dbStore.saveMessage({
+        id: 'msg_sys_' + Math.random().toString(36).substring(2, 9),
+        threadId,
+        senderId,
+        content: `👥 ${sender?.fullName ?? 'Someone'} created the group “${groupName.trim()}”.`,
+        createdAt: new Date().toISOString(),
+      });
+
+      return NextResponse.json({ success: true, data: { threadId } });
+    }
+
+    // ── DM thread creation (existing path) ────────────────────────────────────
     if (!senderId || !receiverId) {
       return NextResponse.json({ success: false, error: 'SenderId and ReceiverId are required' }, { status: 400 });
+    }
+
+    // FIX #1 — Verify senderId matches the authenticated JWT user
+    if (senderId !== user!.id) {
+      return NextResponse.json({ success: false, error: 'Forbidden — senderId does not match your session.' }, { status: 403 });
     }
 
     // ── Network guard ─────────────────────────────────────────────────────────
@@ -114,11 +192,14 @@ export async function POST(req: NextRequest) {
     ]);
 
     let threadId = '';
+    // FIX #3 — Only match DM threads (not group threads) to avoid redirect to a group
     const existingThread = allThreads.find(t => {
+      if (t.isGroup) return false;
       const parts = allParticipants.filter(p => p.threadId === t.id);
       const hasSender = parts.some(p => p.userId === senderId);
       const hasReceiver = parts.some(p => p.userId === receiverId);
-      return hasSender && hasReceiver;
+      // Ensure exactly 2 participants (no extras)
+      return hasSender && hasReceiver && parts.length === 2;
     });
 
     if (existingThread) {

@@ -195,6 +195,9 @@ export interface ChatThread {
   currentCounterPriceUSD?: number;
   createdAt: string;
   updatedAt: string;
+  // Group chat fields
+  isGroup?: boolean;
+  groupName?: string;
 }
 
 export interface ChatParticipant {

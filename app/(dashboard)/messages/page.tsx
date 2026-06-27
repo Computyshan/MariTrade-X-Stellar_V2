@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession } from '@/hooks/use-user-session';
+import { authFetch } from '@/hooks/use-user-session';
 import {
   MessageSquare,
   Send,
@@ -20,6 +21,7 @@ import {
   Paperclip,
   Bell,
   User,
+  Users,
   Handshake,
   Network,
   CheckCircle2,
@@ -32,6 +34,7 @@ import {
   Shield,
   ChevronRight,
   AlertCircle,
+  Plus,
 } from 'lucide-react';
 import { ChatThread, Message, User as UserType, JobRole } from '@/types';
 
@@ -43,7 +46,13 @@ type ThreadWithMeta = ChatThread & {
     fullName: string;
     companyName?: string;
     jobRole?: string;
-  };
+  } | null;
+  groupParticipants?: {
+    id: string;
+    fullName: string;
+    jobRole?: string;
+    companyName?: string;
+  }[] | null;
   lastMessage?: Message;
 };
 
@@ -94,7 +103,7 @@ function getRoleColor(role: string): string {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ChatNegotiationCenter() {
-  const { currentUser, allUsers } = useUserSession();
+  const { currentUser, allUsers, refreshAllUsers } = useUserSession();
 
   const [threads, setThreads]               = useState<ChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState('');
@@ -125,6 +134,12 @@ export default function ChatNegotiationCenter() {
   // Toast for network-gate errors
   const [toast, setToast] = useState<{ type: 'error' | 'info'; msg: string } | null>(null);
 
+  // Group chat creation modal
+  const [showGroupModal, setShowGroupModal]     = useState(false);
+  const [groupName, setGroupName]               = useState('');
+  const [groupMemberIds, setGroupMemberIds]     = useState<string[]>([]);
+  const [creatingGroup, setCreatingGroup]       = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef   = useRef<HTMLInputElement>(null);
 
@@ -139,7 +154,7 @@ export default function ChatNegotiationCenter() {
     if (!currentUser?.id) return;
     try {
       if (!silent) setLoading(true);
-      const res  = await fetch(`/api/messages/threads?userId=${currentUser.id}`);
+      const res  = await authFetch(`/api/messages/threads?userId=${currentUser.id}`);
       const json = await res.json();
       if (json.success && json.data) {
         setThreads(json.data);
@@ -166,7 +181,7 @@ export default function ChatNegotiationCenter() {
     if (!currentUser?.id) return;
     setNetworkLoading(true);
     try {
-      const res  = await fetch(`/api/network/directory?requesterId=${currentUser.id}`);
+      const res  = await authFetch(`/api/network/directory?requesterId=${currentUser.id}`);
       const json = await res.json();
       if (json.success) setNetworkMembers(json.data);
     } catch {}
@@ -177,6 +192,8 @@ export default function ChatNegotiationCenter() {
     if (currentUser?.id) {
       fetchThreads(false);
       fetchNetwork();
+      // FIX #9 — Populate allUsers so sender names and group modal work correctly
+      refreshAllUsers();
     }
   }, [currentUser?.id]);
 
@@ -186,7 +203,7 @@ export default function ChatNegotiationCenter() {
     if (!id) return;
     try {
       if (!silent) setLoadingMessages(true);
-      const res  = await fetch(`/api/messages/threads/${id}`);
+      const res  = await authFetch(`/api/messages/threads/${id}`);
       const json = await res.json();
       if (json.success && json.data) {
         setMessages(json.data.messages || []);
@@ -196,7 +213,15 @@ export default function ChatNegotiationCenter() {
             : ''
         );
         setProposedDesc(json.data.thread.cargoDescription || '');
-        setThreads(prev => prev.map(t => t.id === id ? { ...t, ...json.data.thread } : t));
+        setThreads(prev => prev.map(t => t.id === id ? {
+          ...t,
+          // Only spread fields that exist on ChatThread itself — do NOT
+          // overwrite otherParticipant / lastMessage which come from fetchThreads
+          status: json.data.thread.status,
+          currentCounterPriceUSD: json.data.thread.currentCounterPriceUSD,
+          cargoDescription: json.data.thread.cargoDescription,
+          updatedAt: json.data.thread.updatedAt,
+        } : t));
       }
     } catch (err) {
       console.error(err);
@@ -244,9 +269,16 @@ export default function ChatNegotiationCenter() {
 
   // ── Filtered lists ─────────────────────────────────────────────────────────
 
+  // FIX #6 — Include group threads in search results
   const filteredThreads = threads.filter(t => {
     const q = channelSearch.trim().toLowerCase();
     if (!q) return true;
+    if ((t as any).isGroup) {
+      const gName = (t.groupName || '').toLowerCase();
+      const members = ((t as any).groupParticipants ?? []) as { fullName: string }[];
+      const memberNames = members.map(m => m.fullName.toLowerCase()).join(' ');
+      return gName.includes(q) || memberNames.includes(q);
+    }
     const partner = (t as any).otherParticipant;
     if (!partner) return false;
     return (
@@ -283,10 +315,15 @@ export default function ChatNegotiationCenter() {
 
   const handleUnsendMessage = async (msgId: string) => {
     if (!confirm('Unsend this message? It will be retracted for all participants.')) return;
-    const res  = await fetch(`/api/messages/threads/${selectedThreadId}?messageId=${msgId}`, { method: 'DELETE' });
+    // #12 — Optimistic update: flip isUnsent immediately in local state
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, isUnsent: true, content: 'This message was unsent.' } : m));
+    const res  = await authFetch(`/api/messages/threads/${selectedThreadId}?messageId=${msgId}`, { method: 'DELETE' });
     const json = await res.json();
-    if (json.success) fetchMessagesOfThread(selectedThreadId);
-    else alert(json.error || 'Failed to unsend');
+    if (!json.success) {
+      // Roll back on failure
+      fetchMessagesOfThread(selectedThreadId);
+      alert(json.error || 'Failed to unsend');
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -295,7 +332,7 @@ export default function ChatNegotiationCenter() {
     if (!replyText.trim() && !selectedImage) return;
     try {
       setSubmittingMsg(true);
-      const res  = await fetch(`/api/messages/threads/${selectedThreadId}`, {
+      const res  = await authFetch(`/api/messages/threads/${selectedThreadId}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ senderId: currentUser.id, content: replyText, imageUrl: selectedImage || undefined }),
@@ -318,13 +355,13 @@ export default function ChatNegotiationCenter() {
     if (!selectedThreadId || !isTradePartyThread) return;
     try {
       setProposingCounter(true);
-      const res  = await fetch(`/api/messages/threads/${selectedThreadId}`, {
+      const res  = await authFetch(`/api/messages/threads/${selectedThreadId}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           action: 'COUNTER_TERMS',
           senderId: currentUser.id,
-          counterTerms: `Value: $${proposedPrice} - Description: ${proposedDesc}`,
+          counterTerms: `Value: ${proposedPrice} - Description: ${proposedDesc}`,
           currentCounterPriceUSD: Number(proposedPrice),
           cargoDescription: proposedDesc,
         }),
@@ -338,7 +375,7 @@ export default function ChatNegotiationCenter() {
   const handleAcceptFinalTerms = async () => {
     if (!selectedThreadId || !isTradePartyThread) return;
     if (!confirm('Lock these terms and generate the Stellar multi-sign Escrow contract?')) return;
-    const res  = await fetch(`/api/messages/threads/${selectedThreadId}`, {
+    const res  = await authFetch(`/api/messages/threads/${selectedThreadId}`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'CONVERT_TO_SHIPMENT', senderId: currentUser.id }),
@@ -359,7 +396,7 @@ export default function ChatNegotiationCenter() {
       return;
     }
     try {
-      const res  = await fetch('/api/messages/threads', {
+      const res  = await authFetch('/api/messages/threads', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ senderId: currentUser.id, receiverId }),
@@ -375,15 +412,75 @@ export default function ChatNegotiationCenter() {
     } catch { showToast('error', 'Network error — please try again.'); }
   };
 
+  const handleCreateGroup = async () => {
+    if (!groupName.trim()) { showToast('error', 'Please enter a group name.'); return; }
+    if (groupMemberIds.length === 0) { showToast('error', 'Add at least one member.'); return; }
+    try {
+      setCreatingGroup(true);
+      const res  = await authFetch('/api/messages/threads', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          isGroup: true,
+          groupName: groupName.trim(),
+          senderId: currentUser.id,
+          memberIds: groupMemberIds,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setShowGroupModal(false);
+        setGroupName('');
+        setGroupMemberIds([]);
+        setSidebarTab('chats');
+        await fetchThreads();
+        setSelectedThreadId(json.data.threadId);
+      } else {
+        showToast('error', json.error || 'Failed to create group.');
+      }
+    } catch { showToast('error', 'Network error — please try again.'); }
+    finally { setCreatingGroup(false); }
+  };
+
+  const getThreadDisplayName = (t: ThreadWithMeta) => {
+    if (t.isGroup) return t.groupName || 'Group Chat';
+    const partner = (t as any).otherParticipant;
+    return partner?.fullName || 'Contact';
+  };
+
+  const getThreadSubtitle = (t: ThreadWithMeta) => {
+    if (t.isGroup) {
+      const members = (t as any).groupParticipants ?? [];
+      return `${members.length} member${members.length !== 1 ? 's' : ''}`;
+    }
+    const partner = (t as any).otherParticipant;
+    return partner?.companyName || partner?.jobRole?.replace(/_/g, ' ') || '';
+  };
+
+  const getThreadInitials = (t: ThreadWithMeta) => {
+    if (t.isGroup) return <Users className="w-3.5 h-3.5" />;
+    const partner = (t as any).otherParticipant;
+    return partner ? getInitials(partner.fullName) : '??';
+  };
+
   const formatMessageTime = (iso: string) =>
     new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  // FIX #7 — For group threads, resolve sender name from groupParticipants first, then allUsers
   const getLastMessagePreview = (thread: ThreadWithMeta) => {
     const m = thread.lastMessage;
     if (!m) return 'No messages yet';
     if (m.isUnsent) return 'Message unsent';
     if (m.imageUrl && !m.content) return '📷 Attachment';
-    return `${m.senderId === currentUser.id ? 'You: ' : ''}${m.content || '📷 Attachment'}`;
+    if (m.senderId === currentUser.id) return `You: ${m.content || '📷 Attachment'}`;
+    // Try groupParticipants cache first (always populated), then fall back to allUsers
+    const groupParticipants = (thread as any).groupParticipants as { id: string; fullName: string }[] | null;
+    const senderFromGroup = groupParticipants?.find(p => p.id === m.senderId);
+    const senderFromAllUsers = allUsers.find(u => u.id === m.senderId);
+    const senderName = senderFromGroup?.fullName?.split(' ')[0] ||
+      senderFromAllUsers?.fullName?.split(' ')[0] ||
+      'Contact';
+    return `${senderName}: ${m.content || '📷 Attachment'}`;
   };
 
   const getThreadTimestamp = (thread: ThreadWithMeta) =>
@@ -557,9 +654,18 @@ export default function ChatNegotiationCenter() {
               {/* ── CHATS TAB ──────────────────────────────────────────────── */}
               {sidebarTab === 'chats' && (
                 <>
-                  <p className="px-1 text-[9px] font-extrabold text-[#76777d] uppercase tracking-wider font-mono mb-1">
-                    Secure Channels
-                  </p>
+                  <div className="flex items-center justify-between px-1 mb-1">
+                    <p className="text-[9px] font-extrabold text-[#76777d] uppercase tracking-wider font-mono">
+                      Secure Channels
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setShowGroupModal(true); setGroupName(''); setGroupMemberIds([]); }}
+                      className="flex items-center gap-1 text-[9px] font-bold text-[#0058be] hover:text-[#004395] transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" /> Group
+                    </button>
+                  </div>
                   {loading ? (
                     <div className="text-center py-12">
                       <div className="w-4 h-4 border-2 border-[#0058be] border-t-transparent rounded-full animate-spin mx-auto" />
@@ -581,9 +687,11 @@ export default function ChatNegotiationCenter() {
                     filteredThreads.map(t => {
                       const isSelected      = t.id === selectedThreadId;
                       const partner         = (t as any).otherParticipant;
-                      const initials        = partner ? getInitials(partner.fullName) : '??';
                       const isTradeOnly     = isTradePartyOnlyConversation(partner?.id);
-                      const partnerTrusted  = networkMembers.some(m => m.id === partner?.id && m.connectionStatus === 'ACCEPTED');
+                      const partnerTrusted  = !t.isGroup && networkMembers.some(m => m.id === partner?.id && m.connectionStatus === 'ACCEPTED');
+                      const displayName     = getThreadDisplayName(t as ThreadWithMeta);
+                      const subtitle        = getThreadSubtitle(t as ThreadWithMeta);
+                      const initials        = getThreadInitials(t as ThreadWithMeta);
 
                       if (isSelected) {
                         return (
@@ -595,12 +703,16 @@ export default function ChatNegotiationCenter() {
                               </div>
                               <div className="flex-1 overflow-hidden min-w-0">
                                 <div className="flex justify-between items-start">
-                                  <h4 className="font-bold text-white truncate text-xs">{partner?.fullName || 'Contact'}</h4>
+                                  <h4 className="font-bold text-white truncate text-xs">{displayName}</h4>
                                   <span className="text-[9px] text-[#818ea1]">{getThreadTimestamp(t as ThreadWithMeta)}</span>
                                 </div>
-                                <p className="text-[10px] text-gray-400 mt-0.5 truncate">{partner?.companyName || partner?.jobRole?.replace(/_/g, ' ')}</p>
-                                {/* Trusted badge */}
-                                {partnerTrusted && (
+                                <p className="text-[10px] text-gray-400 mt-0.5 truncate">{subtitle}</p>
+                                {t.isGroup && (
+                                  <span className="inline-flex items-center gap-1 mt-1 text-[8px] font-bold text-blue-400">
+                                    <Users className="w-2.5 h-2.5" /> Group Chat
+                                  </span>
+                                )}
+                                {!t.isGroup && partnerTrusted && (
                                   <span className="inline-flex items-center gap-1 mt-1 text-[8px] font-bold text-ocean-400">
                                     <CheckCircle2 className="w-2.5 h-2.5" /> Trusted Network
                                   </span>
@@ -631,12 +743,17 @@ export default function ChatNegotiationCenter() {
                             </div>
                             <div className="flex-1 overflow-hidden min-w-0">
                               <div className="flex justify-between items-start">
-                                <h4 className="font-bold text-gray-900 truncate text-xs">{partner?.fullName || 'Contact'}</h4>
+                                <h4 className="font-bold text-gray-900 truncate text-xs">{displayName}</h4>
                                 <span className="text-[9px] text-gray-400 shrink-0">{getThreadTimestamp(t as ThreadWithMeta)}</span>
                               </div>
-                              <p className="text-[10px] text-gray-500 mt-0.5 truncate">{partner?.companyName || partner?.jobRole?.replace(/_/g, ' ')}</p>
+                              <p className="text-[10px] text-gray-500 mt-0.5 truncate">{subtitle}</p>
                               <div className="mt-1.5 flex items-center gap-2">
-                                {partnerTrusted && (
+                                {t.isGroup && (
+                                  <span className="inline-flex items-center gap-1 text-[8px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-full">
+                                    <Users className="w-2 h-2" /> Group
+                                  </span>
+                                )}
+                                {!t.isGroup && partnerTrusted && (
                                   <span className="inline-flex items-center gap-1 text-[8px] font-bold text-ocean-600 bg-ocean-50 border border-ocean-100 px-1.5 py-0.5 rounded-full">
                                     <CheckCircle2 className="w-2 h-2" /> Trusted
                                   </span>
@@ -800,29 +917,44 @@ export default function ChatNegotiationCenter() {
                   <div className="h-14 border-b border-gray-150 px-5 flex items-center justify-between bg-white shrink-0 select-none">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-[#0058be] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
-                        {getInitials((activeThread as any).otherParticipant?.fullName || '??')}
+                        {activeThread?.isGroup
+                          ? <Users className="w-4 h-4" />
+                          : getInitials((activeThread as any)?.otherParticipant?.fullName || '??')}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="font-bold text-xs text-gray-900 truncate">
-                            {(activeThread as any).otherParticipant?.fullName || 'Representative'}
+                            {activeThread?.isGroup
+                              ? (activeThread.groupName || 'Group Chat')
+                              : ((activeThread as any)?.otherParticipant?.fullName || 'Representative')}
                           </h3>
-                          <span className="px-1.5 py-0.5 bg-green-50 text-green-700 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
-                            <ShieldCheck className="w-2.5 h-2.5 text-green-600" /> KYC
-                          </span>
-                          {/* Trusted network badge */}
-                          {activePartnerIsTrusted && (
+                          {activeThread?.isGroup ? (
+                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
+                              <Users className="w-2.5 h-2.5" /> Group
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-green-50 text-green-700 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
+                              <ShieldCheck className="w-2.5 h-2.5 text-green-600" /> KYC
+                            </span>
+                          )}
+                          {/* Trusted network badge — DMs only */}
+                          {!activeThread?.isGroup && activePartnerIsTrusted && (
                             <span className="px-1.5 py-0.5 bg-ocean-50 text-ocean-600 border border-ocean-100 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
                               <CheckCircle2 className="w-2 h-2" /> Trusted Network
                             </span>
                           )}
                         </div>
                         <p className="text-[10px] text-gray-400 mt-0.5 font-medium truncate">
-                          {(activeThread as any).otherParticipant?.companyName || 'Stellar Authorized counterparty'}
+                          {activeThread?.isGroup
+                            ? (() => {
+                                const members = (activeThread as any)?.groupParticipants ?? [];
+                                return members.map((m: any) => m.fullName.split(' ')[0]).join(', ') || 'Group members';
+                              })()
+                            : ((activeThread as any)?.otherParticipant?.companyName || 'Stellar Authorized counterparty')}
                         </p>
                       </div>
                     </div>
-                    <p className="text-[9px] font-mono font-bold text-gray-400 shrink-0">ID: {activeThread.id}</p>
+                    <p className="text-[9px] font-mono font-bold text-gray-400 shrink-0">ID: {activeThread?.id}</p>
                   </div>
 
                   {/* Messages */}
@@ -853,9 +985,12 @@ export default function ChatNegotiationCenter() {
                     ) : (
                       messages.map(msg => {
                         const isMe    = msg.senderId === currentUser.id;
-                        const sender  = allUsers.find(u => u.id === msg.senderId);
-                        const sName   = isMe ? 'You' : (sender?.fullName?.split(' ')[0] || 'Partner');
-                        const sInits  = getInitials(sender?.fullName || 'Partner');
+                        // FIX #15 — resolve sender from groupParticipants first, then allUsers
+                        const groupParticipants = (activeThread as any)?.groupParticipants as { id: string; fullName: string }[] | null;
+                        const sender  = groupParticipants?.find(p => p.id === msg.senderId)
+                          ?? allUsers.find(u => u.id === msg.senderId);
+                        const sName   = isMe ? 'You' : (sender?.fullName?.split(' ')[0] || 'Contact');
+                        const sInits  = getInitials(sender?.fullName || 'Contact');
                         return (
                           <div key={msg.id} className={`flex gap-2.5 max-w-xl ${isMe ? 'self-end justify-end' : 'self-start'}`}>
                             {!isMe && (
@@ -905,7 +1040,7 @@ export default function ChatNegotiationCenter() {
                                   <span className={`text-[8px] font-mono ${isMe ? 'text-white/60' : 'text-gray-400'}`}>
                                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </span>
-                                  {isMe && !msg.isUnsent && <span className="text-[10px] text-sky-200 font-bold">✓✓</span>}
+                                  {isMe && !msg.isUnsent && <span className="text-[10px] text-sky-200 font-bold opacity-40">✓✓</span>}
                                 </div>
                               </div>
                             </div>
@@ -933,7 +1068,7 @@ export default function ChatNegotiationCenter() {
                         ['🔒 Escrow',       'All criteria satisfied. Settle on immediate escrow release via Stellar counter.'],
                         ['📝 Verify Docs',  'Uploaded the latest required trade credentials. Please verify and sign.'],
                       ].map(([label, text]) => (
-                        <button key={label} type="button" onClick={() => setReplyText(text)}
+                        <button key={label} type="button" onClick={() => setReplyText(prev => prev ? prev : text)}
                           className="px-3 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-full text-[10px] font-bold text-slate-700 whitespace-nowrap cursor-pointer transition-all">
                           {label}
                         </button>
@@ -1139,6 +1274,129 @@ export default function ChatNegotiationCenter() {
             )}
           </div>
         </div>
+
+        {/* ── GROUP CREATION MODAL ──────────────────────────────────────── */}
+        {showGroupModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowGroupModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="bg-[#111c30] px-5 py-4 flex items-center justify-between">
+                <h3 className="font-extrabold text-white flex items-center gap-2 text-sm">
+                  <Users className="w-4 h-4" /> Create Group Chat
+                </h3>
+                <button onClick={() => setShowGroupModal(false)} className="text-white/60 hover:text-white cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-5">
+                {/* Group name */}
+                <div>
+                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider block mb-1.5">Group Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Manila Shipment Team"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-[#0058be] transition-all"
+                    value={groupName}
+                    onChange={e => setGroupName(e.target.value)}
+                    maxLength={60}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Member picker */}
+                <div>
+                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider block mb-1.5">
+                    Add Members
+                    {groupMemberIds.length > 0 && (
+                      <span className="ml-1.5 text-[#0058be]">({groupMemberIds.length} selected)</span>
+                    )}
+                  </label>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                    {networkMembers.length === 0 && allUsers.filter(u => u.id !== currentUser?.id && (u.kycStatus === 'VERIFIED' || u.kycStatus === 'SUBMITTED')).length === 0 ? (
+                      <p className="text-[11px] text-gray-400 text-center py-6">No verified members found.</p>
+                    ) : (
+                      allUsers
+                        .filter(u => u.id !== currentUser?.id && (u.kycStatus === 'VERIFIED' || u.kycStatus === 'SUBMITTED'))
+                        .map(member => {
+                          const checked = groupMemberIds.includes(member.id);
+                          const isTrusted = networkMembers.some(m => m.id === member.id && m.connectionStatus === 'ACCEPTED');
+                          return (
+                            <button
+                              key={member.id}
+                              type="button"
+                              onClick={() => setGroupMemberIds(prev =>
+                                prev.includes(member.id)
+                                  ? prev.filter(id => id !== member.id)
+                                  : [...prev, member.id]
+                              )}
+                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer
+                                ${ checked ? 'bg-blue-50' : 'hover:bg-gray-50' }
+                                border-b border-gray-100 last:border-b-0`}
+                            >
+                              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all
+                                ${ checked ? 'bg-[#0058be] border-[#0058be]' : 'border-gray-300' }`}>
+                                {checked && <span className="text-white text-[9px] font-black">✓</span>}
+                              </div>
+                              <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-[10px] text-slate-700 shrink-0">
+                                {getInitials(member.fullName)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-gray-900 truncate">{member.fullName}</p>
+                                <p className="text-[10px] text-gray-400 truncate">{member.companyName || member.jobRole.replace(/_/g, ' ')}</p>
+                              </div>
+                              {isTrusted && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-ocean-400 shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })
+                    )}
+                  </div>
+                </div>
+
+                {/* Selected chips — FIX #5: resolve from allUsers when member not in networkMembers */}
+                {groupMemberIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {groupMemberIds.map(id => {
+                      const m = networkMembers.find(nm => nm.id === id)
+                        ?? allUsers.find(u => u.id === id);
+                      if (!m) return null;
+                      return (
+                        <span key={id} className="flex items-center gap-1 bg-blue-50 border border-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded-full">
+                          {m.fullName.split(' ')[0]}
+                          <button type="button" onClick={() => setGroupMemberIds(prev => prev.filter(i => i !== id))} className="text-blue-400 hover:text-blue-700 cursor-pointer">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowGroupModal(false)}
+                    className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-600 font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateGroup}
+                    disabled={creatingGroup || !groupName.trim() || groupMemberIds.length === 0}
+                    className="flex-1 bg-[#0058be] hover:bg-[#004395] disabled:opacity-50 text-white font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    {creatingGroup ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+                    {creatingGroup ? 'Creating...' : 'Create Group'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Lightbox */}
         {lightboxImage && (

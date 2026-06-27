@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
+import { requireAuth } from '@/lib/auth-guard';
 import { Message } from '@/types';
 
 async function isTradePartyOnlyThread(threadId: string): Promise<boolean> {
-  const [participants, allUsers] = await Promise.all([
+  const [participants, allUsers, thread] = await Promise.all([
     dbStore.getParticipantsForThread(threadId),
     dbStore.getUsers(),
+    dbStore.getThreadById(threadId),
   ]);
+
+  // FIX #8 — Group threads are never trade-party-only, regardless of member count
+  if (thread?.isGroup) return false;
+
   const participantUsers = participants
     .map(p => allUsers.find(u => u.id === p.userId))
     .filter(Boolean);
@@ -21,6 +27,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // #1 — Auth guard
+  const { user, errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const resolvedParams = await params;
     const { id: threadId } = resolvedParams;
@@ -59,6 +69,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // #1 — Auth guard
+  const { user, errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const resolvedParams = await params;
     const { id: threadId } = resolvedParams;
@@ -70,6 +84,24 @@ export async function POST(
 
     const body = await req.json();
     const { action, senderId, content, counterTerms } = body;
+
+    // FIX #1 — Verify senderId in body matches the authenticated JWT user
+    if (senderId && senderId !== user!.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden — senderId does not match your session.' },
+        { status: 403 }
+      );
+    }
+
+    // Verify senderId is actually a participant in this thread
+    const participants = await dbStore.getParticipantsForThread(threadId);
+    const participantIds = participants.map(p => p.userId);
+    if (senderId && !participantIds.includes(senderId)) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden — you are not a participant in this thread.' },
+        { status: 403 }
+      );
+    }
 
     if (action === 'CONVERT_TO_SHIPMENT' || action === 'COUNTER_TERMS') {
       const tradePartyOnly = await isTradePartyOnlyThread(threadId);
@@ -143,6 +175,23 @@ export async function POST(
     await dbStore.saveMessage(newMessage);
     await dbStore.saveThread({ ...thread, updatedAt: new Date().toISOString() });
 
+    // #5 — Fire MESSAGE_RECEIVED notification for each other participant
+    const otherParticipants = participants.filter(p => p.userId !== senderId);
+    await Promise.all(
+      otherParticipants.map(p =>
+        dbStore.saveNotification({
+          id: 'notif_' + Math.random().toString(36).substring(2, 9),
+          userId: p.userId,
+          type: 'MESSAGE_RECEIVED',
+          title: 'New message',
+          body: content ? content.slice(0, 80) : '📷 Attachment',
+          linkHref: `/messages?thread=${thread.id}`,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        })
+      )
+    );
+
     return NextResponse.json({ success: true, data: newMessage });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -153,6 +202,10 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // #1 — Auth guard
+  const { user, errorResponse } = await requireAuth(req);
+  if (errorResponse) return errorResponse;
+
   try {
     const resolvedParams = await params;
     const { id: threadId } = resolvedParams;
@@ -165,6 +218,19 @@ export async function DELETE(
     const thread = await dbStore.getThreadById(threadId);
     if (!thread) {
       return NextResponse.json({ success: false, error: 'Chat thread not found' }, { status: 404 });
+    }
+
+    // #2 — Verify the caller is the original sender of this message
+    const messages = await dbStore.getMessages(threadId);
+    const targetMessage = messages.find(m => m.id === messageId);
+    if (!targetMessage) {
+      return NextResponse.json({ success: false, error: 'Message not found.' }, { status: 404 });
+    }
+    if (targetMessage.senderId !== user!.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden — you can only unsend your own messages.' },
+        { status: 403 }
+      );
     }
 
     await dbStore.unsendMessage(messageId);

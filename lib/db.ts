@@ -247,6 +247,8 @@ function rowToThread(row: any): ChatThread {
     currentCounterPriceUSD: row.current_counter_price_usd != null ? Number(row.current_counter_price_usd) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    isGroup: row.is_group ?? false,
+    groupName: row.group_name ?? undefined,
   };
 }
 
@@ -259,6 +261,8 @@ function threadToRow(t: ChatThread): any {
     current_counter_price_usd: t.currentCounterPriceUSD ?? null,
     created_at: t.createdAt,
     updated_at: t.updatedAt,
+    is_group: t.isGroup ?? false,
+    group_name: t.groupName ?? null,
   };
 }
 
@@ -559,7 +563,8 @@ export const dbStore = {
   // ── Chat Threads ──────────────────────────────────────────────────────────
 
   getThreads: async (): Promise<ChatThread[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('chat_threads')
       .select('*')
       .order('updated_at', { ascending: false });
@@ -568,7 +573,8 @@ export const dbStore = {
   },
 
   getThreadById: async (id: string): Promise<ChatThread | undefined> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('chat_threads')
       .select('*')
       .eq('id', id)
@@ -578,7 +584,8 @@ export const dbStore = {
   },
 
   saveThread: async (thread: ChatThread): Promise<ChatThread> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('chat_threads')
       .upsert(threadToRow(thread), { onConflict: 'id' })
       .select()
@@ -590,13 +597,15 @@ export const dbStore = {
   // ── Chat Participants ─────────────────────────────────────────────────────
 
   getParticipants: async (): Promise<ChatParticipant[]> => {
-    const { data, error } = await supabase.from('chat_participants').select('*');
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.from('chat_participants').select('*');
     assertNoError(error, 'getParticipants');
     return (data ?? []).map(rowToParticipant);
   },
 
   getParticipantsForThread: async (threadId: string): Promise<ChatParticipant[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('chat_participants')
       .select('*')
       .eq('thread_id', threadId);
@@ -605,7 +614,8 @@ export const dbStore = {
   },
 
   saveParticipant: async (participant: ChatParticipant): Promise<ChatParticipant> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('chat_participants')
       .upsert(participantToRow(participant), { onConflict: 'thread_id,user_id' })
       .select()
@@ -617,7 +627,8 @@ export const dbStore = {
   // ── Messages ──────────────────────────────────────────────────────────────
 
   getMessages: async (threadId?: string): Promise<Message[]> => {
-    let query = supabase.from('messages').select('*').order('created_at');
+    const admin = getSupabaseAdmin();
+    let query = admin.from('messages').select('*').order('created_at');
     if (threadId) {
       query = query.eq('thread_id', threadId);
     }
@@ -627,7 +638,8 @@ export const dbStore = {
   },
 
   saveMessage: async (msg: Message): Promise<Message> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('messages')
       .upsert(messageToRow(msg), { onConflict: 'id' })
       .select()
@@ -637,11 +649,30 @@ export const dbStore = {
   },
 
   unsendMessage: async (messageId: string): Promise<void> => {
-    const { error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
       .from('messages')
       .update({ is_unsent: true, content: 'This message was unsent.' })
       .eq('id', messageId);
     assertNoError(error, 'unsendMessage');
+  },
+
+  /** #8 — Batch fetch the most recent message per thread (fixes N+1 in GET /threads) */
+  getLastMessagePerThread: async (threadIds: string[]): Promise<Record<string, Message>> => {
+    if (!threadIds.length) return {};
+    const admin = getSupabaseAdmin();
+    // Fetch all messages for these threads ordered oldest→newest, then keep the last per thread
+    const { data, error } = await admin
+      .from('messages')
+      .select('*')
+      .in('thread_id', threadIds)
+      .order('created_at', { ascending: true });
+    assertNoError(error, 'getLastMessagePerThread');
+    const result: Record<string, Message> = {};
+    for (const row of data ?? []) {
+      result[row.thread_id] = rowToMessage(row);
+    }
+    return result;
   },
 
   // ── BOC Document Vault Folders ────────────────────────────────────────────
@@ -732,7 +763,8 @@ export const dbStore = {
   // ── Notifications ─────────────────────────────────────────────────────────
 
   getNotificationsForUser: async (userId: string): Promise<AppNotification[]> => {
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
@@ -762,7 +794,8 @@ export const dbStore = {
       is_read:    n.isRead,
       created_at: n.createdAt,
     };
-    const { data, error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from('notifications')
       .upsert(row, { onConflict: 'id' })
       .select()
@@ -781,7 +814,8 @@ export const dbStore = {
   },
 
   markNotificationRead: async (notificationId: string): Promise<void> => {
-    const { error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
       .from('notifications')
       .update({ is_read: true })
       .eq('id', notificationId);
@@ -789,7 +823,8 @@ export const dbStore = {
   },
 
   markAllNotificationsRead: async (userId: string): Promise<void> => {
-    const { error } = await supabase
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
       .from('notifications')
       .update({ is_read: true })
       .eq('user_id', userId)
