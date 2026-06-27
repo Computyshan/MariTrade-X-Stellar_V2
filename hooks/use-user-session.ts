@@ -98,7 +98,7 @@ export const useUserSession = create<UserSessionState>((set, get) => ({
   },
 
   refreshAllUsers: async () => {
-    const res = await fetch('/api/users');
+    const res = await authFetch('/api/users');
     const json = await res.json();
     if (json.success) set({ allUsers: json.data });
   },

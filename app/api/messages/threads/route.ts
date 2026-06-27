@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   // CRITICAL FIX: authenticate every request
-  const { errorResponse } = await requireAuth(req);
+  const { user, errorResponse } = await requireAuth(req);
   if (errorResponse) return errorResponse;
 
   try {

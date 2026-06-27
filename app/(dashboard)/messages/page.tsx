@@ -19,7 +19,6 @@ import {
   Lock,
   ShieldCheck,
   Paperclip,
-  Bell,
   User,
   Users,
   Handshake,
@@ -35,6 +34,10 @@ import {
   ChevronRight,
   AlertCircle,
   Plus,
+  ExternalLink,
+  Building2,
+  Phone,
+  MapPin,
 } from 'lucide-react';
 import { ChatThread, Message, User as UserType, JobRole } from '@/types';
 
@@ -139,6 +142,9 @@ export default function ChatNegotiationCenter() {
   const [groupName, setGroupName]               = useState('');
   const [groupMemberIds, setGroupMemberIds]     = useState<string[]>([]);
   const [creatingGroup, setCreatingGroup]       = useState(false);
+
+  // Profile popover
+  const [showProfilePopover, setShowProfilePopover] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef   = useRef<HTMLInputElement>(null);
@@ -534,68 +540,190 @@ export default function ChatNegotiationCenter() {
 
           <div className="flex items-center gap-2">
             {/* Deal checklist — Trade Party threads only */}
-            {isTradePartyThread && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowChecklistPopover(p => !p)}
-                  className="relative bg-white border border-gray-200 hover:border-gray-300 p-1.5 rounded-lg flex items-center justify-center text-gray-600 cursor-pointer active:scale-95 transition-all"
-                  title="View Deal Checklist"
-                >
-                  <ClipboardList className="w-4 h-4 text-gray-500" />
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#ba1a1a] text-[9px] text-white flex items-center justify-center rounded-full font-bold">
-                    {activeThread?.status === 'DEAL_AGREED' ? '0' : '2'}
-                  </span>
-                </button>
-                {showChecklistPopover && (
-                  <div className="absolute right-0 mt-2.5 w-80 bg-white shadow-2xl rounded-xl border border-gray-200 z-50 overflow-hidden">
-                    <div className="p-3 bg-[#111c30] flex items-center justify-between text-white">
-                      <h5 className="font-extrabold flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-mono">
-                        <ClipboardList className="w-3.5 h-3.5" /> Deal Checklist
-                      </h5>
-                      <button onClick={() => setShowChecklistPopover(false)} className="text-white hover:text-red-400 cursor-pointer">
-                        <X className="w-4 h-4" />
-                      </button>
+            {isTradePartyThread && activeThread && (() => {
+              const isDealAgreed    = activeThread.status === 'DEAL_AGREED';
+              const isCounterOffer  = activeThread.status === 'COUNTER_OFFER';
+              const hasPrice        = activeThread.currentCounterPriceUSD != null;
+              const hasCargo        = !!(activeThread.cargoDescription?.trim());
+              const stepsTotal      = 4;
+              const stepsDone       = [true, hasPrice || hasCargo, isCounterOffer || isDealAgreed, isDealAgreed].filter(Boolean).length;
+              const pct             = Math.round((stepsDone / stepsTotal) * 100);
+              const pendingCount    = isDealAgreed ? 0 : stepsTotal - stepsDone;
+
+              const step = (done: boolean, label: string, sub: string) => (
+                <div className="flex gap-2.5 items-start">
+                  <div className={`shrink-0 mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center text-[9px] font-extrabold transition-all
+                    ${done ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-300 text-transparent'}`}>
+                    {done ? '✓' : ''}
+                  </div>
+                  <div>
+                    <p className={`font-bold text-[11px] ${done ? 'text-gray-900' : 'text-gray-400'}`}>{label}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{sub}</p>
+                  </div>
+                </div>
+              );
+
+              return (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowChecklistPopover(p => !p)}
+                    className="relative bg-white border border-gray-200 hover:border-gray-300 p-1.5 rounded-lg flex items-center justify-center text-gray-600 cursor-pointer active:scale-95 transition-all"
+                    title="View Deal Checklist"
+                  >
+                    <ClipboardList className="w-4 h-4 text-gray-500" />
+                    {pendingCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#ba1a1a] text-[9px] text-white flex items-center justify-center rounded-full font-bold">
+                        {pendingCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {showChecklistPopover && (
+                    <div className="absolute right-0 mt-2.5 w-80 bg-white shadow-2xl rounded-xl border border-gray-200 z-50 overflow-hidden">
+                      <div className="p-3 bg-[#111c30] flex items-center justify-between text-white">
+                        <h5 className="font-extrabold flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-mono">
+                          <ClipboardList className="w-3.5 h-3.5" /> Deal Checklist
+                        </h5>
+                        <button onClick={() => setShowChecklistPopover(false)} className="text-white hover:text-red-400 cursor-pointer">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Cargo summary if available */}
+                      {(hasPrice || hasCargo) && (
+                        <div className="px-4 pt-3 pb-2 bg-slate-50 border-b border-gray-100">
+                          {hasCargo && (
+                            <p className="text-[10px] text-gray-600 font-semibold truncate">📦 {activeThread.cargoDescription}</p>
+                          )}
+                          {hasPrice && (
+                            <p className="text-[11px] font-black text-[#0058be] font-mono mt-0.5">
+                              ${activeThread.currentCounterPriceUSD!.toLocaleString()} USDC
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="p-4 space-y-3">
+                        {step(true,
+                          'Deal Initiated',
+                          'Conversation opened between Trade Parties')}
+                        {step(hasPrice || hasCargo,
+                          'Terms Proposed',
+                          hasPrice || hasCargo
+                            ? `${(activeThread.currentCounterPriceUSD ?? 0).toLocaleString()} USDC · ${activeThread.cargoDescription ?? 'cargo described'}`
+                            : 'No counter offer submitted yet')}
+                        {step(isCounterOffer || isDealAgreed,
+                          'Counter Offer Active',
+                          isCounterOffer
+                            ? 'Awaiting counterparty acceptance'
+                            : isDealAgreed
+                              ? 'Terms were agreed'
+                              : 'Use NEGOTIATE to submit terms')}
+                        {step(isDealAgreed,
+                          'Escrow Secured',
+                          isDealAgreed
+                            ? `${(activeThread.currentCounterPriceUSD ?? 0).toLocaleString()} USDC locked in Stellar Vault`
+                            : 'Accept final terms to lock escrow')}
+
+                        <div className="pt-2 border-t border-gray-100">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[9px] font-bold text-gray-400 uppercase font-mono">Progress</span>
+                            <span className="text-[9px] font-black text-[#0058be] font-mono">{pct}%</span>
+                          </div>
+                          <div className="bg-gray-100 h-1.5 w-full rounded-full overflow-hidden">
+                            <div
+                              className="bg-[#0058be] h-full rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          {isDealAgreed && (
+                            <p className="text-center text-[9px] font-extrabold mt-2 text-green-600 uppercase font-mono tracking-wider">
+                              ✓ Deal Complete — Escrow Active
+                            </p>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="p-4 space-y-3 text-xs">
-                      <div className="flex gap-2">
-                        <div className="shrink-0 w-4 h-4 rounded border-2 border-green-500 bg-green-50 flex items-center justify-center text-[9px] text-green-600 font-extrabold">✓</div>
-                        <div>
-                          <p className="font-bold text-gray-950 text-[11px]">Bill of Lading Draft</p>
-                          <p className="text-[10px] text-gray-500">Confirmed by Exporter</p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* My Profile button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setShowProfilePopover(p => !p); setShowChecklistPopover(false); }}
+                className="p-1.5 border border-gray-200 hover:border-[#0058be] rounded-lg text-gray-500 hover:text-[#0058be] bg-white transition-all cursor-pointer active:scale-95"
+                title="My Profile"
+              >
+                <User className="w-4 h-4" />
+              </button>
+
+              {showProfilePopover && currentUser && (
+                <div className="absolute right-0 mt-2.5 w-72 bg-white shadow-2xl rounded-xl border border-gray-200 z-50 overflow-hidden">
+                  <div className="p-4 bg-[#111c30] flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-black text-sm text-white shrink-0">
+                      {getInitials(currentUser.fullName)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-white text-xs truncate">{currentUser.fullName}</p>
+                      <p className="text-[10px] text-[#818ea1] truncate">{currentUser.email}</p>
+                    </div>
+                    <button onClick={() => setShowProfilePopover(false)} className="ml-auto text-white/40 hover:text-white cursor-pointer shrink-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="p-3 space-y-2">
+                    {/* Role badge */}
+                    <div className="flex items-center gap-2 px-1">
+                      <span className={`text-[9px] px-2 py-0.5 font-extrabold rounded border uppercase tracking-wide ${getRoleColor(currentUser.jobRole)}`}>
+                        {JOB_ROLE_LABELS[currentUser.jobRole] ?? currentUser.jobRole.replace(/_/g, ' ')}
+                      </span>
+                      {currentUser.kycStatus === 'VERIFIED' && (
+                        <span className="flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded">
+                          <ShieldCheck className="w-2.5 h-2.5" /> KYC Verified
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Details */}
+                    <div className="space-y-1.5 px-1">
+                      {currentUser.companyName && (
+                        <div className="flex items-center gap-2 text-[10px] text-gray-600">
+                          <Building2 className="w-3 h-3 text-gray-400 shrink-0" />
+                          <span className="truncate">{currentUser.companyName}</span>
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <div className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center text-[9px] font-extrabold
-                          ${activeThread?.status === 'DEAL_AGREED' ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-300'}`}>
-                          {activeThread?.status === 'DEAL_AGREED' ? '✓' : ''}
+                      )}
+                      {currentUser.contactNumber && (
+                        <div className="flex items-center gap-2 text-[10px] text-gray-600">
+                          <Phone className="w-3 h-3 text-gray-400 shrink-0" />
+                          <span>{currentUser.contactNumber}</span>
                         </div>
-                        <div>
-                          <p className="font-bold text-gray-950 text-[11px]">Escrow Account Allocation</p>
-                          <p className="text-[10px] text-gray-500">
-                            {activeThread?.status === 'DEAL_AGREED' ? 'Secured and Synced' : 'Pending Importer Approval'}
-                          </p>
+                      )}
+                      {currentUser.fullAddress && (
+                        <div className="flex items-center gap-2 text-[10px] text-gray-600">
+                          <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
+                          <span className="truncate">{currentUser.fullAddress}</span>
                         </div>
-                      </div>
-                      <div className="pt-2 border-t border-gray-100">
-                        <div className="bg-gray-100 h-1.5 w-full rounded-full overflow-hidden">
-                          <div className="bg-[#0058be] h-full transition-all" style={{ width: activeThread?.status === 'DEAL_AGREED' ? '100%' : '50%' }} />
-                        </div>
-                        <p className="text-right text-[9px] font-bold mt-1 text-[#0058be] uppercase font-mono">
-                          {activeThread?.status === 'DEAL_AGREED' ? '100% Completed' : '50% Progress'}
-                        </p>
-                      </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-2">
+                      <Link
+                        href="/profile"
+                        onClick={() => setShowProfilePopover(false)}
+                        className="flex items-center justify-center gap-1.5 w-full bg-[#0058be] hover:bg-[#004395] text-white font-bold py-2 rounded-lg text-[11px] transition-all"
+                      >
+                        <ExternalLink className="w-3 h-3" /> View Full Profile
+                      </Link>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
-            <button className="p-1.5 border border-gray-200 hover:border-gray-300 rounded-lg text-gray-500 bg-white">
-              <Bell className="w-4 h-4" />
-            </button>
-            <button className="p-1.5 border border-gray-200 hover:border-gray-300 rounded-lg text-gray-500 bg-white">
-              <User className="w-4 h-4" />
-            </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -1103,6 +1231,14 @@ export default function ChatNegotiationCenter() {
                           placeholder="Type your message..."
                           value={replyText}
                           onChange={e => setReplyText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              if (replyText.trim() || selectedImage) {
+                                handleSendMessage(e as any);
+                              }
+                            }
+                          }}
                         />
                       </div>
                       <button
@@ -1194,17 +1330,20 @@ export default function ChatNegotiationCenter() {
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-[11px] font-mono">$</span>
                               <input
                                 type="number"
-                                className="w-full bg-white border border-gray-200 rounded-xl py-2 pl-6 pr-3 text-[11px] font-mono font-bold focus:border-gray-400 focus:outline-none"
+                                className="w-full bg-white border border-gray-200 rounded-xl py-2 pl-6 pr-3 text-[11px] font-mono font-bold focus:border-gray-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                 value={proposedPrice}
                                 onChange={e => setProposedPrice(e.target.value)}
+                                min="0"
+                                step="any"
+                                onKeyDown={e => e.key === 'Enter' && e.preventDefault()}
                               />
                             </div>
                           </div>
                           <div>
                             <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Negotiation Message</label>
                             <textarea
-                              rows={2}
-                              className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-[11px] text-gray-800 placeholder-gray-400 focus:border-gray-400 focus:outline-none resize-none"
+                              rows={3}
+                              className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-[11px] text-gray-800 placeholder-gray-400 focus:border-gray-400 focus:outline-none resize-y min-h-[64px]"
                               placeholder="e.g. Can we settle on intermediate port clearance standard terms..."
                               value={proposedDesc}
                               onChange={e => setProposedDesc(e.target.value)}
