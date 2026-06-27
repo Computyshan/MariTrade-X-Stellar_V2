@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useUserSession } from '@/hooks/use-user-session';
+import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import {
   CreditCard,
   Coins,
@@ -63,7 +63,7 @@ export default function EscrowLedger() {
   const fetchShipments = useCallback(async () => {
     try {
       setLoading(true);
-      const res  = await fetch('/api/shipments');
+      const res  = await authFetch('/api/shipments');
       const json = await res.json();
       if (json.success && json.data) setShipments(json.data);
     } catch {

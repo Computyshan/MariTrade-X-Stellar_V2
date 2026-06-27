@@ -85,17 +85,21 @@ export async function GET(
       );
     }
 
-    const [milestones, priorityMilestones, documents, assignments] =
+    const [milestones, priorityMilestones, documents, assignments, vaultFolder] =
       await Promise.all([
         dbStore.getMilestones(shipment.id),
         dbStore.getPriorityMilestones(shipment.id),
         dbStore.getDocuments(shipment.id),
         dbStore.getAssignmentsForShipment(shipment.id),
+        dbStore.getVaultFolderByShipmentId(shipment.id),
       ]);
+
+    // Only expose the vault folder ID (never the password)
+    const vaultFolderId = vaultFolder?.id ?? null;
 
     return NextResponse.json({
       success: true,
-      data: { shipment, milestones, priorityMilestones, documents, assignments },
+      data: { shipment, milestones, priorityMilestones, documents, assignments, vaultFolderId },
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

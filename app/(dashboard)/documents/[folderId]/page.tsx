@@ -3,7 +3,7 @@
 import React, { use, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useUserSession } from '@/hooks/use-user-session';
+import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import {
   FolderLock,
   FolderOpen,
@@ -21,78 +21,13 @@ import {
   Key,
   ChevronLeft,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { ShipmentDocument, ShipmentScope, ShipmentStatus } from '@/types';
 import { canAccessBOCDocuments, canDownloadDocuments } from '@/lib/permissions/documents';
 import { motion } from 'motion/react';
 
-// ── MOCK VAULT DATA (mirrors documents/page.tsx) ────────────────────────────────
-
-interface VaultFolder {
-  id: string;
-  referenceCode: string;
-  description: string;
-  originCountry: string;
-  destinationPort: string;
-  scope: ShipmentScope;
-  status: ShipmentStatus;
-  vaultPassword: string;
-  documents: ShipmentDocument[];
-  createdAt: string;
-}
-
-const MOCK_VAULT_FOLDERS: VaultFolder[] = [
-  {
-    id: 'folder-001',
-    referenceCode: 'MT-2026-00001',
-    description: 'Industrial Steel Coils & Fabricated Parts — Q1 Batch',
-    originCountry: 'Japan',
-    destinationPort: 'Manila South Harbor',
-    scope: 'OVERSEAS',
-    status: 'CUSTOMS_CLEARANCE',
-    vaultPassword: 'TKY2026',
-    createdAt: '2026-01-15T08:00:00Z',
-    documents: [
-      { id: 'doc-001-a', shipmentId: 'folder-001', fileName: 'BOC_Customs_Entry_Declaration_Signed.pdf', fileUrl: 'https://picsum.photos/seed/doc1a/800/600', version: 2, isLatest: true, uploadedById: 'charles-broker-id', createdAt: new Date(Date.now() - 36 * 3600000).toISOString() },
-      { id: 'doc-001-b', shipmentId: 'folder-001', fileName: 'Cargo_Manifest_Packing_List_Osaka.xlsx', fileUrl: 'https://picsum.photos/seed/doc1b/800/600', version: 1, isLatest: true, uploadedById: 'dav4d-exporter-id', createdAt: new Date(Date.now() - 72 * 3600000).toISOString() },
-      { id: 'doc-001-c', shipmentId: 'folder-001', fileName: 'Bill_of_Lading_Pacific_Ocean_Lines.pdf', fileUrl: 'https://picsum.photos/seed/doc1c/800/600', version: 1, isLatest: true, uploadedById: 'von-captain-id', createdAt: new Date(Date.now() - 48 * 3600000).toISOString() },
-      { id: 'doc-001-d', shipmentId: 'folder-001', fileName: 'Duties_Taxes_Official_Receipt_BOC.pdf', fileUrl: 'https://picsum.photos/seed/doc1d/800/600', version: 1, isLatest: true, uploadedById: 'charles-broker-id', createdAt: new Date(Date.now() - 12 * 3600000).toISOString() },
-    ],
-  },
-  {
-    id: 'folder-002',
-    referenceCode: 'MT-2026-00002',
-    description: 'Automotive Parts & Engine Components — Subic Batch',
-    originCountry: 'South Korea',
-    destinationPort: 'Subic Bay Freeport',
-    scope: 'OVERSEAS',
-    status: 'AT_PORT',
-    vaultPassword: 'SEL2026',
-    createdAt: '2026-02-03T10:30:00Z',
-    documents: [
-      { id: 'doc-002-a', shipmentId: 'folder-002', fileName: 'Subic_Dry_Harbour_Gated_Release_Permit.pdf', fileUrl: 'https://picsum.photos/seed/doc2a/800/600', version: 1, isLatest: true, uploadedById: 'jed-port-id', createdAt: new Date(Date.now() - 12 * 3600000).toISOString() },
-      { id: 'doc-002-b', shipmentId: 'folder-002', fileName: 'Commercial_Invoice_Hyundai_Parts_USD.pdf', fileUrl: 'https://picsum.photos/seed/doc2b/800/600', version: 1, isLatest: true, uploadedById: 'shaun-importer-id', createdAt: new Date(Date.now() - 96 * 3600000).toISOString() },
-    ],
-  },
-  {
-    id: 'folder-003',
-    referenceCode: 'MT-2026-00003',
-    description: 'Fresh Produce — Nationwide Cold Chain (Davao-Cebu)',
-    originCountry: 'Philippines',
-    destinationPort: 'Cebu Baseport',
-    scope: 'NATIONWIDE',
-    status: 'IN_TRANSIT',
-    vaultPassword: 'DAV2026',
-    createdAt: '2026-02-20T14:00:00Z',
-    documents: [
-      { id: 'doc-003-a', shipmentId: 'folder-003', fileName: 'Phytosanitary_Certificate_DA_Davao.pdf', fileUrl: 'https://picsum.photos/seed/doc3a/800/600', version: 1, isLatest: true, uploadedById: 'shaun-importer-id', createdAt: new Date(Date.now() - 18 * 3600000).toISOString() },
-      { id: 'doc-003-b', shipmentId: 'folder-003', fileName: 'Trucking_Waybill_Manila_Heavy_Movers.pdf', fileUrl: 'https://picsum.photos/seed/doc3b/800/600', version: 1, isLatest: true, uploadedById: 'reginald-trucker-id', createdAt: new Date(Date.now() - 6 * 3600000).toISOString() },
-      { id: 'doc-003-c', shipmentId: 'folder-003', fileName: 'Delivery_Receipt_Cold_Chain_Manifest.xlsx', fileUrl: 'https://picsum.photos/seed/doc3c/800/600', version: 2, isLatest: true, uploadedById: 'quinn-warehouse-id', createdAt: new Date(Date.now() - 3 * 3600000).toISOString() },
-    ],
-  },
-];
-
-// ── STATUS CONFIG ───────────────────────────────────────────────────────────────
+// ── STATUS CONFIG ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<ShipmentStatus, { label: string; className: string }> = {
   PENDING_EXPORTER:  { label: 'Pending Exporter', className: 'bg-gray-100 text-gray-600' },
@@ -107,6 +42,29 @@ const STATUS_CONFIG: Record<ShipmentStatus, { label: string; className: string }
   DISPUTED:          { label: 'Disputed',           className: 'bg-coral-50 text-coral-400' },
   CANCELLED:         { label: 'Cancelled',          className: 'bg-gray-100 text-gray-500' },
 };
+
+// ── DATA SHAPE (API-returned, password always stripped) ──────────────────────
+
+interface FolderDetail {
+  id: string;
+  shipmentId: string;
+  referenceCode: string;
+  folderName: string;
+  createdByUserId: string;
+  createdAt: string;
+  shipment: {
+    id: string;
+    referenceCode: string;
+    description: string;
+    originCountry: string;
+    destinationPort: string;
+    shipmentScope: ShipmentScope;
+    status: ShipmentStatus;
+  } | null;
+  documents: ShipmentDocument[];
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
 
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
@@ -128,7 +86,7 @@ function fileExtBadge(fileName: string) {
   return { ext, className: map[ext] ?? 'bg-gray-100 text-gray-500' };
 }
 
-// ── PAGE ────────────────────────────────────────────────────────────────────────
+// ── PAGE ─────────────────────────────────────────────────────────────────────
 
 type PageParams = { folderId: string };
 
@@ -137,24 +95,51 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
   const router = useRouter();
   const { currentUser } = useUserSession();
 
-  const folder = MOCK_VAULT_FOLDERS.find((f) => f.id === folderId) ?? null;
+  // ── API state ──
+  const [folder,   setFolder]   = useState<FolderDetail | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [fetchErr, setFetchErr] = useState('');
 
-  // Auth state
-  const [unlocked, setUnlocked]           = useState(false);
-  const [passwordInput, setPasswordInput] = useState('');
-  const [showPassword, setShowPassword]   = useState(false);
-  const [passwordError, setPasswordError] = useState('');
-  const [shakeForm, setShakeForm]         = useState(false);
+  // ── Auth state ──
+  const [unlocked,       setUnlocked]       = useState(false);
+  const [passwordInput,  setPasswordInput]  = useState('');
+  const [showPassword,   setShowPassword]   = useState(false);
+  const [passwordError,  setPasswordError]  = useState('');
+  const [verifying,      setVerifying]      = useState(false);
+  const [shakeForm,      setShakeForm]      = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // ── Fetch folder from API ──
   useEffect(() => {
-    if (!unlocked) setTimeout(() => inputRef.current?.focus(), 80);
-  }, [unlocked]);
+    async function load() {
+      setLoading(true);
+      setFetchErr('');
+      try {
+        const res  = await authFetch(`/api/vault/folders/${folderId}`);
+        const json = await res.json();
+        if (json.success) {
+          setFolder(json.data);
+        } else {
+          setFetchErr(json.error ?? 'Folder not found.');
+        }
+      } catch {
+        setFetchErr('Network error — could not reach the server.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [folderId]);
 
-  // ── SESSION STILL LOADING ───────────────────────────────────────────────────
-  // currentUser is null until the Supabase session resolves on mount — render a
-  // lightweight loading state instead of touching currentUser.jobRole too early.
+  // Auto-focus the password field when the lock screen appears
+  useEffect(() => {
+    if (!unlocked && !loading && folder) {
+      setTimeout(() => inputRef.current?.focus(), 80);
+    }
+  }, [unlocked, loading, folder]);
+
+  // ── SESSION STILL LOADING ─────────────────────────────────────────────────
   if (!currentUser) {
     return (
       <DashboardLayout>
@@ -166,32 +151,53 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
     );
   }
 
-  const hasAccess  = canAccessBOCDocuments(currentUser.jobRole);
+  const hasAccess   = canAccessBOCDocuments(currentUser.jobRole);
   const canDownload = canDownloadDocuments(currentUser.jobRole);
 
-  // ── NOT FOUND ──────────────────────────────────────────────────────────────────
-  if (!folder) {
+  // ── LOADING ───────────────────────────────────────────────────────────────
+  if (loading) {
     return (
       <DashboardLayout>
-        <div className="bg-white border border-sand-200 p-8 rounded-2xl text-center space-y-4">
-          <AlertCircle className="w-12 h-12 text-coral-400 mx-auto" />
-          <h2 className="text-lg font-bold text-maritime-900">Vault Folder Not Found</h2>
-          <p className="text-xs text-gray-500">
-            No BOC vault folder exists with ID:{' '}
-            <code className="font-mono bg-sand-100 px-1 rounded">{folderId}</code>
-          </p>
-          <button
-            onClick={() => router.push('/documents')}
-            className="bg-maritime-400 text-white text-xs font-bold px-4 py-2 rounded-lg"
-          >
-            Back to Document Vault
-          </button>
+        <div className="flex items-center justify-center py-24 text-gray-400 text-xs gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin text-maritime-400" />
+          Loading vault folder…
         </div>
       </DashboardLayout>
     );
   }
 
-  // ── NO ROLE ACCESS ─────────────────────────────────────────────────────────────
+  // ── FETCH ERROR / NOT FOUND ───────────────────────────────────────────────
+  if (fetchErr || !folder) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-4">
+          <button
+            onClick={() => router.push('/documents')}
+            className="flex items-center gap-1.5 text-xs text-maritime-400 hover:text-maritime-900 font-medium"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to BOC Document Vault
+          </button>
+          <div className="bg-white border border-sand-200 p-8 rounded-2xl text-center space-y-4">
+            <AlertCircle className="w-12 h-12 text-coral-400 mx-auto" />
+            <h2 className="text-lg font-bold text-maritime-900">Vault Folder Not Found</h2>
+            <p className="text-xs text-gray-500">
+              {fetchErr || `No BOC vault folder found with ID: `}
+              {!fetchErr && <code className="font-mono bg-sand-100 px-1 rounded">{folderId}</code>}
+            </p>
+            <button
+              onClick={() => router.push('/documents')}
+              className="bg-maritime-400 text-white text-xs font-bold px-4 py-2 rounded-lg"
+            >
+              Back to Document Vault
+            </button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ── NO ROLE ACCESS ────────────────────────────────────────────────────────
   if (!hasAccess) {
     return (
       <DashboardLayout>
@@ -203,7 +209,6 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
             <ChevronLeft className="w-4 h-4" />
             Back to BOC Document Vault
           </button>
-
           <div className="bg-red-50 border border-red-200 p-10 rounded-2xl text-center space-y-4">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
               <Lock className="w-8 h-8 text-red-500" />
@@ -211,43 +216,55 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
             <h3 className="font-extrabold text-base text-red-950">BOC Vault — Access Restricted</h3>
             <p className="text-xs text-red-700 max-w-sm mx-auto leading-relaxed">
               Your active profile (<strong className="uppercase">{currentUser.jobRole}</strong>) does not have
-              clearance to access the Bureau of Customs Document Vault. Only Trade Party members and Customs Brokers
-              are authorized.
+              clearance to access the Bureau of Customs Document Vault.
             </p>
-            <div className="text-[11px] bg-white border border-sand-200 rounded-lg p-3 max-w-sm mx-auto text-gray-500 font-medium">
-              💡 Switch to <strong>Charles Solomon (CUSTOMS_BROKER)</strong> or{' '}
-              <strong>Tyshaun Louis (IMPORTER)</strong> via the toolbar above to access the vault.
-            </div>
           </div>
         </div>
       </DashboardLayout>
     );
   }
 
-  const statusCfg = STATUS_CONFIG[folder.status];
+  const statusCfg = folder.shipment ? STATUS_CONFIG[folder.shipment.status] : null;
 
-  function handlePasswordSubmit(e: React.FormEvent) {
+  // ── SERVER-SIDE PASSWORD VERIFICATION ────────────────────────────────────
+  async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (passwordInput === folder!.vaultPassword) {
-      setUnlocked(true);
-      setPasswordError('');
-    } else {
-      const next = failedAttempts + 1;
-      setFailedAttempts(next);
-      setPasswordError(
-        `Incorrect vault password.${next >= 3 ? ` ${next} failed attempts recorded.` : ' Please try again.'}`
-      );
-      setShakeForm(true);
-      setTimeout(() => setShakeForm(false), 500);
+    if (!passwordInput.trim() || verifying) return;
+
+    setVerifying(true);
+    setPasswordError('');
+    try {
+      const res  = await authFetch(`/api/vault/folders/${folderId}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'verify_password', password: passwordInput }),
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        setUnlocked(true);
+        setPasswordError('');
+      } else {
+        const next = failedAttempts + 1;
+        setFailedAttempts(next);
+        setPasswordError(
+          `Incorrect vault password.${next >= 3 ? ` ${next} failed attempts recorded.` : ' Please try again.'}`
+        );
+        setShakeForm(true);
+        setTimeout(() => setShakeForm(false), 500);
+      }
+    } catch {
+      setPasswordError('Network error — please try again.');
+    } finally {
+      setVerifying(false);
     }
   }
 
-  // ── PASSWORD GATE ──────────────────────────────────────────────────────────────
+  // ── PASSWORD GATE ─────────────────────────────────────────────────────────
   if (!unlocked) {
     return (
       <DashboardLayout>
         <div className="space-y-4 max-w-lg mx-auto">
-          {/* Back */}
           <button
             onClick={() => router.push('/documents')}
             className="flex items-center gap-1.5 text-xs text-maritime-400 hover:text-maritime-900 font-medium"
@@ -256,7 +273,6 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
             Back to BOC Document Vault
           </button>
 
-          {/* Vault unlock card */}
           <motion.div
             animate={{ x: shakeForm ? [0, -8, 8, -6, 6, -3, 3, 0] : 0 }}
             transition={shakeForm ? { duration: 0.4 } : {}}
@@ -276,20 +292,24 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
 
               {/* Folder summary */}
               <div className="bg-maritime-800/60 rounded-xl p-3 space-y-1.5 text-xs">
-                <p className="text-white font-semibold">{folder.description}</p>
-                <div className="flex flex-wrap items-center gap-3 text-maritime-300 text-[11px]">
-                  <span className="flex items-center gap-1">
-                    <Globe className="w-3 h-3" />
-                    {folder.originCountry} → {folder.destinationPort}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <FileText className="w-3 h-3" />
-                    {folder.documents.length} document{folder.documents.length !== 1 ? 's' : ''}
-                  </span>
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${statusCfg.className}`}>
-                    {statusCfg.label}
-                  </span>
-                </div>
+                <p className="text-white font-semibold">{folder.folderName}</p>
+                {folder.shipment && (
+                  <div className="flex flex-wrap items-center gap-3 text-maritime-300 text-[11px]">
+                    <span className="flex items-center gap-1">
+                      <Globe className="w-3 h-3" />
+                      {folder.shipment.originCountry} → {folder.shipment.destinationPort}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      {folder.documents.length} document{folder.documents.length !== 1 ? 's' : ''}
+                    </span>
+                    {statusCfg && (
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${statusCfg.className}`}>
+                        {statusCfg.label}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -300,8 +320,8 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
                   <Key className="w-6 h-6 text-maritime-400" />
                 </div>
                 <p className="text-xs text-gray-500 leading-relaxed max-w-xs mx-auto">
-                  Enter the vault password to access documents in this shipment folder. Passwords are managed by the
-                  Trade Party.
+                  Enter the vault password to access documents in this shipment folder.
+                  Passwords are set by the shipment owner at creation time.
                 </p>
               </div>
 
@@ -335,12 +355,6 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
                     {passwordError}
                   </div>
                 )}
-
-                {/* Demo hint */}
-                <div className="flex items-center gap-1.5 text-[10px] text-gray-400 bg-sand-50 border border-sand-100 rounded-lg px-3 py-2 font-mono">
-                  <Key className="w-3 h-3 text-maritime-400" />
-                  Demo password: <strong className="text-ocean-600">{folder.vaultPassword}</strong>
-                </div>
               </div>
 
               <div className="flex gap-3">
@@ -353,11 +367,13 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
                 </button>
                 <button
                   type="submit"
-                  disabled={!passwordInput.trim()}
+                  disabled={!passwordInput.trim() || verifying}
                   className="flex-1 bg-maritime-400 hover:bg-maritime-700 disabled:bg-maritime-100 disabled:text-maritime-300 text-white font-bold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
                 >
-                  <Unlock className="w-4 h-4" />
-                  Unlock Folder
+                  {verifying
+                    ? <><RefreshCw className="w-4 h-4 animate-spin" /> Verifying…</>
+                    : <><Unlock className="w-4 h-4" /> Unlock Folder</>
+                  }
                 </button>
               </div>
 
@@ -372,7 +388,7 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
     );
   }
 
-  // ── UNLOCKED — DOCUMENT LIST ───────────────────────────────────────────────────
+  // ── UNLOCKED — DOCUMENT LIST ──────────────────────────────────────────────
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -388,18 +404,24 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
               Back to BOC Document Vault
             </button>
             <h1 className="text-3xl font-black text-maritime-900 tracking-tight font-mono">{folder.referenceCode}</h1>
-            <p className="text-xs text-gray-500 font-semibold">{folder.description}</p>
+            <p className="text-xs text-gray-500 font-semibold">{folder.folderName}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
-            <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] ${statusCfg.className}`}>
-              {statusCfg.label}
-            </span>
-            <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] ${
-              folder.scope === 'OVERSEAS' ? 'bg-maritime-50 text-maritime-400' : 'bg-ocean-50 text-ocean-600'
-            }`}>
-              {folder.scope}
-            </span>
+            {statusCfg && folder.shipment && (
+              <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] ${statusCfg.className}`}>
+                {statusCfg.label}
+              </span>
+            )}
+            {folder.shipment && (
+              <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] ${
+                folder.shipment.shipmentScope === 'OVERSEAS'
+                  ? 'bg-maritime-50 text-maritime-400'
+                  : 'bg-ocean-50 text-ocean-600'
+              }`}>
+                {folder.shipment.shipmentScope}
+              </span>
+            )}
             <div className="flex items-center gap-1.5 bg-ocean-50 border border-ocean-100 text-ocean-600 font-bold px-3 py-1.5 rounded-lg">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Vault Unlocked</span>
@@ -415,21 +437,23 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
         </div>
 
         {/* Folder meta strip */}
-        <div className="bg-white border border-sand-200 rounded-2xl p-4 flex flex-wrap gap-4 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5">
-            <Globe className="w-3.5 h-3.5 text-gray-400" />
-            <strong className="text-gray-700">{folder.originCountry}</strong> →{' '}
-            <strong className="text-gray-700">{folder.destinationPort}</strong>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <FileText className="w-3.5 h-3.5 text-gray-400" />
-            {folder.documents.length} document{folder.documents.length !== 1 ? 's' : ''}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-gray-400" />
-            Created {timeAgo(folder.createdAt)}
-          </span>
-        </div>
+        {folder.shipment && (
+          <div className="bg-white border border-sand-200 rounded-2xl p-4 flex flex-wrap gap-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-gray-400" />
+              <strong className="text-gray-700">{folder.shipment.originCountry}</strong> →{' '}
+              <strong className="text-gray-700">{folder.shipment.destinationPort}</strong>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-gray-400" />
+              {folder.documents.length} document{folder.documents.length !== 1 ? 's' : ''}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-gray-400" />
+              Created {timeAgo(folder.createdAt)}
+            </span>
+          </div>
+        )}
 
         {/* Security notice */}
         <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-3 flex items-start gap-2.5 text-xs text-ocean-700">
@@ -442,7 +466,7 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
         {/* Document list */}
         {folder.documents.length === 0 ? (
           <div className="text-center py-16 bg-white border border-sand-200 rounded-2xl text-gray-400 text-xs font-mono">
-            NO ENCRYPTED CARGO FILES IN THIS VAULT FOLDER.
+            NO ENCRYPTED CARGO FILES IN THIS VAULT FOLDER YET.
           </div>
         ) : (
           <div className="bg-white border border-sand-200 rounded-2xl overflow-hidden shadow-sm">
@@ -467,10 +491,6 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
                           )}
                           <span className="text-gray-300">•</span>
                           <span>Uploaded {timeAgo(doc.createdAt)}</span>
-                          <span className="text-gray-300">•</span>
-                          <span>
-                            By: <strong className="text-gray-600">{doc.uploadedById.substring(0, 12)}</strong>
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -478,7 +498,8 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
                     {canDownload && (
                       <a
                         href={doc.fileUrl}
-                        download
+                        target="_blank"
+                        rel="noreferrer"
                         className="flex items-center gap-1.5 text-xs font-bold bg-white hover:bg-sand-50 border border-sand-200 text-gray-600 px-3 py-2 rounded-xl transition-colors shrink-0"
                       >
                         <Download className="w-3.5 h-3.5 text-gray-400" />

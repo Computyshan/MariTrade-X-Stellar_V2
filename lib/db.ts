@@ -814,6 +814,17 @@ export const dbStore = {
     return (data ?? []).map(rowToVaultFolder);
   },
 
+  getVaultFolderById: async (id: string): Promise<VaultFolder | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('vault_folders')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    assertNoError(error, 'getVaultFolderById');
+    return data ? rowToVaultFolder(data) : undefined;
+  },
+
   getVaultFolderByShipmentId: async (shipmentId: string): Promise<VaultFolder | undefined> => {
     const admin = getSupabaseAdmin();
     const { data, error } = await admin

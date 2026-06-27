@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useUserSession } from '@/hooks/use-user-session';
+import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import { 
   Ship, 
   Coins, 
@@ -86,11 +86,11 @@ export default function DashboardHome() {
   const fetchData = async () => {
     try {
       setDataLoading(true);
-      const shipRes = await fetch('/api/shipments');
+      const shipRes = await authFetch('/api/shipments');
       const shipResult = await shipRes.json();
       if (shipResult.success) setShipments(shipResult.data);
 
-      const msRes = await fetch('/api/milestones/feed');
+      const msRes = await authFetch('/api/milestones/feed');
       const msResult = await msRes.json();
       setMilestones(msResult.success ? msResult.data : []);
     } catch (err) {
@@ -135,7 +135,7 @@ export default function DashboardHome() {
     const destination = aiDestinationPort || selectedShip?.destinationPort || 'Port of Manila';
     try {
       setEstimating(true);
-      const res = await fetch('/api/gemini/estimate', {
+      const res = await authFetch('/api/gemini/estimate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -170,7 +170,7 @@ export default function DashboardHome() {
 
     try {
       setIsLogging(true);
-      const res = await fetch(`/api/shipments/${selectedShipmentLogId}`, {
+      const res = await authFetch(`/api/shipments/${selectedShipmentLogId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -6,7 +6,7 @@ import { Shipment, PriorityMilestone, ShipmentAssignment, VaultFolder } from '@/
 
 export async function GET(req: NextRequest) {
   // CRITICAL FIX: authenticate every request
-  const { errorResponse } = await requireAuth(req);
+  const { user, errorResponse } = await requireAuth(req);
   if (errorResponse) return errorResponse;
 
   try {
@@ -16,7 +16,21 @@ export async function GET(req: NextRequest) {
       dbStore.getAssignments(),
     ]);
 
-    const decoratedList = list.map(s => {
+    // Scope to shipments the requester is actually party to: importer,
+    // exporter, or an assigned logistics user. dbStore uses the Supabase
+    // service-role client (bypasses RLS), so this filtering has to happen
+    // here rather than relying on the "shipments_involved_users" RLS policy.
+    const myUserId = user!.id;
+    const myAssignedShipmentIds = new Set(
+      assignments.filter(a => a.userId === myUserId).map(a => a.shipmentId)
+    );
+    const myShipments = list.filter(s =>
+      s.importerId === myUserId ||
+      s.exporterId === myUserId ||
+      myAssignedShipmentIds.has(s.id)
+    );
+
+    const decoratedList = myShipments.map(s => {
       const importer = users.find(u => u.id === s.importerId) || null;
       const exporter = s.exporterId ? (users.find(u => u.id === s.exporterId) || null) : null;
       const shipmentAssignments = assignments

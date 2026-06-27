@@ -165,20 +165,31 @@ export default function DocumentVaultPage() {
     }
   }
 
-  function handlePasswordSubmit(e: React.FormEvent) {
+  async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!modalTarget) return;
 
-    if (passwordInput === modalTarget.password) {
-      setUnlockedIds(prev => new Set([...prev, modalTarget.id]));
-      setExpandedIds(prev => new Set([...prev, modalTarget.id]));
-      setModalTarget(null);
-    } else {
-      const next = (attempts[modalTarget.id] ?? 0) + 1;
-      setAttempts(prev => ({ ...prev, [modalTarget.id]: next }));
-      setPasswordError(`Incorrect vault password.${next >= 3 ? ` ${next} failed attempts recorded.` : ' Please try again.'}`);
-      setShakeModal(true);
-      setTimeout(() => setShakeModal(false), 500);
+    try {
+      const res = await authFetch(`/api/vault/folders/${modalTarget.id}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'verify_password', password: passwordInput }),
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        setUnlockedIds(prev => new Set([...prev, modalTarget.id]));
+        setExpandedIds(prev => new Set([...prev, modalTarget.id]));
+        setModalTarget(null);
+      } else {
+        const next = (attempts[modalTarget.id] ?? 0) + 1;
+        setAttempts(prev => ({ ...prev, [modalTarget.id]: next }));
+        setPasswordError(`Incorrect vault password.${next >= 3 ? ` ${next} failed attempts recorded.` : ' Please try again.'}`);
+        setShakeModal(true);
+        setTimeout(() => setShakeModal(false), 500);
+      }
+    } catch {
+      setPasswordError('Network error — please try again.');
     }
   }
 

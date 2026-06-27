@@ -56,6 +56,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     priorityMilestones: PriorityMilestone[];
     documents: ShipmentDocument[];
     assignments: any[];
+    vaultFolderId: string | null;
   } | null>(null);
 
   const [errorText, setErrorText] = useState('');
@@ -68,6 +69,11 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const [chainCanRelease, setChainCanRelease] = useState<boolean | null>(null);
   const [checkingRelease, setCheckingRelease] = useState(false);
   const [bocAuthOpen, setBocAuthOpen] = useState(false);
+  const [uploadOpen,    setUploadOpen]    = useState(false);
+  const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadFileUrl,  setUploadFileUrl]  = useState('');
+  const [uploading,     setUploading]     = useState(false);
+  const [uploadError,   setUploadError]   = useState('');
 
   if (sessionLoading || !currentUser) {
     return (
@@ -232,7 +238,47 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const handleUploadBOCClick = () => {
     const hasAccess = canAccessBOCDocuments(currentUser.jobRole);
     if (!hasAccess) { setBocAuthOpen(true); return; }
-    router.push(`/documents?folder=${shipmentId}`);
+    setUploadOpen(true);
+  };
+
+  const handleOpenVaultFolder = () => {
+    if (data?.vaultFolderId) {
+      router.push(`/documents/${data.vaultFolderId}`);
+    } else {
+      router.push('/documents');
+    }
+  };
+
+  const handleUploadDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data || !uploadFileName.trim() || !uploadFileUrl.trim()) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      const res = await authFetch(`/api/shipments/${data.shipment.id}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          action:       'UPLOAD_DOCUMENT',
+          fileName:     uploadFileName.trim(),
+          fileUrl:      uploadFileUrl.trim(),
+          uploadedById: currentUser.id,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setUploadOpen(false);
+        setUploadFileName('');
+        setUploadFileUrl('');
+        fetchDetails(); // refresh the document list
+      } else {
+        setUploadError(json.error || 'Upload failed.');
+      }
+    } catch {
+      setUploadError('Network error — please try again.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   if (loading) {
@@ -263,7 +309,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     );
   }
 
-  const { shipment, milestones, priorityMilestones, documents, assignments } = data;
+  const { shipment, milestones, priorityMilestones, documents, assignments, vaultFolderId } = data;
 
   // Decide release eligibility: prefer on-chain result, fall back to DB
   const releaseEligible = chainCanRelease !== null ? chainCanRelease : allPriorityCompleted;
@@ -539,7 +585,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
                     </div>
                   </div>
                   <div className="pt-2 border-t border-sand-200">
-                    <button onClick={handleUploadBOCClick} className="w-full flex items-center justify-center gap-1 text-[10px] font-bold text-maritime-400 hover:text-maritime-900 transition-colors">
+                    <button onClick={handleOpenVaultFolder} className="w-full flex items-center justify-center gap-1 text-[10px] font-bold text-maritime-400 hover:text-maritime-900 transition-colors">
                       <Eye className="w-3 h-3" /><span>View in Vault</span>
                     </button>
                   </div>
@@ -552,7 +598,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
         {documents.length > 0 && (
           <div className="flex items-center justify-between pt-1 border-t border-sand-100">
             <p className="text-[10px] text-gray-400 flex items-center gap-1"><Lock className="w-3 h-3" /> Downloads require BOC Vault authorization.</p>
-            <button onClick={handleUploadBOCClick} className="text-[10px] text-maritime-400 hover:text-maritime-900 font-bold flex items-center gap-1 transition-colors">
+            <button onClick={handleOpenVaultFolder} className="text-[10px] text-maritime-400 hover:text-maritime-900 font-bold flex items-center gap-1 transition-colors">
               <FolderLock className="w-3 h-3" /> Open Vault Folder
             </button>
           </div>
@@ -640,6 +686,82 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
           </div>
         </div>
       )}
+
+      {/* UPLOAD DOCUMENT MODAL */}
+      {uploadOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-sand-200 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-maritime-50 rounded-xl flex items-center justify-center shrink-0">
+                <Upload className="w-5 h-5 text-maritime-400" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-maritime-900">Upload BOC Document</h3>
+                <p className="text-[10px] text-gray-400 font-mono uppercase">{shipment.referenceCode}</p>
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-500 leading-normal">
+              Add a compliance document to this shipment&#39;s BOC vault folder. The file will appear in the vault and on this page.
+            </p>
+
+            {uploadError && (
+              <div className="bg-coral-50 border border-coral-200 text-coral-700 text-xs p-2.5 rounded-lg flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />{uploadError}
+              </div>
+            )}
+
+            <form onSubmit={handleUploadDocument} className="space-y-3 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-bold text-gray-700">File Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. BOC_Import_Declaration.pdf"
+                  className="w-full border border-sand-200 rounded-lg p-2 text-xs outline-none font-mono focus:border-maritime-400"
+                  value={uploadFileName}
+                  onChange={e => setUploadFileName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block font-bold text-gray-700">File URL</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://storage.example.com/file.pdf"
+                  className="w-full border border-sand-200 rounded-lg p-2 text-xs outline-none font-mono focus:border-maritime-400"
+                  value={uploadFileUrl}
+                  onChange={e => setUploadFileUrl(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setUploadFileUrl('https://picsum.photos/seed/boc_doc/800/600')}
+                  className="text-[10px] text-ocean-600 underline"
+                >
+                  Quick-attach sample document URL
+                </button>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 border border-sand-200 rounded-lg text-gray-500 font-bold"
+                  onClick={() => { setUploadOpen(false); setUploadError(''); setUploadFileName(''); setUploadFileUrl(''); }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploading || !uploadFileName.trim() || !uploadFileUrl.trim()}
+                  className="px-4 py-1.5 bg-maritime-400 hover:bg-maritime-900 text-white rounded-lg font-black disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {uploading ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Uploading…</> : <><Upload className="w-3.5 h-3.5" /> Upload</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
+
