@@ -54,8 +54,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   // Show nothing while resolving session to avoid flash
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50">
-        <div className="w-8 h-8 border-4 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-mist-light">
+        <div className="w-8 h-8 border-4 border-amber border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

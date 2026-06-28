@@ -96,31 +96,55 @@ export type MilestoneType =
  * Canonical map of loggable milestones per job role.
  * Single source of truth — import this everywhere instead of
  * maintaining local copies (dashboard, log-milestone page, etc.).
+ *
+ * Derived directly from the role comments in MilestoneType above:
+ * every milestone belongs to exactly one role.
  */
 export const ROLE_MILESTONES: Record<JobRole, MilestoneType[]> = {
   // Trade Party — read-only observers, no milestone logging
-  IMPORTER: ['DELIVERED_AND_SIGNED_OFF'],
-  EXPORTER: ['BILL_OF_LADING_ISSUED'],
-  // ─── Logistics Chain ───
+  IMPORTER: [],
+  EXPORTER: [],
+
+  // ─── Logistics Chain ────────────────────────────────────────────────────
+
   FREIGHT_FORWARDER: [
+    // Booking & vessel coordination
     'BOOKING_CONFIRMED',
     'DOCUMENTS_SUBMITTED_TO_CARRIER',
-    'CARGO_READY_FOR_COLLECTION',
     'SPACE_ON_VESSEL_SECURED',
+    'CONTAINER_GATED_OUT_ORIGIN',
+    'CONTAINER_LOADED_ON_VESSEL',
+    'VESSEL_CLEARED_TO_DEPART',
+    'VESSEL_DEPARTED_ORIGIN',
+    'BILL_OF_LADING_ISSUED',
+    // Destination legs
+    'VESSEL_ARRIVED_AT_BERTH',
+    'VESSEL_ARRIVED_DESTINATION',
+    'CONTAINER_OFFLOADED',
+    'CONTAINER_GATED_IN_DESTINATION',
+    'CARGO_RELEASED_FOR_PICKUP',
+    'IN_TRANSIT_TO_DESTINATION',
+    'ARRIVED_AT_DELIVERY_ADDRESS',
+    'DELIVERED_AND_SIGNED_OFF',
   ],
+
   CUSTOMS_BROKER: [
     'BOC_ENTRY_FILED',
+    'PORT_HOLD_PLACED_OR_LIFTED',
     'DUTIES_AND_TAXES_PAID',
     'CUSTOMS_EXAMINATION_REQUESTED',
     'CUSTOMS_CLEARANCE_APPROVED',
-    'CARGO_RELEASED_FOR_PICKUP',
   ],
+
   WAREHOUSE_OPERATOR: [
-    'CARGO_RECEIVED_AT_WAREHOUSE',
+    'CARGO_READY_FOR_COLLECTION',
     'CARGO_INSPECTED_AND_PACKED',
     'CARGO_STAGED_FOR_PICKUP',
     'CARGO_HANDED_OFF_TO_CARRIER',
+    'CARGO_PICKED_UP_FROM_PORT',
+    'CARGO_RECEIVED_AT_WAREHOUSE',
     'INCOMING_CARGO_STORED',
+    'FAILED_DELIVERY_ATTEMPT',
   ],
 };
 
@@ -183,7 +207,6 @@ export interface User {
   jobRole: JobRole;
   companyName?: string;
   stellarWallet?: string;
-  bankDetails?: string;
   kycStatus: KycStatus;
   kycDocumentUrl?: string;
   createdAt: string;

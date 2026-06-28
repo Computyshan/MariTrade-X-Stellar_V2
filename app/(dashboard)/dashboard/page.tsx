@@ -32,44 +32,38 @@ import { MilestoneType, JobRole, Shipment, MilestoneEvent, ROLE_MILESTONES } fro
 
 const MILESTONE_BY_JOB = ROLE_MILESTONES;
 
-// All loggable milestones across all roles (matches Priority Milestones checklist on create shipment)
-const ALL_LOGGABLE_MILESTONES: MilestoneType[] = [
-  // Freight Forwarder
-  'BOOKING_CONFIRMED',
-  'DOCUMENTS_SUBMITTED_TO_CARRIER',
-  'CARGO_READY_FOR_COLLECTION',
-  'SPACE_ON_VESSEL_SECURED',
-  // Shipping Line / Captain
-  'BILL_OF_LADING_ISSUED',
-  'CONTAINER_LOADED_ON_VESSEL',
-  'VESSEL_DEPARTED_ORIGIN',
-  'VESSEL_ARRIVED_DESTINATION',
-  'CONTAINER_OFFLOADED',
-  // Customs Broker
-  'BOC_ENTRY_FILED',
-  'DUTIES_AND_TAXES_PAID',
-  'CUSTOMS_EXAMINATION_REQUESTED',
-  'CUSTOMS_CLEARANCE_APPROVED',
-  'CARGO_RELEASED_FOR_PICKUP',
-  // Warehouse Operator
-  'CARGO_RECEIVED_AT_WAREHOUSE',
-  'CARGO_INSPECTED_AND_PACKED',
-  'CARGO_STAGED_FOR_PICKUP',
-  'CARGO_HANDED_OFF_TO_CARRIER',
-  'INCOMING_CARGO_STORED',
-  // Port Authority
-  'VESSEL_CLEARED_TO_DEPART',
-  'CONTAINER_GATED_OUT_ORIGIN',
-  'VESSEL_ARRIVED_AT_BERTH',
-  'CONTAINER_GATED_IN_DESTINATION',
-  'PORT_HOLD_PLACED_OR_LIFTED',
-  // Trucker
-  'CARGO_PICKED_UP_FROM_PORT',
-  'IN_TRANSIT_TO_DESTINATION',
-  'ARRIVED_AT_DELIVERY_ADDRESS',
-  'DELIVERED_AND_SIGNED_OFF',
-  'FAILED_DELIVERY_ATTEMPT',
-];
+// Human-readable labels matching the create-shipment priority milestone checklist.
+const MILESTONE_LABELS: Partial<Record<MilestoneType, string>> = {
+  BOOKING_CONFIRMED:               'Booking Confirmed',
+  DOCUMENTS_SUBMITTED_TO_CARRIER:  'Documents Submitted to Carrier',
+  SPACE_ON_VESSEL_SECURED:         'Space on Vessel Secured',
+  CONTAINER_GATED_OUT_ORIGIN:      'Container Gated Out (Origin)',
+  CONTAINER_LOADED_ON_VESSEL:      'Container Loaded on Vessel',
+  VESSEL_CLEARED_TO_DEPART:        'Vessel Cleared to Depart',
+  VESSEL_DEPARTED_ORIGIN:          'Vessel Departed Origin',
+  BILL_OF_LADING_ISSUED:           'Bill of Lading Issued',
+  VESSEL_ARRIVED_AT_BERTH:         'Vessel Arrived at Berth',
+  VESSEL_ARRIVED_DESTINATION:      'Vessel Arrived at Destination',
+  CONTAINER_OFFLOADED:             'Container Offloaded',
+  CONTAINER_GATED_IN_DESTINATION:  'Container Gated In (Destination)',
+  CARGO_RELEASED_FOR_PICKUP:       'Cargo Released for Pickup',
+  IN_TRANSIT_TO_DESTINATION:       'In Transit to Destination',
+  ARRIVED_AT_DELIVERY_ADDRESS:     'Arrived at Delivery Address',
+  DELIVERED_AND_SIGNED_OFF:        'Delivered and Signed Off',
+  BOC_ENTRY_FILED:                 'BOC Entry Filed',
+  PORT_HOLD_PLACED_OR_LIFTED:      'Port Hold Placed or Lifted',
+  DUTIES_AND_TAXES_PAID:           'Duties and Taxes Paid',
+  CUSTOMS_EXAMINATION_REQUESTED:   'Customs Examination Requested',
+  CUSTOMS_CLEARANCE_APPROVED:      'Customs Clearance Approved',
+  CARGO_READY_FOR_COLLECTION:      'Cargo Ready for Collection',
+  CARGO_INSPECTED_AND_PACKED:      'Cargo Inspected and Packed',
+  CARGO_STAGED_FOR_PICKUP:         'Cargo Staged for Pickup',
+  CARGO_HANDED_OFF_TO_CARRIER:     'Cargo Handed Off to Carrier',
+  CARGO_PICKED_UP_FROM_PORT:       'Cargo Picked Up from Port',
+  CARGO_RECEIVED_AT_WAREHOUSE:     'Cargo Received at Warehouse',
+  INCOMING_CARGO_STORED:           'Incoming Cargo Stored',
+  FAILED_DELIVERY_ATTEMPT:         'Failed Delivery Attempt',
+};
 
 export default function DashboardHome() {
   const { currentUser } = useUserSession();
@@ -181,7 +175,7 @@ export default function DashboardHome() {
 
     try {
       setIsLogging(true);
-      const res = await fetch(`/api/shipments/${selectedShipmentLogId}`, {
+      const res = await authFetch(`/api/shipments/${selectedShipmentLogId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -549,14 +543,14 @@ export default function DashboardHome() {
                         disabled={!selectedShipmentLogId}
                         onChange={(e) => setLogMilestoneType(e.target.value as MilestoneType)}
                       >
-                        {ALL_LOGGABLE_MILESTONES.map((mType) => (
+                        {(MILESTONE_BY_JOB[currentUser.jobRole] ?? []).map((mType) => (
                           <option key={mType} value={mType}>
-                            {mType.replace(/_/g, ' ')}
+                            {MILESTONE_LABELS[mType] ?? mType.replace(/_/g, ' ')}
                           </option>
                         ))}
                       </select>
                       <p className="mt-2 text-[10px] text-gray-400">
-                        {ALL_LOGGABLE_MILESTONES.length} milestones available.
+                        {(MILESTONE_BY_JOB[currentUser.jobRole] ?? []).length} milestones for your role.
                       </p>
                     </MilestoneStep>
 
@@ -869,19 +863,19 @@ function LogisticsScopeBanner({ jobRole }: { jobRole: JobRole }) {
       <div className="flex-1">
         <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5">Loggable Milestones</p>
         <div className="flex flex-wrap gap-1.5">
-          {ALL_LOGGABLE_MILESTONES.map((m) => (
+          {(MILESTONE_BY_JOB[jobRole] ?? []).map((m) => (
             <span
               key={m}
               className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-white/60 border border-current/10 tracking-wide"
             >
-              {m.replace(/_/g, ' ')}
+              {MILESTONE_LABELS[m] ?? m.replace(/_/g, ' ')}
             </span>
           ))}
         </div>
       </div>
       <div className="flex items-center gap-1.5 text-[10px] font-bold opacity-60 flex-shrink-0">
         <Lock className="w-3 h-3" />
-        {ALL_LOGGABLE_MILESTONES.length} milestones
+        {(MILESTONE_BY_JOB[jobRole] ?? []).length} milestones
       </div>
     </div>
   );

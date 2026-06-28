@@ -13,9 +13,9 @@ import {
   Wallet, RefreshCw, FileText, AlertTriangle, Plus, Calendar,
   Building2, Package, Weight, Search, ToggleLeft, ToggleRight,
   DollarSign, Hash, FolderLock, Key, Eye, EyeOff, Copy, CheckCircle2,
-  Shuffle, ShieldCheck, FolderOpen, ExternalLink,
+  Shuffle, ShieldCheck, FolderOpen, ExternalLink, Receipt, Sparkles,
 } from 'lucide-react';
-import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase } from '@/types';
+import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase, ShipmentReceipt, CURRENCY_SYMBOLS } from '@/types';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
 import { signAndSubmitWithRetry } from '@/lib/stellar/freighter';
 import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
@@ -175,7 +175,12 @@ export default function NewShipmentPage() {
   const [step, setStep] = useState(1);
   const [errorText, setErrorText] = useState('');
 
-  // ── Step 1 · SCOPE ──────────────────────────────────────────────────────────
+  // ── Step 1 · SHIPMENT RECEIPT PICKER ────────────────────────────────
+  const [receipts,         setReceipts]         = useState<(ShipmentReceipt & { counterparty?: { id: string; fullName: string; companyName?: string; jobRole?: string } | null })[]>([]);
+  const [receiptsLoading,  setReceiptsLoading]  = useState(true);
+  const [appliedReceiptId, setAppliedReceiptId] = useState<string | null>(null);
+
+  // ── Step 1 · SCOPE ────────────────────────────────────────────────────────────
   const [shipmentScope,    setShipmentScope]    = useState<ShipmentScope>('OVERSEAS');
   const [description,      setDescription]      = useState('');
   const [estimatedArrival, setEstimatedArrival] = useState('');
@@ -286,6 +291,45 @@ export default function NewShipmentPage() {
     } finally {
       setRateLoading(false);
     }
+  };
+
+  // ── Fetch finalized Shipment Receipts the user can pick from ───────────────
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    setReceiptsLoading(true);
+    authFetch(`/api/shipments/receipts?userId=${currentUser.id}`)
+      .then(r => r.json())
+      .then(json => { if (json.success) setReceipts(json.data || []); })
+      .catch(() => {})
+      .finally(() => setReceiptsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+
+  // Prefills the Step 1 form fields from a finalized chat Shipment Receipt.
+  // The person can still edit anything afterwards — this is just a head start.
+  const applyReceipt = (r: ShipmentReceipt) => {
+    setDescription(r.cargoDescription || '');
+    if (r.shipmentScope) setShipmentScope(r.shipmentScope);
+    setEstimatedArrival(r.estimatedArrival ? r.estimatedArrival.substring(0, 10) : '');
+    setImporterContact(r.importerContact || '');
+    setExporterContact(r.exporterContact || '');
+    setOriginCountry(r.originCountry || '');
+    setOriginAddress(r.originAddress || '');
+    setOriginPort(r.originPort || '');
+    setDestCountry(r.destCountry || '');
+    setDestAddress(r.destAddress || '');
+    setDestinationPort(r.destinationPort || '');
+    if (r.invoiceCurrency && ['USD', 'PHP', 'EUR', 'JPY'].includes(r.invoiceCurrency)) {
+      setInvoiceCurrency(r.invoiceCurrency as 'USD' | 'PHP' | 'EUR' | 'JPY');
+    }
+    if (r.invoiceValue != null) setInvoiceValue(String(r.invoiceValue));
+    setHsCode(r.hsCode || '');
+    setIsDangerousGoods(Boolean(r.isDangerousGoods));
+    if (r.packageCount != null) setPackageCount(String(r.packageCount));
+    setPackagingType(r.packagingType || 'Cartons');
+    if (r.grossWeight != null) setGrossWeight(String(r.grossWeight));
+    setWeightUnit(r.weightUnit || 'KG');
+    setAppliedReceiptId(r.id);
   };
 
   // ── Auto-suggest vault folder name when Step 2 becomes active ───────────────
@@ -675,6 +719,57 @@ export default function NewShipmentPage() {
       {step === 1 && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">
+
+            {/* SHIPMENT RECEIPTS — finalized chat planners that can prefill this form */}
+            {!receiptsLoading && receipts.length > 0 && (
+              <div className="bg-white border-2 border-ocean-100 p-6 rounded-2xl space-y-4">
+                <SubSectionHeader
+                  icon={Receipt}
+                  title="Shipment Receipts"
+                  description="Finalized planners from your chats. Pick one to prefill this form with what you and your counterparty already agreed on."
+                  accent="border-ocean-400 bg-ocean-50"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {receipts.map(r => {
+                    const isApplied = appliedReceiptId === r.id;
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => applyReceipt(r)}
+                        className={`text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer
+                          ${isApplied ? 'border-ocean-400 bg-ocean-50' : 'border-sand-200 hover:border-ocean-200'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-bold text-maritime-900 line-clamp-2">
+                            {r.cargoDescription || 'Untitled cargo'}
+                          </p>
+                          {isApplied && <CheckCircle2 className="w-4 h-4 text-ocean-400 flex-shrink-0" />}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          {r.originCountry || '—'} → {r.destinationPort || '—'}
+                        </p>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-[11px] font-black text-ocean-600 font-mono">
+                            {r.invoiceValue != null ? `${CURRENCY_SYMBOLS[r.invoiceCurrency || 'USD']}${r.invoiceValue.toLocaleString()}` : '—'}
+                          </span>
+                          {r.counterparty && (
+                            <span className="text-[9px] font-bold text-gray-400 truncate max-w-[120px]">
+                              with {r.counterparty.fullName.split(' ')[0]}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {appliedReceiptId && (
+                  <p className="text-[10px] text-ocean-600 font-semibold flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3" /> Form prefilled — feel free to edit anything below before continuing.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* A · SCOPE */}
             <div className="bg-white border border-sand-200 p-6 rounded-2xl">

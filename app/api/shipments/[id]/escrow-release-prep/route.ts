@@ -10,23 +10,35 @@
  * causes txMalformed. See the comment in /api/shipments/[id]/route.ts.
  *
  * Flow:
- *   POST { action: "execute_release", importerAddress }
- *   → Runs assign_logistics_users (if needed) + release() server-side
+ *   POST { action: "execute_release", importerAddress, assignLogisticsSignedXdr }
+ *   Step 1 — assign_logistics_users   Client (Freighter) signs the tx and sends
+ *                                      the signed XDR here. Server submits it and
+ *                                      waits for on-chain confirmation. FATAL.
+ *   Step 2 — confirm_milestone()      for every DB-completed priority milestone
+ *             not yet confirmed on-chain (REQUIRED — satisfies the #16 gate)
+ *   Step 3 — release()                server-side via platform keypair
  *   → Returns { txHash } on success
  *
  * The importer's Freighter wallet is NOT needed for the release itself —
  * the platform keypair is the co-signer on the multisig escrow.
- * Freighter is only needed for fund() (Step 4 of shipment creation).
+ * Freighter is only needed for assign_logistics_users (Step 1) and
+ * fund() (Step 4 of shipment creation).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Keypair, Networks, Transaction } from '@stellar/stellar-sdk';
+import { Server as SorobanServer } from '@stellar/stellar-sdk/rpc';
 import { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 import { requireAuth } from '@/lib/auth-guard';
 import { dbStore } from '@/lib/db';
-import { getMariTradeEscrowClient, NETWORKS, NetworkName } from '@/lib/stellar/escrow-contract';
+import { getMariTradeEscrowClient, NETWORKS, NetworkName, MilestoneType as ContractMilestoneType } from '@/lib/stellar/escrow-contract';
+import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
 
 const STELLAR_NETWORK = (process.env.STELLAR_NETWORK ?? 'testnet') as NetworkName;
+const RPC_URL =
+  STELLAR_NETWORK === 'mainnet'
+    ? 'https://soroban.stellar.org'
+    : 'https://soroban-testnet.stellar.org';
 const NETWORK_PASSPHRASE =
   STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
 const PLATFORM_ADDRESS = process.env.NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS ?? '';
@@ -70,7 +82,7 @@ export async function POST(
   }
 
   const { id: shipmentId } = await params;
-  let body: { action: string; importerAddress?: string };
+  let body: { action: string; importerAddress?: string; assignLogisticsSignedXdr?: string };
 
   try {
     body = await req.json();
@@ -78,7 +90,7 @@ export async function POST(
     return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { action, importerAddress } = body;
+  const { action, importerAddress, assignLogisticsSignedXdr } = body;
 
   if (!importerAddress) {
     return NextResponse.json({ success: false, error: 'importerAddress is required' }, { status: 400 });
@@ -112,31 +124,127 @@ export async function POST(
     const client = getMariTradeEscrowClient(STELLAR_NETWORK, PLATFORM_ADDRESS);
     const referenceCode = shipment.referenceCode;
 
-    // ── Step 1: assign_logistics_users (best-effort, non-fatal) ──────────────
-    try {
-      const assignments = await dbStore.getAssignmentsForShipment(shipmentId);
-      const logisticsAddresses: string[] = (
-        await Promise.all(
-          assignments.map(async (a) => {
-            const user = await dbStore.getUserById(a.userId);
-            return user?.stellarWallet ?? null;
-          }),
-        )
-      ).filter((addr): addr is string => !!addr && addr.startsWith('G'));
+    // ── Step 1: submit the importer-signed assign_logistics_users XDR ─────────
+    // assign_logistics_users() requires the importer's signature — it cannot be
+    // signed by the platform keypair alone. The client (page.tsx) already built
+    // the tx via the escrow client, had Freighter sign it, and sent the signed
+    // XDR here as `assignLogisticsSignedXdr`.
+    //
+    // We submit it via the RPC server and wait for confirmation before Step 2,
+    // because confirm_milestone() will reject (#6 NotAuthorizedLogisticsUser)
+    // if the logistics users list hasn't been updated on-chain yet.
+    //
+    // This step is FATAL — without it Step 2 is guaranteed to fail.
+    if (!assignLogisticsSignedXdr) {
+      return NextResponse.json(
+        { success: false, error: 'assignLogisticsSignedXdr is required — the client must sign assign_logistics_users via Freighter before calling execute_release.' },
+        { status: 400 },
+      );
+    }
+    {
+      try {
+        const server = new SorobanServer(RPC_URL);
+        const tx = new Transaction(assignLogisticsSignedXdr, NETWORK_PASSPHRASE);
+        const sendResult = await server.sendTransaction(tx);
 
-      if (logisticsAddresses.length > 0) {
-        const assignTx = await client.assign_logistics_users({
-          reference_code: referenceCode,
-          importer: importerAddress,
-          users: logisticsAddresses,
-        });
-        await platformSignAndSend(assignTx);
+        if (sendResult.status === 'ERROR') {
+          const detail = JSON.stringify((sendResult as any).errorResult ?? (sendResult as any).error ?? 'unknown');
+          throw new Error(`assign_logistics_users rejected by Stellar: ${detail}`);
+        }
+
+        const { hash } = sendResult;
+        // Poll up to 2 min for confirmation before proceeding to confirm_milestone
+        let confirmed = false;
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 2000));
+          const check = await server.getTransaction(hash);
+          if (check.status === 'SUCCESS') { confirmed = true; break; }
+          if (check.status === 'FAILED') {
+            const resultXdr = (check as any).resultXdr ?? '';
+            throw new Error(`assign_logistics_users failed on-chain (hash: ${hash})${resultXdr ? ` · ${resultXdr}` : ''}`);
+          }
+        }
+        if (!confirmed) throw new Error(`assign_logistics_users timed out waiting for confirmation (hash: ${hash})`);
+        console.log(`[escrow-release-prep] ✓ assign_logistics_users confirmed on-chain. Hash: ${hash}`);
+      } catch (err: any) {
+        const msg = err?.message ?? String(err);
+        console.error('[escrow-release-prep] assign_logistics_users submission FAILED — aborting:', msg);
+        return NextResponse.json(
+          { success: false, error: `Failed to register logistics users on-chain: ${msg}` },
+          { status: 500 },
+        );
       }
-    } catch (err) {
-      console.warn('[escrow-release-prep] assign_logistics_users failed (non-fatal):', err);
     }
 
-    // ── Step 2: release() — must use platformSignAndSend, never .toXDR() ─────
+    // ── Step 2: confirm_milestone() for every DB-completed priority milestone ──
+    // This is the step that satisfies the on-chain milestone gate (#16).
+    // Without it, release() always throws PriorityMilestonesIncomplete because
+    // logistics users never call confirm_milestone() on-chain directly — the DB
+    // is the source of truth, and the platform must bridge that to the contract
+    // here before release() can succeed.
+    {
+      const priorityMilestones = await dbStore.getPriorityMilestones(shipmentId);
+      const completedDbTypes   = priorityMilestones
+        .filter(pm => pm.isCompleted)
+        .map(pm => pm.type);
+      const contractEnums = dbMilestonesToContractEnums(completedDbTypes as any[]);
+
+      // Skip milestones already confirmed on-chain to avoid #14 (MilestoneAlreadyConfirmed).
+      let alreadyConfirmed: ContractMilestoneType[] = [];
+      try {
+        const confirmedTx = await client.get_confirmed_milestones({
+          reference_code: referenceCode,
+        });
+        if (confirmedTx.result?.isOk()) {
+          alreadyConfirmed = confirmedTx.result
+            .unwrap()
+            .map((c: any) => c.milestone_type as ContractMilestoneType);
+        }
+      } catch (err) {
+        console.warn('[escrow-release-prep] Could not fetch confirmed milestones — will attempt all:', err);
+      }
+
+      const pending = contractEnums.filter(e => !alreadyConfirmed.includes(e));
+      const confirmErrors: string[] = [];
+
+      for (const milestoneEnum of pending) {
+        try {
+          const tx = await client.confirm_milestone({
+            reference_code: referenceCode,
+            confirmer:      PLATFORM_ADDRESS,
+            milestone_type: milestoneEnum,
+            evidence_uri:   `db://platform-auto/${referenceCode}/${milestoneEnum}`,
+          });
+          const hash = await platformSignAndSend(tx);
+          console.log(`[escrow-release-prep] ✓ confirmed milestone ${milestoneEnum}. Hash: ${hash}`);
+        } catch (err: any) {
+          const msg = err?.message ?? String(err);
+          // #14 = MilestoneAlreadyConfirmed — idempotent, count as success
+          const isAlreadyConfirmed =
+            msg.includes('MilestoneAlreadyConfirmed') ||
+            msg.includes('Error(Contract, #14)') ||
+            (msg.includes('14') && msg.toLowerCase().includes('already'));
+          if (!isAlreadyConfirmed) {
+            console.error(`[escrow-release-prep] confirm_milestone ${milestoneEnum} failed:`, msg);
+            confirmErrors.push(`Milestone ${milestoneEnum}: ${msg}`);
+          }
+        }
+      }
+
+      // If every pending milestone failed to confirm, abort now rather than
+      // letting release() fail with the less-helpful #16 error.
+      if (confirmErrors.length > 0 && confirmErrors.length === pending.length && pending.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `On-chain milestone confirmation failed — cannot proceed to release. Errors: ${confirmErrors.join('; ')}`,
+          },
+          { status: 500 },
+        );
+      }
+    }
+
+    // ── Step 3: release() — must use platformSignAndSend, never .toXDR() ─────
     try {
       const releaseTx = await client.release({
         reference_code: referenceCode,

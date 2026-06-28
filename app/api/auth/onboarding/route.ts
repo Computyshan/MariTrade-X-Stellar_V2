@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     if (errorResponse) return errorResponse;
 
     const body = await req.json();
-    const { jobRole, kycDocumentUrl, companyName, bankDetails, userType } = body;
+    const { jobRole, kycDocumentUrl, companyName, userType } = body;
 
     const existingUser = await dbStore.getUserById(user!.id);
     if (!existingUser) {
@@ -22,7 +22,6 @@ export async function POST(req: NextRequest) {
       ...(userType && { userType }),
       ...(jobRole && { jobRole }),
       ...(companyName && { companyName }),
-      ...(bankDetails && { bankDetails }),
       ...(kycDocumentUrl && { kycDocumentUrl }),
       kycStatus: 'SUBMITTED' as const,
       updatedAt: new Date().toISOString(),

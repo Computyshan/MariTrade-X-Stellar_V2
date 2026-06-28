@@ -30,7 +30,6 @@ export default function OnboardingPage() {
   const [idFile, setIdFile] = useState<string>(''); // Uploaded file name for display
   const [idFileObject, setIdFileObject] = useState<File | null>(null); // Actual File object
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [bankDetails, setBankDetails] = useState('');
   const [uploading, setUploading] = useState(false);
 
   // Filter job roles based on Step 1 selection
@@ -114,7 +113,6 @@ export default function OnboardingPage() {
           jobRole,
           companyName,
           kycDocumentUrl: idFile || 'https://picsum.photos/seed/kyc/800/600',
-          bankDetails: bankDetails || null,
         }),
       });
 
@@ -327,23 +325,6 @@ export default function OnboardingPage() {
                     <span className="block text-[10px] text-gray-400 font-mono">Accepts JPG, PNG or PDF formats. Max 10 MB limit.</span>
                   </div>
                 </div>
-
-                {/* TRADE PARTY ONLY: Encrypted bank details */}
-                {userType === 'TRADE_PARTY' && (
-                  <div className="space-y-1 sm:col-span-2">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Bank Details (Trade Settlement)</label>
-                      <span className="text-[9px] bg-coral-400 text-white font-bold tracking-wider px-1.5 rounded">ENCRYPTED AT REST</span>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="BDO Unibank Account • Juan Dela Cruz • 1024-5678-9012"
-                      className="w-full bg-white border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:ring-1 focus:ring-coral-400/20"
-                      value={bankDetails}
-                      onChange={(e) => setBankDetails(e.target.value)}
-                    />
-                  </div>
-                )}
 
                 {/* Optional stellar address with Coming soon badge */}
                 <div className="space-y-1 sm:col-span-2 bg-sand-100 border border-sand-200 p-3 rounded-lg flex items-center justify-between opacity-70">

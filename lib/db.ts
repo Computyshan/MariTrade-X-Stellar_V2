@@ -13,7 +13,6 @@
  *   job_role           ↔ jobRole
  *   company_name       ↔ companyName
  *   stellar_wallet     ↔ stellarWallet
- *   bank_details       ↔ bankDetails
  *   kyc_status         ↔ kycStatus
  *   kyc_document_url   ↔ kycDocumentUrl
  *   created_at         ↔ createdAt
@@ -83,7 +82,6 @@ function rowToUser(row: any): User {
     jobRole: row.job_role,
     companyName: row.company_name ?? undefined,
     stellarWallet: row.stellar_wallet ?? undefined,
-    bankDetails: row.bank_details ?? undefined,
     kycStatus: row.kyc_status,
     kycDocumentUrl: row.kyc_document_url ?? undefined,
     createdAt: row.created_at,
@@ -102,7 +100,6 @@ function userToRow(user: User): any {
     job_role: user.jobRole,
     company_name: user.companyName ?? null,
     stellar_wallet: user.stellarWallet ?? null,
-    bank_details: user.bankDetails ?? null,
     kyc_status: user.kycStatus,
     kyc_document_url: user.kycDocumentUrl ?? null,
     created_at: user.createdAt,

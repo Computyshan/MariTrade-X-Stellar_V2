@@ -32,6 +32,7 @@ import {
 import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE } from '@/types';
 import { canAccessBOCDocuments } from '@/lib/permissions/documents';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
+import { signXdrWithFreighter } from '@/lib/stellar/freighter';
 
 type PageParams = { id: string };
 
@@ -192,14 +193,51 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       let txHash: string;
 
       if (hasRealEscrowId) {
-        // Server handles the full release — assign + release() via platform key.
-        // Never round-trip the Soroban XDR through Freighter: that strips the
-        // auth/footprint entries and causes txMalformed.
+        // ── Step 1: build assign_logistics_users tx and sign it with Freighter ──
+        // The contract requires the importer's signature on this call — the
+        // platform keypair alone is not sufficient (#7 RequiresBothPartiesSignature
+        // or the SDK's needsNonInvokerSigningBy check). We build the tx here in
+        // the browser (where the escrow client can simulate against the RPC),
+        // sign with Freighter, and send the signed XDR to the server which
+        // submits it and then runs confirm_milestone + release() with the
+        // platform key.
+        setStellarStep('Building logistics authorization transaction…');
+        const platformAddress = process.env.NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS ?? '';
+        const escrowClient = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
+
+        // Collect DB logistics user wallets + always include the platform address
+        // (platform needs to be in the list to call confirm_milestone in Step 2)
+        const assignments = data.assignments ?? [];
+        const dbWallets: string[] = assignments
+          .map((a: any) => a.stellarWallet ?? a.user?.stellarWallet ?? null)
+          .filter((w: string | null): w is string => !!w && w.startsWith('G'));
+        const usersSet = new Set<string>([platformAddress, ...dbWallets]);
+        const users = Array.from(usersSet).filter(Boolean);
+
+        let assignLogisticsSignedXdr: string;
+        try {
+          const assignTx = await escrowClient.assign_logistics_users({
+            reference_code: data.shipment.referenceCode,
+            importer: importerAddress,
+            users,
+          });
+          setStellarStep('Approve logistics authorization in Freighter…');
+          assignLogisticsSignedXdr = await signXdrWithFreighter(
+            assignTx.toXDR(),
+            NETWORKS[STELLAR_NETWORK].networkPassphrase,
+          );
+        } catch (assignErr) {
+          const msg = assignErr instanceof Error ? assignErr.message : String(assignErr);
+          setStellarError(`Logistics authorization signing failed: ${msg}`);
+          return;
+        }
+
+        // ── Steps 2 & 3: server confirms milestones + calls release() ──────────
         setStellarStep('Executing escrow release on Stellar…');
         const releaseRes = await authFetch(`/api/shipments/${data.shipment.id}/escrow-release-prep`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'execute_release', importerAddress }),
+          body: JSON.stringify({ action: 'execute_release', importerAddress, assignLogisticsSignedXdr }),
         });
         const releaseJson = await releaseRes.json();
         if (!releaseJson.success) {
@@ -454,9 +492,6 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
               {/* Real on-chain escrow: show Stellar gate result */}
               {hasRealEscrowId && chainCanRelease !== null && !checkingRelease && (
                 <div className={`text-[10px] font-bold pt-1 flex items-center gap-1 ${
-                  // If DB says all done, show green regardless of chain result.
-                  // Chain may say false because confirm_milestone() wasn't called
-                  // on-chain (logistics users without Stellar wallets).
                   allPriorityCompleted
                     ? 'text-ocean-600'
                     : chainCanRelease ? 'text-ocean-600' : 'text-coral-500'
@@ -850,4 +885,3 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     </DashboardLayout>
   );
 }
-
