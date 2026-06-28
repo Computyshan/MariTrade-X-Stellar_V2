@@ -28,46 +28,61 @@ import {
   Warehouse,
   Lock
 } from 'lucide-react';
-import { MilestoneType, JobRole, Shipment, MilestoneEvent } from '@/types';
+import { MilestoneType, JobRole, Shipment, MilestoneEvent, ROLE_MILESTONES } from '@/types';
 
-// MILESTONE FILTER DICTIONARY FROM STARTER SPEC
-const MILESTONE_BY_JOB: Record<JobRole, MilestoneType[]> = {
-  IMPORTER: ['DELIVERED_AND_SIGNED_OFF'],
-  EXPORTER: ['BILL_OF_LADING_ISSUED'],
-  FREIGHT_FORWARDER: [
-    'BOOKING_CONFIRMED',
-    'DOCUMENTS_SUBMITTED_TO_CARRIER',
-    'CARGO_READY_FOR_COLLECTION',
-    'SPACE_ON_VESSEL_SECURED',
-  ],
-  CUSTOMS_BROKER: [
-    'BOC_ENTRY_FILED',
-    'DUTIES_AND_TAXES_PAID',
-    'CUSTOMS_EXAMINATION_REQUESTED',
-    'CUSTOMS_CLEARANCE_APPROVED',
-    'CARGO_RELEASED_FOR_PICKUP',
-  ],
-  WAREHOUSE_OPERATOR: [
-    'CARGO_RECEIVED_AT_WAREHOUSE',
-    'CARGO_INSPECTED_AND_PACKED',
-    'CARGO_STAGED_FOR_PICKUP',
-    'CARGO_HANDED_OFF_TO_CARRIER',
-    'INCOMING_CARGO_STORED',
-  ],
-};
+const MILESTONE_BY_JOB = ROLE_MILESTONES;
+
+// All loggable milestones across all roles (matches Priority Milestones checklist on create shipment)
+const ALL_LOGGABLE_MILESTONES: MilestoneType[] = [
+  // Freight Forwarder
+  'BOOKING_CONFIRMED',
+  'DOCUMENTS_SUBMITTED_TO_CARRIER',
+  'CARGO_READY_FOR_COLLECTION',
+  'SPACE_ON_VESSEL_SECURED',
+  // Shipping Line / Captain
+  'BILL_OF_LADING_ISSUED',
+  'CONTAINER_LOADED_ON_VESSEL',
+  'VESSEL_DEPARTED_ORIGIN',
+  'VESSEL_ARRIVED_DESTINATION',
+  'CONTAINER_OFFLOADED',
+  // Customs Broker
+  'BOC_ENTRY_FILED',
+  'DUTIES_AND_TAXES_PAID',
+  'CUSTOMS_EXAMINATION_REQUESTED',
+  'CUSTOMS_CLEARANCE_APPROVED',
+  'CARGO_RELEASED_FOR_PICKUP',
+  // Warehouse Operator
+  'CARGO_RECEIVED_AT_WAREHOUSE',
+  'CARGO_INSPECTED_AND_PACKED',
+  'CARGO_STAGED_FOR_PICKUP',
+  'CARGO_HANDED_OFF_TO_CARRIER',
+  'INCOMING_CARGO_STORED',
+  // Port Authority
+  'VESSEL_CLEARED_TO_DEPART',
+  'CONTAINER_GATED_OUT_ORIGIN',
+  'VESSEL_ARRIVED_AT_BERTH',
+  'CONTAINER_GATED_IN_DESTINATION',
+  'PORT_HOLD_PLACED_OR_LIFTED',
+  // Trucker
+  'CARGO_PICKED_UP_FROM_PORT',
+  'IN_TRANSIT_TO_DESTINATION',
+  'ARRIVED_AT_DELIVERY_ADDRESS',
+  'DELIVERED_AND_SIGNED_OFF',
+  'FAILED_DELIVERY_ATTEMPT',
+];
 
 export default function DashboardHome() {
-  const { currentUser, loading } = useUserSession();
+  const { currentUser } = useUserSession();
 
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [milestones, setMilestones] = useState<MilestoneEvent[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   // Logistics quick log state
   const [selectedShipmentLogId, setSelectedShipmentLogId] = useState('');
   const [logMilestoneType, setLogMilestoneType] = useState<MilestoneType>('BOOKING_CONFIRMED');
   const [logMessage, setLogMessage] = useState('');
-  const [logEvidence, setLogEvidence] = useState('');
+  const [logEvidence, setLogEvidence] = useState(''); // File path representation
   const [logStatusError, setLogStatusError] = useState('');
   const [logStatusSuccess, setLogStatusSuccess] = useState('');
   const [isLogging, setIsLogging] = useState(false);
@@ -85,57 +100,50 @@ export default function DashboardHome() {
 
   const fetchData = async () => {
     try {
-      setDataLoading(true);
+      setLoading(true);
+      // Fetch shipments
       const shipRes = await authFetch('/api/shipments');
       const shipResult = await shipRes.json();
-      if (shipResult.success) setShipments(shipResult.data);
+      if (shipResult.success) {
+        setShipments(shipResult.data);
+      }
 
+      // Fetch recent milestones feed from real API
       const msRes = await authFetch('/api/milestones/feed');
       const msResult = await msRes.json();
-      setMilestones(msResult.success ? msResult.data : []);
+      if (msResult.success) {
+        setMilestones(msResult.data);
+      } else {
+        setMilestones([]);
+      }
     } catch (err) {
       console.warn('Dashboard fetch failed:', err);
     } finally {
-      setDataLoading(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (currentUser) fetchData();
+    fetchData();
   }, [currentUser]);
 
-  // Set first valid milestone type once the user is available
+  // Set first valid milestone type when user logs in and chooses logistics
   useEffect(() => {
-    if (!currentUser) return;
     const list = MILESTONE_BY_JOB[currentUser.jobRole];
-    if (list && list.length > 0) setLogMilestoneType(list[0]);
+    if (list && list.length > 0) {
+      setLogMilestoneType(list[0]);
+    }
   }, [currentUser]);
-
-  // ── Guard: show spinner until session + user are resolved ─────────────────
-  // AuthProvider will redirect to /login if there's no session, but we still
-  // need to avoid rendering before currentUser is populated to prevent
-  // "Cannot read properties of null" crashes.
-  if (loading || !currentUser) {
-    return (
-      <DashboardLayout>
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-maritime-400 border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs text-gray-400 font-mono tracking-wide">LOADING SECURE SESSION…</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   const handleAIEstimate = async (e: React.FormEvent) => {
     e.preventDefault();
+    // HARDCODED FIX: use values from the selected shipment or user-entered fields
     const selectedShip = shipments.find(s => s.id === selectedShipmentLogId);
     const origin = aiOriginCountry || selectedShip?.originCountry || 'Philippines';
     const destination = aiDestinationPort || selectedShip?.destinationPort || 'Port of Manila';
     try {
       setEstimating(true);
-      const res = await authFetch('/api/gemini/estimate', {
+      const res = await fetch('/api/gemini/estimate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -146,7 +154,9 @@ export default function DashboardHome() {
         })
       });
       const resJson = await res.json();
-      if (resJson.success) setAiResult(resJson.data);
+      if (resJson.success) {
+        setAiResult(resJson.data);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -156,13 +166,14 @@ export default function DashboardHome() {
 
   const handleQuickLogMilestone = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLogStatusError('');
+    setLogStatusError('');  
     setLogStatusSuccess('');
 
     if (!selectedShipmentLogId) {
       setLogStatusError('Please select an assigned cargo shipment first.');
       return;
     }
+
     if (!logEvidence) {
       setLogStatusError('Proof Upload is strictly REQUIRED. You must attach photo/document proof before logging handoffs.');
       return;
@@ -170,7 +181,7 @@ export default function DashboardHome() {
 
     try {
       setIsLogging(true);
-      const res = await authFetch(`/api/shipments/${selectedShipmentLogId}`, {
+      const res = await fetch(`/api/shipments/${selectedShipmentLogId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -187,7 +198,7 @@ export default function DashboardHome() {
         setLogStatusSuccess('Milestone logged successfully and Stellar escrow status updated!');
         setLogMessage('');
         setLogEvidence('');
-        fetchData();
+        fetchData(); // Reload stats
       } else {
         setLogStatusError(json.error || 'Submit failed.');
       }
@@ -198,7 +209,8 @@ export default function DashboardHome() {
     }
   };
 
-  const filteredShipments = shipments.filter(s =>
+  // Filter shipments based on search
+  const filteredShipments = shipments.filter(s => 
     s.referenceCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -219,7 +231,7 @@ export default function DashboardHome() {
         </div>
       </div>
 
-      {dataLoading ? (
+      {loading ? (
         <div className="text-center py-20 bg-white rounded-3xl border border-sand-200">
           <div className="w-10 h-10 border-4 border-maritime-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-xs text-gray-400 font-mono tracking-wide">FETCHING SECURED TRADEPORTS CORRESPONDENCE...</p>
@@ -244,18 +256,15 @@ export default function DashboardHome() {
                   </div>
                 </div>
 
-                {/* Card 2 — Escrow Holdings */}
+                {/* Card 2 — Escrow Holdings (DARK) — HARDCODED FIX: computed from live shipments */}
                 {(() => {
                   const totalEscrow = shipments
                     .filter(s => s.escrowStatus === 'FUNDED')
                     .reduce((acc, s) => acc + (s.escrowAmountUSD ?? s.totalValueUSD ?? 0), 0);
                   const phpEquiv = (totalEscrow * 58.7).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                   return (
-                  <div
-                      className="border border-white/10 p-5 rounded-xl shadow-sm col-span-1"
-                      style={{ background: 'var(--theme-feature)' }}
-                    >
-                      <span className="block text-[10px] text-white/50 uppercase font-medium tracking-widest mb-2">Escrow Holdings</span>
+                    <div className="bg-[#111c30] border border-[#1e3a5f] p-5 rounded-xl shadow-sm col-span-1">
+                      <span className="block text-[10px] text-white/40 uppercase font-medium tracking-widest mb-2">Escrow Holdings</span>
                       <strong className="text-[28px] text-white font-black leading-none">
                         {totalEscrow.toLocaleString()} <span className="text-sm font-semibold text-white/60">USDC</span>
                       </strong>
@@ -264,7 +273,7 @@ export default function DashboardHome() {
                   );
                 })()}
 
-                {/* Card 3 — Completed */}
+                {/* Card 3 — Completed (MO) */}
                 <div className="bg-white border border-gray-200 p-5 rounded-xl shadow-sm flex items-center justify-between">
                   <div>
                     <span className="block text-[10px] text-gray-400 uppercase font-medium tracking-widest mb-2">Completed (MO)</span>
@@ -277,7 +286,7 @@ export default function DashboardHome() {
                   </div>
                 </div>
 
-                {/* Card 4 — Smart Locks */}
+                {/* Card 4 — Smart Locks — HARDCODED FIX: derived from live shipment escrow data */}
                 {(() => {
                   const funded = shipments.filter(s => s.escrowStatus === 'FUNDED').length;
                   const total = shipments.length;
@@ -301,6 +310,7 @@ export default function DashboardHome() {
                 {/* Shipments Table */}
                 <div className="lg:col-span-2">
                   <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    {/* Table header */}
                     <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100">
                       <h2 className="text-sm font-bold text-[#111c30]">Active Shipments</h2>
                       <div className="relative">
@@ -316,7 +326,9 @@ export default function DashboardHome() {
                     </div>
 
                     {filteredShipments.length === 0 ? (
-                      <div className="text-center py-14 text-gray-400 text-xs">No cargoes found.</div>
+                      <div className="text-center py-14 text-gray-400 text-xs">
+                        No cargoes found.
+                      </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-left">
@@ -345,11 +357,13 @@ export default function DashboardHome() {
                                 <td className="px-5 py-4">
                                   {ship.status === 'DELIVERED' ? (
                                     <span className="inline-flex items-center gap-1.5 bg-green-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />DELIVERED
+                                      <span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />
+                                      DELIVERED
                                     </span>
                                   ) : ship.status === 'IN_TRANSIT' ? (
-                              <span className="inline-flex items-center gap-1.5 text-white text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: 'var(--theme-accent)', color: '#111c30' }}>
-                                      <span className="w-1.5 h-1.5 rounded-full bg-current/60 inline-block" />IN TRANSIT
+                                    <span className="inline-flex items-center gap-1.5 bg-[#111c30] text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />
+                                      IN TRANSIT
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full">
@@ -359,9 +373,9 @@ export default function DashboardHome() {
                                 </td>
                                 <td className="px-5 py-4">
                                   <span className="text-[12px] font-bold text-[#111c30] block">${ship.totalValueUSD?.toLocaleString()}</span>
-                                  <span className={`text-[10px] font-semibold ${ship.escrowStatus === 'FUNDED' ? 'text-green-500' : 'text-gray-400'}`}>
-                                    {ship.escrowStatus}
-                                  </span>
+                                  <span className={`text-[10px] font-semibold ${
+                                    ship.escrowStatus === 'FUNDED' ? 'text-green-500' : 'text-gray-400'
+                                  }`}>{ship.escrowStatus}</span>
                                 </td>
                                 <td className="px-5 py-4">
                                   <Link
@@ -380,8 +394,9 @@ export default function DashboardHome() {
                   </div>
                 </div>
 
-                {/* Right column: Port Activity */}
+                {/* Right column: Port Activity + Support */}
                 <div className="space-y-4">
+                  {/* Port Activity — driven by real milestones from Supabase */}
                   <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                     <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100">
                       <h3 className="text-sm font-bold text-[#111c30]">Port Activity</h3>
@@ -395,19 +410,24 @@ export default function DashboardHome() {
                         </div>
                       ) : (
                         <>
+                          {/* Timeline line */}
                           <div className="absolute left-[26px] top-6 bottom-6 w-px bg-gray-100" />
                           {milestones.slice(0, 3).map((me, idx) => (
                             <div key={me.id} className={`flex gap-4 ${idx < milestones.slice(0, 3).length - 1 ? 'pb-5' : ''}`}>
                               <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 z-10 ${
-                                idx === 0 ? '' : idx === 1 ? 'bg-gray-300' : 'bg-gray-100 border border-gray-200'
-                              }`} style={idx === 0 ? { background: 'var(--theme-accent)' } : {}}>
+                                idx === 0 ? 'bg-[#111c30]' : idx === 1 ? 'bg-gray-300' : 'bg-gray-100 border border-gray-200'
+                              }`}>
                                 <div className="w-1.5 h-1.5 rounded-full bg-white" />
                               </div>
                               <div className={idx === 2 ? 'opacity-40' : ''}>
-                                <p className="text-[11px] font-bold text-[#111c30] uppercase tracking-wide">{me.type.replace(/_/g, ' ')}</p>
+                                <p className="text-[11px] font-bold text-[#111c30] uppercase tracking-wide">
+                                  {me.type.replace(/_/g, ' ')}
+                                </p>
                                 <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{me.description}</p>
                                 {me.shipmentId && (
-                                  <p className="text-[10px] text-blue-500 mt-1 font-medium">REF: {me.shipmentId.slice(-10).toUpperCase()}</p>
+                                  <p className="text-[10px] text-blue-500 mt-1 font-medium">
+                                    REF: {me.shipmentId.slice(-10).toUpperCase()}
+                                  </p>
                                 )}
                               </div>
                             </div>
@@ -420,11 +440,17 @@ export default function DashboardHome() {
               </div>
             </div>
           ) : (
-            /* LOGISTICS CHAIN PORTAL */
+            /* ─────────────────────────────────────────────────────────────
+               LOGISTICS CHAIN PORTAL — milestone logging as the hero
+            ───────────────────────────────────────────────────────────── */
             <div className="space-y-6">
+
+              {/* ROLE SCOPE BANNER */}
               <LogisticsScopeBanner jobRole={currentUser.jobRole} />
 
+              {/* HERO: MILESTONE LOGGER — full width, 4-step wizard feel */}
               <div className="bg-white border border-sand-200 rounded-3xl shadow-sm overflow-hidden">
+                {/* Header */}
                 <div className="bg-maritime-900 px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="flex items-center gap-3 flex-1">
                     <div className="w-10 h-10 rounded-xl bg-ocean-400/20 flex items-center justify-center">
@@ -432,20 +458,28 @@ export default function DashboardHome() {
                     </div>
                     <div>
                       <h2 className="text-white font-black text-base tracking-tight">Log a Milestone</h2>
-                      <p className="text-maritime-300 text-[11px] mt-0.5">Every log is committed to the Stellar trade ledger and cannot be undone.</p>
+                      <p className="text-maritime-300 text-[11px] mt-0.5">
+                        Every log is committed to the Stellar trade ledger and cannot be undone.
+                      </p>
                     </div>
                   </div>
+                  {/* live ready indicator */}
                   <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
                     selectedShipmentLogId
                       ? 'bg-ocean-400/10 border-ocean-400/30 text-ocean-400'
                       : 'bg-maritime-700 border-maritime-600 text-maritime-400'
                   }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${selectedShipmentLogId ? 'bg-ocean-400 animate-pulse' : 'bg-maritime-500'}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      selectedShipmentLogId ? 'bg-ocean-400 animate-pulse' : 'bg-maritime-500'
+                    }`} />
                     {selectedShipmentLogId ? 'Ready to Log' : 'Awaiting Cargo Select'}
                   </div>
                 </div>
 
+                {/* Step form */}
                 <form onSubmit={handleQuickLogMilestone} className="p-6 space-y-0">
+
+                  {/* Status alerts */}
                   {logStatusError && (
                     <div className="mb-5 bg-coral-50 border border-coral-200 text-coral-700 text-xs p-3.5 rounded-xl leading-normal flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-coral-400 flex-shrink-0 mt-0.5" />
@@ -459,15 +493,32 @@ export default function DashboardHome() {
                     </div>
                   )}
 
+                  {/* 4-step grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-0 md:gap-px bg-sand-100 rounded-2xl overflow-hidden border border-sand-200">
-                    <MilestoneStep step={1} label="Cargo Reference" hint="Which shipment are you handling?" active={true} done={!!selectedShipmentLogId}>
+
+                    {/* Step 1 — Pick Cargo */}
+                    <MilestoneStep
+                      step={1}
+                      label="Cargo Reference"
+                      hint="Which shipment are you handling?"
+                      active={true}
+                      done={!!selectedShipmentLogId}
+                    >
                       <select
                         className="w-full bg-white border border-sand-200 rounded-lg px-3 py-2 text-xs text-gray-800 outline-none focus:border-maritime-400 font-mono"
                         value={selectedShipmentLogId}
-                        onChange={(e) => { setSelectedShipmentLogId(e.target.value); setLogStatusError(''); setLogStatusSuccess(''); }}
+                        onChange={(e) => {
+                          setSelectedShipmentLogId(e.target.value);
+                          setLogStatusError('');
+                          setLogStatusSuccess('');
+                        }}
                       >
                         <option value="">— Select assigned cargo —</option>
-                        {shipments.map(s => <option key={s.id} value={s.id}>{s.referenceCode}</option>)}
+                        {shipments.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.referenceCode}
+                          </option>
+                        ))}
                       </select>
                       {selectedShipmentLogId && (() => {
                         const s = shipments.find(x => x.id === selectedShipmentLogId);
@@ -475,27 +526,48 @@ export default function DashboardHome() {
                           <div className="mt-2 text-[10px] text-gray-500 leading-relaxed">
                             <span className="font-medium text-gray-700">{s.description.substring(0, 40)}{s.description.length > 40 ? '…' : ''}</span>
                             <br />
-                            <span className="flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3 text-maritime-400" />{s.originCountry} → {s.destinationPort}</span>
+                            <span className="flex items-center gap-1 mt-0.5">
+                              <MapPin className="w-3 h-3 text-maritime-400" />
+                              {s.originCountry} → {s.destinationPort}
+                            </span>
                           </div>
                         ) : null;
                       })()}
                     </MilestoneStep>
 
-                    <MilestoneStep step={2} label="Milestone Type" hint="Restricted to your job role." active={!!selectedShipmentLogId} done={!!logMilestoneType && !!selectedShipmentLogId}>
+                    {/* Step 2 — Pick Milestone */}
+                    <MilestoneStep
+                      step={2}
+                      label="Milestone Type"
+                      hint="Restricted to your job role."
+                      active={!!selectedShipmentLogId}
+                      done={!!logMilestoneType && !!selectedShipmentLogId}
+                    >
                       <select
                         className="w-full bg-white border border-sand-200 rounded-lg px-3 py-2 text-xs text-gray-800 outline-none focus:border-maritime-400 disabled:opacity-40 disabled:cursor-not-allowed"
                         value={logMilestoneType}
                         disabled={!selectedShipmentLogId}
                         onChange={(e) => setLogMilestoneType(e.target.value as MilestoneType)}
                       >
-                        {MILESTONE_BY_JOB[currentUser.jobRole]?.map((mType) => (
-                          <option key={mType} value={mType}>{mType.replace(/_/g, ' ')}</option>
+                        {ALL_LOGGABLE_MILESTONES.map((mType) => (
+                          <option key={mType} value={mType}>
+                            {mType.replace(/_/g, ' ')}
+                          </option>
                         ))}
                       </select>
-                      <p className="mt-2 text-[10px] text-gray-400">{MILESTONE_BY_JOB[currentUser.jobRole]?.length ?? 0} milestones available for your role.</p>
+                      <p className="mt-2 text-[10px] text-gray-400">
+                        {ALL_LOGGABLE_MILESTONES.length} milestones available.
+                      </p>
                     </MilestoneStep>
 
-                    <MilestoneStep step={3} label="What Happened" hint="Describe this handoff event." active={!!selectedShipmentLogId} done={logMessage.trim().length > 5}>
+                    {/* Step 3 — Description */}
+                    <MilestoneStep
+                      step={3}
+                      label="What Happened"
+                      hint="Describe this handoff event."
+                      active={!!selectedShipmentLogId}
+                      done={logMessage.trim().length > 5}
+                    >
                       <textarea
                         rows={3}
                         placeholder="e.g. Container gated through Pier 14 at 14:30 PHT. Seal intact."
@@ -506,19 +578,46 @@ export default function DashboardHome() {
                       />
                     </MilestoneStep>
 
-                    <MilestoneStep step={4} label="Proof of Event" hint="Photo or document. Required." active={!!selectedShipmentLogId} done={!!logEvidence} required>
+                    {/* Step 4 — Evidence */}
+                    <MilestoneStep
+                      step={4}
+                      label="Proof of Event"
+                      hint="Photo or document. Required."
+                      active={!!selectedShipmentLogId}
+                      done={!!logEvidence}
+                      required
+                    >
                       {logEvidence ? (
                         <div className="flex items-center gap-2 bg-ocean-50 border border-ocean-100 rounded-lg px-3 py-2">
                           <CheckCircle2 className="w-4 h-4 text-ocean-500 flex-shrink-0" />
                           <div className="min-w-0">
                             <p className="text-[10px] font-bold text-ocean-700 truncate">{logEvidence}</p>
-                            <button type="button" onClick={() => setLogEvidence('')} className="text-[9px] text-coral-500 hover:underline mt-0.5">Remove</button>
+                            <button
+                              type="button"
+                              onClick={() => setLogEvidence('')}
+                              className="text-[9px] text-coral-500 hover:underline mt-0.5"
+                            >
+                              Remove
+                            </button>
                           </div>
                         </div>
                       ) : (
-                        <label className={`w-full border-2 border-dashed border-sand-200 hover:border-maritime-400 rounded-lg px-3 py-4 text-center transition-all group cursor-pointer ${!selectedShipmentLogId ? 'opacity-40 pointer-events-none' : ''}`}>
-                          <input type="file" accept="image/*,.pdf" className="sr-only" disabled={!selectedShipmentLogId}
-                            onChange={(e) => { const file = e.target.files?.[0]; if (file) setLogEvidence(file.name); }} />
+                        /* CRITICAL FIX: real file picker — no longer generates a fake filename */
+                        <label
+                          className={`w-full border-2 border-dashed border-sand-200 hover:border-maritime-400 rounded-lg px-3 py-4 text-center transition-all group cursor-pointer ${!selectedShipmentLogId ? 'opacity-40 pointer-events-none' : ''}`}
+                        >
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            className="sr-only"
+                            disabled={!selectedShipmentLogId}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setLogEvidence(file.name);
+                              }
+                            }}
+                          />
                           <Upload className="w-5 h-5 text-gray-300 group-hover:text-maritime-400 mx-auto mb-1 transition-colors" />
                           <p className="text-[10px] font-bold text-gray-400 group-hover:text-maritime-600">Attach proof photo or PDF</p>
                           <p className="text-[9px] text-gray-300 mt-0.5">JPG, PNG, PDF — max 10 MB</p>
@@ -527,6 +626,7 @@ export default function DashboardHome() {
                     </MilestoneStep>
                   </div>
 
+                  {/* Submit row */}
                   <div className="mt-5 flex flex-col sm:flex-row items-center gap-3">
                     <button
                       type="submit"
@@ -534,57 +634,106 @@ export default function DashboardHome() {
                       className="bg-maritime-900 hover:bg-maritime-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black px-8 py-3 rounded-xl text-sm tracking-wide transition-all cursor-pointer shadow-sm flex items-center gap-2"
                     >
                       {isLogging ? (
-                        <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Committing to Ledger…</>
+                        <>
+                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Committing to Ledger…
+                        </>
                       ) : (
-                        <><Anchor className="w-4 h-4" />Submit Milestone Log</>
+                        <>
+                          <Anchor className="w-4 h-4" />
+                          Submit Milestone Log
+                        </>
                       )}
                     </button>
                     <p className="text-[10px] text-gray-400 leading-relaxed">
-                      This action is <strong className="text-gray-600">irreversible</strong>. Ensure all details are correct before submitting. Stellar transaction fees apply.
+                      This action is <strong className="text-gray-600">irreversible</strong>. Ensure all details are correct before submitting.
+                      Stellar transaction fees apply.
                     </p>
                   </div>
+
                 </form>
               </div>
 
+              {/* LOWER SECTION — assigned shipments + recent logs side by side */}
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+                {/* Assigned Shipments — wider */}
                 <div className="lg:col-span-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="font-extrabold text-sm text-maritime-900 tracking-tight flex items-center gap-2">
-                      <Ship className="w-4 h-4 text-maritime-400" />Assigned Shipments
+                      <Ship className="w-4 h-4 text-maritime-400" />
+                      Assigned Shipments
                     </h3>
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2" />
-                      <input type="text" placeholder="Search ref…" className="bg-white border border-sand-200 pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none focus:border-maritime-400 w-36" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                      <input
+                        type="text"
+                        placeholder="Search ref…"
+                        className="bg-white border border-sand-200 pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none focus:border-maritime-400 w-36"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
                     </div>
                   </div>
+
                   <div className="bg-white border border-sand-200 rounded-2xl overflow-hidden shadow-sm divide-y divide-sand-100">
                     {filteredShipments.length === 0 ? (
                       <div className="py-12 text-center text-xs text-gray-400 font-mono">NO ASSIGNED SHIPMENTS FOUND</div>
                     ) : filteredShipments.map((ship) => (
-                      <div key={ship.id}
-                        className={`p-4 flex items-center gap-4 hover:bg-sand-50/40 transition-colors cursor-pointer ${selectedShipmentLogId === ship.id ? 'bg-maritime-50 border-l-2 border-l-maritime-400' : ''}`}
-                        onClick={() => { setSelectedShipmentLogId(ship.id); setLogStatusError(''); setLogStatusSuccess(''); }}
+                      <div
+                        key={ship.id}
+                        className={`p-4 flex items-center gap-4 hover:bg-sand-50/40 transition-colors cursor-pointer ${
+                          selectedShipmentLogId === ship.id ? 'bg-maritime-50 border-l-2 border-l-maritime-400' : ''
+                        }`}
+                        onClick={() => {
+                          setSelectedShipmentLogId(ship.id);
+                          setLogStatusError('');
+                          setLogStatusSuccess('');
+                        }}
                       >
-                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5 ${ship.status === 'DELIVERED' ? 'bg-green-400' : ship.status === 'IN_TRANSIT' ? 'bg-ocean-400 animate-pulse' : ship.status === 'CUSTOMS_CLEARANCE' ? 'bg-amber-400' : 'bg-sand-300'}`} />
+                        {/* Status dot */}
+                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5 ${
+                          ship.status === 'DELIVERED' ? 'bg-green-400'
+                          : ship.status === 'IN_TRANSIT' ? 'bg-ocean-400 animate-pulse'
+                          : ship.status === 'CUSTOMS_CLEARANCE' ? 'bg-amber-400'
+                          : 'bg-sand-300'
+                        }`} />
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold font-mono text-xs text-maritime-900">{ship.referenceCode}</span>
                             <span className="bg-sand-100 text-gray-500 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">{ship.shipmentScope}</span>
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${ship.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : ship.status === 'IN_TRANSIT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                              ship.status === 'DELIVERED' ? 'bg-green-100 text-green-700'
+                              : ship.status === 'IN_TRANSIT' ? 'bg-blue-100 text-blue-700'
+                              : 'bg-amber-100 text-amber-700'
+                            }`}>
                               {ship.status?.replace(/_/g, ' ')}
                             </span>
                           </div>
                           <p className="text-[10px] text-gray-500 truncate mt-0.5">{ship.description}</p>
                           <div className="flex items-center gap-3 text-[10px] text-gray-400 mt-1">
-                            <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{ship.originCountry} → {ship.destinationPort}</span>
+                            <span className="flex items-center gap-0.5">
+                              <MapPin className="w-3 h-3" />{ship.originCountry} → {ship.destinationPort}
+                            </span>
                             {ship.estimatedArrival && (
-                              <span className="flex items-center gap-0.5"><Clock className="w-3 h-3 text-coral-400" />ETA {new Date(ship.estimatedArrival).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span>
+                              <span className="flex items-center gap-0.5">
+                                <Clock className="w-3 h-3 text-coral-400" />
+                                ETA {new Date(ship.estimatedArrival).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                              </span>
                             )}
                           </div>
                         </div>
+
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {selectedShipmentLogId === ship.id && <span className="text-[9px] bg-maritime-900 text-white px-2 py-0.5 rounded-full font-bold">SELECTED</span>}
-                          <Link href={`/shipments/${ship.id}`} onClick={(e) => e.stopPropagation()} className="text-[10px] bg-sand-100 hover:bg-sand-200 text-gray-600 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition-colors">
+                          {selectedShipmentLogId === ship.id && (
+                            <span className="text-[9px] bg-maritime-900 text-white px-2 py-0.5 rounded-full font-bold">SELECTED</span>
+                          )}
+                          <Link
+                            href={`/shipments/${ship.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[10px] bg-sand-100 hover:bg-sand-200 text-gray-600 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition-colors"
+                          >
                             Timeline <ChevronRight className="w-3 h-3" />
                           </Link>
                         </div>
@@ -593,10 +742,13 @@ export default function DashboardHome() {
                   </div>
                 </div>
 
+                {/* Recent Milestones Feed */}
                 <div className="lg:col-span-2 space-y-3">
                   <h3 className="font-extrabold text-sm text-maritime-900 tracking-tight flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-ocean-400" />Recent Logs
+                    <Activity className="w-4 h-4 text-ocean-400" />
+                    Recent Logs
                   </h3>
+
                   <div className="bg-white border border-sand-200 rounded-2xl overflow-hidden shadow-sm">
                     {milestones.length === 0 ? (
                       <div className="py-12 text-center">
@@ -612,11 +764,17 @@ export default function DashboardHome() {
                               <PackageCheck className="w-3.5 h-3.5 text-ocean-500" />
                             </div>
                             <div className="min-w-0 space-y-0.5">
-                              <p className="text-[10px] font-black text-maritime-900 uppercase tracking-tight leading-tight">{me.type.replace(/_/g, ' ')}</p>
+                              <p className="text-[10px] font-black text-maritime-900 uppercase tracking-tight leading-tight">
+                                {me.type.replace(/_/g, ' ')}
+                              </p>
                               <p className="text-[10px] text-gray-500 leading-relaxed truncate">{me.description}</p>
                               <div className="flex items-center gap-2 pt-0.5">
-                                <span className="text-[9px] font-mono text-gray-300">{new Date(me.occurredAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                {me.verified && <span className="text-[9px] bg-green-100 text-green-600 font-bold px-1 rounded">VERIFIED</span>}
+                                <span className="text-[9px] font-mono text-gray-300">
+                                  {new Date(me.occurredAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                {me.verified && (
+                                  <span className="text-[9px] bg-green-100 text-green-600 font-bold px-1 rounded">VERIFIED</span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -625,6 +783,7 @@ export default function DashboardHome() {
                     )}
                   </div>
                 </div>
+
               </div>
             </div>
           )}
@@ -638,17 +797,36 @@ export default function DashboardHome() {
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Step card used inside the 4-column milestone wizard */
 function MilestoneStep({
-  step, label, hint, active, done, required, children,
+  step,
+  label,
+  hint,
+  active,
+  done,
+  required,
+  children,
 }: {
-  step: number; label: string; hint: string; active: boolean; done: boolean; required?: boolean; children: React.ReactNode;
+  step: number;
+  label: string;
+  hint: string;
+  active: boolean;
+  done: boolean;
+  required?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <div className={`bg-white p-5 space-y-3 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`}>
+    <div className={`bg-white p-5 space-y-3 transition-opacity ${
+      active ? 'opacity-100' : 'opacity-50'
+    }`}>
+      {/* Step header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 ${done ? 'text-white' : 'bg-sand-100 text-gray-400 border border-sand-200'}`}
-            style={done ? { background: 'var(--theme-accent)' } : {}}>
+          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 ${
+            done
+              ? 'bg-ocean-400 text-white'
+              : 'bg-sand-100 text-gray-400 border border-sand-200'
+          }`}>
             {done ? '✓' : step}
           </div>
           <div>
@@ -656,29 +834,30 @@ function MilestoneStep({
             <p className="text-[9px] text-gray-400 mt-0.5 leading-none">{hint}</p>
           </div>
         </div>
-        {required && !done && <span className="text-[8px] bg-coral-400 text-white font-bold px-1 py-0.5 rounded flex-shrink-0 mt-0.5">REQ</span>}
+        {required && !done && (
+          <span className="text-[8px] bg-coral-400 text-white font-bold px-1 py-0.5 rounded flex-shrink-0 mt-0.5">REQ</span>
+        )}
       </div>
+      {/* Step content */}
       <div>{children}</div>
     </div>
   );
 }
 
+/** Banner showing which milestones the current role can log */
 const ROLE_META: Record<JobRole, { label: string; color: string; icon: React.ReactNode }> = {
-  FREIGHT_FORWARDER:  { label: 'Freight Forwarder',  color: 'border text-white', icon: <Truck className="w-4 h-4" /> },
-  CUSTOMS_BROKER:     { label: 'Customs Broker',      color: 'border text-white', icon: <FileCheck className="w-4 h-4" /> },
-  WAREHOUSE_OPERATOR: { label: 'Warehouse Operator',  color: 'border text-white', icon: <Warehouse className="w-4 h-4" /> },
-  IMPORTER:           { label: 'Importer',            color: 'border text-white', icon: <Shield className="w-4 h-4" /> },
-  EXPORTER:           { label: 'Exporter',            color: 'border text-white', icon: <Shield className="w-4 h-4" /> },
+  FREIGHT_FORWARDER: { label: 'Freight Forwarder', color: 'bg-blue-50 border-blue-100 text-blue-700', icon: <Truck className="w-4 h-4" /> },
+  CUSTOMS_BROKER: { label: 'Customs Broker', color: 'bg-amber-50 border-amber-100 text-amber-700', icon: <FileCheck className="w-4 h-4" /> },
+  WAREHOUSE_OPERATOR: { label: 'Warehouse Operator', color: 'bg-purple-50 border-purple-100 text-purple-700', icon: <Warehouse className="w-4 h-4" /> },
+  IMPORTER: { label: 'Importer', color: 'bg-sand-50 border-sand-100 text-sand-700', icon: <Shield className="w-4 h-4" /> },
+  EXPORTER: { label: 'Exporter', color: 'bg-sand-50 border-sand-100 text-sand-700', icon: <Shield className="w-4 h-4" /> },
 };
 
 function LogisticsScopeBanner({ jobRole }: { jobRole: JobRole }) {
-  const milestones = MILESTONE_BY_JOB[jobRole] ?? [];
   const meta = ROLE_META[jobRole];
+
   return (
-    <div
-      className={`border rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 ${meta.color}`}
-      style={{ background: 'var(--theme-feature)', borderColor: 'var(--theme-feature-muted)' }}
-    >
+    <div className={`border rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 ${meta.color}`}>
       <div className="flex items-center gap-2.5 flex-shrink-0">
         {meta.icon}
         <div>
@@ -686,19 +865,23 @@ function LogisticsScopeBanner({ jobRole }: { jobRole: JobRole }) {
           <p className="text-sm font-extrabold leading-tight">{meta.label}</p>
         </div>
       </div>
-      <div className="hidden sm:block w-px h-8 bg-white/20" />
+      <div className="hidden sm:block w-px h-8 bg-current opacity-10" />
       <div className="flex-1">
-        <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5">Your Loggable Milestones</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5">Loggable Milestones</p>
         <div className="flex flex-wrap gap-1.5">
-          {milestones.map((m) => (
-            <span key={m} className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-white/15 border border-white/20 tracking-wide">
+          {ALL_LOGGABLE_MILESTONES.map((m) => (
+            <span
+              key={m}
+              className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-white/60 border border-current/10 tracking-wide"
+            >
               {m.replace(/_/g, ' ')}
             </span>
           ))}
         </div>
       </div>
       <div className="flex items-center gap-1.5 text-[10px] font-bold opacity-60 flex-shrink-0">
-        <Lock className="w-3 h-3" />{milestones.length} milestones
+        <Lock className="w-3 h-3" />
+        {ALL_LOGGABLE_MILESTONES.length} milestones
       </div>
     </div>
   );

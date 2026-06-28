@@ -6,6 +6,10 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // Prevent webpack from bundling these packages into the client bundle.
+  // They contain pnpm virtual-store paths (.pnpm/...) that only resolve
+  // correctly when loaded natively by Node — not when bundled by webpack.
+  serverExternalPackages: ['@stellar/stellar-sdk', 'escrow-bindings'],
   // CLEANUP: picsum.photos is used for demo/placeholder avatars only.
   // Before going to production, migrate to real CDN / Supabase Storage and remove this entry.
   images: {
@@ -19,7 +23,7 @@ const nextConfig = {
     ],
   },
   output: 'standalone',
-  transpilePackages: ['motion', 'escrow-bindings'],
+  transpilePackages: ['motion'],
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modify file watching is disabled to prevent flickering during agent edits.

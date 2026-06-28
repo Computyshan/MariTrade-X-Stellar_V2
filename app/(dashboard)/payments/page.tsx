@@ -99,25 +99,27 @@ export default function EscrowLedger() {
     await Promise.allSettled(
       onChainShipments.map(async s => {
         try {
-          const record = await client.getEscrow(s.referenceCode);
+          // Correct binding: snake_case method name, object param, unwrap Result
+          const tx = await client.get_escrow({ reference_code: s.referenceCode });
+          const record = tx.result?.isOk() ? tx.result.unwrap() : null;
 
-          // getEscrow returns null when the contract has no record yet
+          // get_escrow returns an Err result when the contract has no record yet
           if (!record) {
             setChainMap(prev => ({ ...prev, [s.referenceCode]: 'error' }));
             return;
           }
 
-          // EscrowRecord uses camelCase from scValToNative:
-          // { status, amount (strobes), requiredMilestones, confirmedMilestones, ... }
+          // EscrowRecord fields are snake_case from the generated bindings:
+          // { status, amount (strobes), required_milestones, confirmed_milestones, ... }
           const statusLabel =
             CONTRACT_STATUS_LABEL[record.status as number] ??
             String(record.status);
 
-          const confirmed = Array.isArray(record.confirmedMilestones)
-            ? record.confirmedMilestones.length
+          const confirmed = Array.isArray(record.confirmed_milestones)
+            ? record.confirmed_milestones.length
             : 0;
-          const required  = Array.isArray(record.requiredMilestones)
-            ? record.requiredMilestones.length
+          const required  = Array.isArray(record.required_milestones)
+            ? record.required_milestones.length
             : 0;
 
           setChainMap(prev => ({

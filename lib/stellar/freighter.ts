@@ -14,16 +14,20 @@ import { NETWORKS, NetworkName } from './escrow-contract';
 
 // ─── Loose type for dynamic import ──────────────────────────────────────────
 
-type AnyReturn = string | { address?: string; signedTxXdr?: string; isConnected?: boolean };
+type AnyReturn = string | { address?: string; signedTxXdr?: string; isConnected?: boolean; isAllowed?: boolean };
 
 interface FreighterModule {
+  // v4+ API
+  isAllowed?:       () => Promise<{ isAllowed: boolean }>;
+  setAllowed?:      () => Promise<{ isAllowed: boolean }>;
+  // v1–v3 API (kept for fallback)
   isConnected?:     () => Promise<AnyReturn>;
   requestAccess?:   () => Promise<AnyReturn>;
   getAddress?:      () => Promise<AnyReturn>;
   getPublicKey?:    () => Promise<string>;
   signTransaction?: (
     xdr: string,
-    opts?: { networkPassphrase?: string; network?: string; accountToSign?: string },
+    opts?: { networkPassphrase?: string; network?: string; accountToSign?: string; address?: string },
   ) => Promise<AnyReturn>;
 }
 
@@ -65,6 +69,13 @@ function pickSignedXdr(raw: AnyReturn): string {
 export async function isFreighterInstalled(): Promise<boolean> {
   try {
     const api = await loadFreighter();
+    // v4+: prefer isAllowed() as the presence check — it only resolves if the
+    // extension is actually installed and responding.
+    if (typeof api.isAllowed === 'function') {
+      await api.isAllowed(); // throws / hangs if extension absent
+      return true;
+    }
+    // v1–v3 fallback
     if (!api.isConnected) return false;
     const raw = await api.isConnected();
     if (typeof raw === 'boolean') return raw;
@@ -85,6 +96,31 @@ export async function isFreighterInstalled(): Promise<boolean> {
 export async function connectFreighter(): Promise<string> {
   const api = await loadFreighter();
 
+  // ── v4+ path: setAllowed() prompts the user, then getAddress() returns the key ──
+  if (typeof api.setAllowed === 'function') {
+    try {
+      const allowResult = await api.setAllowed();
+      if (!allowResult?.isAllowed) {
+        throw new Error('Wallet connection was rejected. Approve the request in Freighter.');
+      }
+      if (typeof api.getAddress !== 'function') {
+        throw new Error('getAddress not available in this version of the Freighter extension. Please update Freighter.');
+      }
+      const address = pickAddress(await api.getAddress());
+      if (!address) {
+        throw new Error('Freighter returned an empty address. Ensure your wallet is set up and unlocked.');
+      }
+      return address;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/reject|deny|cancel|user/i.test(msg)) {
+        throw new Error('Wallet connection was rejected. Approve the request in Freighter.');
+      }
+      throw new Error(`Freighter connection failed: ${msg}`);
+    }
+  }
+
+  // ── v1–v3 fallback ────────────────────────────────────────────────────────
   const hasFn = api.requestAccess ?? api.getAddress ?? api.getPublicKey;
   if (!hasFn) {
     throw new Error(

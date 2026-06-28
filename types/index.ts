@@ -93,6 +93,38 @@ export type MilestoneType =
   | 'FAILED_DELIVERY_ATTEMPT';
 
 /**
+ * Canonical map of loggable milestones per job role.
+ * Single source of truth — import this everywhere instead of
+ * maintaining local copies (dashboard, log-milestone page, etc.).
+ */
+export const ROLE_MILESTONES: Record<JobRole, MilestoneType[]> = {
+  // Trade Party — read-only observers, no milestone logging
+  IMPORTER: ['DELIVERED_AND_SIGNED_OFF'],
+  EXPORTER: ['BILL_OF_LADING_ISSUED'],
+  // ─── Logistics Chain ───
+  FREIGHT_FORWARDER: [
+    'BOOKING_CONFIRMED',
+    'DOCUMENTS_SUBMITTED_TO_CARRIER',
+    'CARGO_READY_FOR_COLLECTION',
+    'SPACE_ON_VESSEL_SECURED',
+  ],
+  CUSTOMS_BROKER: [
+    'BOC_ENTRY_FILED',
+    'DUTIES_AND_TAXES_PAID',
+    'CUSTOMS_EXAMINATION_REQUESTED',
+    'CUSTOMS_CLEARANCE_APPROVED',
+    'CARGO_RELEASED_FOR_PICKUP',
+  ],
+  WAREHOUSE_OPERATOR: [
+    'CARGO_RECEIVED_AT_WAREHOUSE',
+    'CARGO_INSPECTED_AND_PACKED',
+    'CARGO_STAGED_FOR_PICKUP',
+    'CARGO_HANDED_OFF_TO_CARRIER',
+    'INCOMING_CARGO_STORED',
+  ],
+};
+
+/**
  * Phase labels for grouping milestones in the timeline UI.
  */
 export type ShipmentPhase =

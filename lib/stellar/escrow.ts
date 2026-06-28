@@ -90,9 +90,19 @@ export async function releaseEscrow(params: {
   sellerPublicKey: string;
   amountUSDC: string;
   platformSecretKey: string;
+  /** USDC issuer address (Circle / testnet anchor) — NOT the escrow account */
+  usdcIssuerAddress: string;
 }): Promise<string> {
-  const { escrowAccountPublicKey, sellerPublicKey, amountUSDC, platformSecretKey } = params;
-  
+  const { escrowAccountPublicKey, sellerPublicKey, amountUSDC, platformSecretKey, usdcIssuerAddress } = params;
+
+  // usdcIssuerAddress must be provided — using the escrow account address as the
+  // issuer (the old bug) creates a synthetic asset nobody holds, causing tx rejection.
+  if (!usdcIssuerAddress) {
+    throw new Error(
+      'usdcIssuerAddress is required for releaseEscrow — pass NEXT_PUBLIC_USDC_SAC_TESTNET or the Circle issuer address'
+    );
+  }
+
   if (!platformSecretKey) {
     console.warn('Missing platform secret key for signing. Simulating release with mock hash.');
     return 'tx_mock_hash_stellar_release_' + Math.random().toString(36).substring(7);
@@ -111,7 +121,8 @@ export async function releaseEscrow(params: {
     })
     .addOperation(StellarSdk.Operation.payment({
       destination: sellerPublicKey,
-      asset: new StellarSdk.Asset('USDC', escrowAccountPublicKey), // Assumed stable anchor issuer or asset issuer
+      // usdcIssuerAddress is the Circle/anchor issuer — distinct from escrowAccountPublicKey
+      asset: new StellarSdk.Asset('USDC', usdcIssuerAddress),
       amount: amountUSDC
     }))
     .setTimeout(180)

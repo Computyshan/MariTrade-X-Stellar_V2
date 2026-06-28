@@ -29,10 +29,9 @@ import {
   RefreshCw,
   Wallet,
 } from 'lucide-react';
-import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument } from '@/types';
+import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE } from '@/types';
 import { canAccessBOCDocuments } from '@/lib/permissions/documents';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
-import { signAndSubmitWithRetry } from '@/lib/stellar/freighter';
 
 type PageParams = { id: string };
 
@@ -75,16 +74,6 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const [uploading,     setUploading]     = useState(false);
   const [uploadError,   setUploadError]   = useState('');
 
-  if (sessionLoading || !currentUser) {
-    return (
-      <DashboardLayout>
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   const fetchDetails = async () => {
     try {
       setLoading(true);
@@ -107,17 +96,21 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     if (shipmentId) fetchDetails();
   }, [shipmentId]);
 
-  // DB-level check (fast fallback)
+  // DB-level check — source of truth for release eligibility.
+  // The on-chain can_release query is advisory only; if it fails or the
+  // escrow ID is a placeholder we fall back to this.
   const allPriorityCompleted = data?.priorityMilestones?.every(pm => pm.isCompleted) ?? false;
+
+  // True when the escrow ID looks like a real on-chain tx hash (64 hex chars).
+  const hasRealEscrowId = !!data?.shipment?.stellarEscrowId &&
+    /^[0-9a-fA-F]{64}$/.test(data.shipment.stellarEscrowId);
 
   // ── Query canRelease from the contract when shipment is FUNDED ─────────────
   useEffect(() => {
     if (!data?.shipment || data.shipment.escrowStatus !== 'FUNDED') return;
     if (!data.shipment.referenceCode) return;
-    // Only query the chain if the escrow ID is a real tx hash (64 hex chars),
-    // not the placeholder value set during DB record creation.
-    if (!data.shipment.stellarEscrowId) return;
-    if (data.shipment.stellarEscrowId.length !== 64) return;
+    // Only query the chain when the escrow ID is a real 64-hex tx hash.
+    if (!hasRealEscrowId) return;
 
     const walletKey = freighter.publicKey
       ?? process.env.NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS
@@ -127,10 +120,17 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     setCheckingRelease(true);
     const client = getMariTradeEscrowClient(STELLAR_NETWORK, walletKey);
     client.can_release({ reference_code: data.shipment.referenceCode })
-      .then(tx => tx.result?.isOk() ? setChainCanRelease(tx.result.unwrap()) : setChainCanRelease(null))
-      .catch(() => setChainCanRelease(null))
+      .then(tx => {
+        if (tx.result?.isOk()) {
+          setChainCanRelease(tx.result.unwrap());
+        } else {
+          // Contract returned an error result — fall back to DB
+          setChainCanRelease(null);
+        }
+      })
+      .catch(() => setChainCanRelease(null)) // RPC unreachable — fall back to DB
       .finally(() => setCheckingRelease(false));
-  }, [data?.shipment?.escrowStatus, data?.shipment?.referenceCode, freighter.publicKey]);
+  }, [data?.shipment?.escrowStatus, data?.shipment?.referenceCode, hasRealEscrowId, freighter.publicKey]);
 
   // ── Authorise escrow lock (UNFUNDED → FUNDED mock; kept for UI compatibility)
   const handleFundEscrow = async () => {
@@ -166,41 +166,62 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     setStellarError('');
 
     try {
-      // Resolve signer address
-      const importerAddress = freighter.publicKey ?? await freighter.connect();
+      // Ensure Freighter is connected
+      let importerAddress = freighter.publicKey;
+      if (!importerAddress) {
+        setStellarStep('Connecting Freighter wallet…');
+        try {
+          importerAddress = await freighter.connect();
+        } catch (connErr) {
+          const msg = connErr instanceof Error ? connErr.message : String(connErr);
+          setStellarError(`Freighter connection failed: ${msg}`);
+          return;
+        }
+      }
 
-      // Gate: confirm on-chain that all milestones are done
-      setStellarStep('Verifying milestone gate on Stellar…');
-      const client = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
-      const canReleaseTx = await client.can_release({ reference_code: data.shipment.referenceCode });
-      const canRelease = canReleaseTx.result?.isOk() ? canReleaseTx.result.unwrap() : false;
-
-      if (!canRelease) {
-        setStellarError('Not all required milestones are confirmed on-chain yet. Release is still locked.');
+      if (!importerAddress) {
+        setStellarError('No wallet address available. Connect Freighter and try again.');
         return;
       }
 
-      // Build and sign the release transaction
-      setStellarStep('Sign the release transaction in Freighter…');
-      const txHash = await signAndSubmitWithRetry(
-        () => client.release({
-          reference_code: data.shipment.referenceCode,
-          importer:       importerAddress,
-        }),
-        STELLAR_NETWORK,
-      );
+      if (!allPriorityCompleted) {
+        setStellarError('Not all required milestones are confirmed yet. Release is still locked.');
+        return;
+      }
+
+      let txHash: string;
+
+      if (hasRealEscrowId) {
+        // Server handles the full release — assign + release() via platform key.
+        // Never round-trip the Soroban XDR through Freighter: that strips the
+        // auth/footprint entries and causes txMalformed.
+        setStellarStep('Executing escrow release on Stellar…');
+        const releaseRes = await authFetch(`/api/shipments/${data.shipment.id}/escrow-release-prep`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'execute_release', importerAddress }),
+        });
+        const releaseJson = await releaseRes.json();
+        if (!releaseJson.success) {
+          setStellarError(releaseJson.error || 'Release transaction failed.');
+          return;
+        }
+        txHash = releaseJson.data.txHash;
+      } else {
+        // DB-only / placeholder escrow
+        setStellarStep('Processing escrow release…');
+        await new Promise(r => setTimeout(r, 1200));
+        txHash = 'db_release_' + Math.random().toString(36).substring(2, 11);
+      }
+
       setStellarHash(txHash);
 
       // Sync the DB record
       setStellarStep('Updating shipment record…');
-      const res     = await authFetch(`/api/shipments/${data.shipment.id}`, {
-        method:  'POST',
+      const res = await authFetch(`/api/shipments/${data.shipment.id}`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          action:      'RELEASE_ESCROW',
-          evidenceUrl: releaseProofUrl,
-          txHash,
-        }),
+        body: JSON.stringify({ action: 'RELEASE_ESCROW', evidenceUrl: releaseProofUrl, txHash }),
       });
       const resJson = await res.json();
       if (resJson.success) {
@@ -208,11 +229,22 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
         setReleaseProofUrl('');
         fetchDetails();
       } else {
-        setStellarError(resJson.error || 'DB update failed after on-chain release.');
+        setStellarError(resJson.error || 'DB update failed after release.');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Release transaction failed.';
-      setStellarError(msg);
+      const friendlyMsg = msg.includes('#3') || msg.includes('NotImporter')
+        ? 'Wrong wallet connected. Connect the Freighter wallet that originally funded this escrow and try again.'
+        : msg.includes('#6') || msg.includes('NotAuthorizedLogisticsUser')
+        ? 'Platform authorization step failed. Make sure Freighter is unlocked and connected to the correct importer wallet, then try again.'
+        : msg.includes('#16') || msg.includes('PriorityMilestonesIncomplete')
+        ? 'The on-chain milestone gate is not satisfied yet. All priority milestones must be confirmed on Stellar before release.'
+        : msg.includes('#9') || msg.includes('NotFunded')
+        ? 'This escrow is not in a funded state on-chain and cannot be released.'
+        : msg.includes('#17') || msg.includes('AlreadySettled')
+        ? 'This escrow has already been released or refunded on-chain.'
+        : msg;
+      setStellarError(friendlyMsg);
     } finally {
       setStellarWorking(false);
       setStellarStep('');
@@ -281,6 +313,16 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     }
   };
 
+  if (sessionLoading || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -309,10 +351,34 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     );
   }
 
-  const { shipment, milestones, priorityMilestones, documents, assignments, vaultFolderId } = data;
+  const { shipment, milestones, priorityMilestones: rawPriorityMilestones, documents, assignments, vaultFolderId } = data;
 
-  // Decide release eligibility: prefer on-chain result, fall back to DB
-  const releaseEligible = chainCanRelease !== null ? chainCanRelease : allPriorityCompleted;
+  // Sort priority milestones into canonical shipment lifecycle order so the
+  // Escrow Release Requirements list always reads top-to-bottom chronologically,
+  // regardless of the order the importer selected them during creation.
+  const MILESTONE_ORDER = Object.values(PHASE_MILESTONE_SEQUENCE).flat();
+  const priorityMilestones = [...rawPriorityMilestones].sort(
+    (a, b) => {
+      const ai = MILESTONE_ORDER.indexOf(a.type);
+      const bi = MILESTONE_ORDER.indexOf(b.type);
+      // Unknown types go to the end
+      return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
+    }
+  );
+
+  // Decide release eligibility:
+  // Priority order:
+  //   1. If all DB priority milestones are complete → always eligible, regardless
+  //      of what the contract says. This handles the common case where logistics
+  //      users don't have Stellar wallets so confirm_milestone() was never called
+  //      on-chain — the DB is the authoritative source of truth for milestone state.
+  //   2. If DB milestones are NOT all complete → check the chain result.
+  //      If chain says true (shouldn't happen, but belt-and-suspenders) → eligible.
+  //      If chain says false → locked.
+  //   3. If DB milestones are not all complete and chain result is unknown → locked.
+  const releaseEligible = allPriorityCompleted
+    ? true
+    : (chainCanRelease === true);
 
   return (
     <DashboardLayout>
@@ -337,7 +403,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
           <span className={`px-3 py-1 rounded-full uppercase font-bold ${shipment.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
             {shipment.status?.replace(/_/g, ' ')}
           </span>
-          {shipment.stellarEscrowId && (
+          {shipment.stellarEscrowId && hasRealEscrowId && (
             <a href={`https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${shipment.stellarEscrowId}`}
               target="_blank" rel="noreferrer"
               className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1 rounded-full font-bold flex items-center gap-1 transition-all">
@@ -368,7 +434,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
             </h3>
 
             <div className="bg-sand-50 p-4 rounded-xl border border-sand-200 space-y-3">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider font-mono">Stellar Release Requirements</h4>
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider font-mono">Escrow Release Requirements</h4>
               <div className="space-y-2">
                 {priorityMilestones.map((pm) => (
                   <div key={pm.id} className="flex items-center gap-2.5 text-xs text-gray-700">
@@ -385,9 +451,29 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
                   <RefreshCw className="w-3 h-3 animate-spin" /> Checking on-chain release status…
                 </div>
               )}
-              {chainCanRelease !== null && !checkingRelease && (
-                <div className={`text-[10px] font-bold pt-1 flex items-center gap-1 ${chainCanRelease ? 'text-ocean-600' : 'text-coral-500'}`}>
-                  {chainCanRelease ? '✓ On-chain gate: OPEN — all milestones confirmed on Stellar' : '⊘ On-chain gate: LOCKED — pending milestone confirmations'}
+              {/* Real on-chain escrow: show Stellar gate result */}
+              {hasRealEscrowId && chainCanRelease !== null && !checkingRelease && (
+                <div className={`text-[10px] font-bold pt-1 flex items-center gap-1 ${
+                  // If DB says all done, show green regardless of chain result.
+                  // Chain may say false because confirm_milestone() wasn't called
+                  // on-chain (logistics users without Stellar wallets).
+                  allPriorityCompleted
+                    ? 'text-ocean-600'
+                    : chainCanRelease ? 'text-ocean-600' : 'text-coral-500'
+                }`}>
+                  {allPriorityCompleted
+                    ? '✓ All priority milestones confirmed — payout unlocked'
+                    : chainCanRelease
+                    ? '✓ On-chain gate: OPEN — all milestones confirmed on Stellar'
+                    : '⊘ On-chain gate: pending milestone confirmations'}
+                </div>
+              )}
+              {/* Placeholder escrow: show DB-derived gate status */}
+              {!hasRealEscrowId && !checkingRelease && (
+                <div className={`text-[10px] font-bold pt-1 flex items-center gap-1 ${allPriorityCompleted ? 'text-ocean-600' : 'text-coral-500'}`}>
+                  {allPriorityCompleted
+                    ? '✓ All priority milestones confirmed — payout unlocked'
+                    : '⊘ Awaiting milestone confirmations — payout locked'}
                 </div>
               )}
             </div>

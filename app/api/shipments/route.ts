@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
 import { notifyUser, notifyUsers } from '@/lib/notify';
-import { Shipment, PriorityMilestone, ShipmentAssignment, VaultFolder } from '@/types';
+import { Shipment, PriorityMilestone, ShipmentAssignment, VaultFolder, ShipmentDocument } from '@/types';
 
 export async function GET(req: NextRequest) {
   // CRITICAL FIX: authenticate every request
@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
       estimatedArrival,
       selectedLogisticsUsers,
       requiredMilestones,
+      documents,
       vaultFolderName,
       vaultPassword,
     } = body;
@@ -167,6 +168,28 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString(),
       };
       await dbStore.saveVaultFolder(vaultFolder);
+    }
+
+    // Save uploaded documents (sent as base64 data URLs from the client —
+    // see fileToDataUrl() in shipments/new/page.tsx; no Supabase Storage
+    // bucket exists yet, so this matches the chat-image convention already
+    // used elsewhere in the app). Each becomes a real shipment_documents row
+    // so it actually shows up in the shipment detail page and BOC Vault.
+    if (Array.isArray(documents) && documents.length > 0) {
+      for (const doc of documents) {
+        if (!doc?.name || !doc?.dataUrl) continue;
+        const shipmentDoc: ShipmentDocument = {
+          id: 'doc_' + Math.random().toString(36).substring(2, 9),
+          shipmentId: newId,
+          fileName: String(doc.name),
+          fileUrl: String(doc.dataUrl),
+          uploadedById: importerId,
+          version: 1,
+          isLatest: true,
+          createdAt: new Date().toISOString(),
+        };
+        await dbStore.saveDocument(shipmentDoc);
+      }
     }
 
     return NextResponse.json({ success: true, data: newShipment });

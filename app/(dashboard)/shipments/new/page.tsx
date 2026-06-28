@@ -15,48 +15,18 @@ import {
   DollarSign, Hash, FolderLock, Key, Eye, EyeOff, Copy, CheckCircle2,
   Shuffle, ShieldCheck, FolderOpen, ExternalLink,
 } from 'lucide-react';
-import { ShipmentScope, MilestoneType, JobRole } from '@/types';
+import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase } from '@/types';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
 import { signAndSubmitWithRetry } from '@/lib/stellar/freighter';
 import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MILESTONE_BY_JOB: Record<string, MilestoneType[]> = {
-  '🏢 Freight Forwarder': [
-    'BOOKING_CONFIRMED',
-    'DOCUMENTS_SUBMITTED_TO_CARRIER',
-    'SPACE_ON_VESSEL_SECURED',
-    'CONTAINER_GATED_OUT_ORIGIN',
-    'CONTAINER_LOADED_ON_VESSEL',
-    'VESSEL_CLEARED_TO_DEPART',
-    'VESSEL_DEPARTED_ORIGIN',
-    'BILL_OF_LADING_ISSUED',
-    'VESSEL_ARRIVED_AT_BERTH',
-    'VESSEL_ARRIVED_DESTINATION',
-    'CONTAINER_OFFLOADED',
-    'CONTAINER_GATED_IN_DESTINATION',
-    'CARGO_RELEASED_FOR_PICKUP',
-    'IN_TRANSIT_TO_DESTINATION',
-    'ARRIVED_AT_DELIVERY_ADDRESS',
-    'DELIVERED_AND_SIGNED_OFF',
-  ],
-  '🛃 Customs Broker': [
-    'BOC_ENTRY_FILED',
-    'PORT_HOLD_PLACED_OR_LIFTED',
-    'DUTIES_AND_TAXES_PAID',
-    'CUSTOMS_EXAMINATION_REQUESTED',
-    'CUSTOMS_CLEARANCE_APPROVED',
-  ],
-  '🏬 Warehouse Operator': [
-    'CARGO_READY_FOR_COLLECTION',
-    'CARGO_INSPECTED_AND_PACKED',
-    'CARGO_STAGED_FOR_PICKUP',
-    'CARGO_HANDED_OFF_TO_CARRIER',
-    'CARGO_PICKED_UP_FROM_PORT',
-    'CARGO_RECEIVED_AT_WAREHOUSE',
-    'INCOMING_CARGO_STORED',
-  ],
+const PHASE_LABELS: Record<ShipmentPhase, string> = {
+  CARGO_PREPARATION:         '📦 Phase 1 — Cargo Preparation & Origin Warehouse',
+  ORIGIN_PORT_EXPORT:        '⚓ Phase 2 — Origin Port & Export Clearance',
+  OCEAN_TRANSIT_DESTINATION: '🌊 Phase 3 — Ocean Transit & Destination Port',
+  LAST_MILE_DELIVERY:        '🚛 Phase 4 — Last-Mile Delivery & Final Receipt',
 };
 
 const DEFAULT_PRIORITY_MILESTONES: MilestoneType[] = [
@@ -153,6 +123,19 @@ function deriveFolderName(description: string, origin: string, dest: string): st
   const from = origin.trim().slice(0, 3).toUpperCase() || 'ORI';
   const to   = dest.trim().slice(0, 3).toUpperCase() || 'DST';
   return `${from}-${to}_${slug}_${year}`;
+}
+
+// Reads a File into a base64 data URL (e.g. "data:application/pdf;base64,...").
+// Matches the same approach already used for chat image attachments in
+// app/(dashboard)/messages/page.tsx — no Supabase Storage bucket exists yet,
+// so this keeps document upload working without adding new infrastructure.
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -492,6 +475,13 @@ export default function NewShipmentPage() {
 
     try {
       // ── 1. Create the DB shipment record ────────────────────────────────────
+      const documentPayload = documents.length > 0
+        ? await Promise.all(documents.map(async (file) => ({
+            name:    file.name,
+            dataUrl: await fileToDataUrl(file),
+          })))
+        : [];
+
       const res = await authFetch('/api/shipments', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -506,7 +496,7 @@ export default function NewShipmentPage() {
           estimatedArrival:       estimatedArrival || undefined,
           selectedLogisticsUsers: assignedUserIds,
           requiredMilestones:     priorityMilestones,
-          documentNames:          documents.map(d => d.name),
+          documents:              documentPayload,
           invoiceCurrency,
           invoiceValue:           Number(invoiceValue),
           hsCode,
@@ -1255,11 +1245,11 @@ export default function NewShipmentPage() {
               </h3>
               <p className="text-xs text-gray-500">The <strong>Release Funds</strong> button stays locked until <strong>all</strong> selected milestones are confirmed.</p>
               <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
-                {Object.entries(MILESTONE_BY_JOB).map(([group, types]) => (
-                  <div key={group}>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5">{group}</p>
+                {(Object.keys(PHASE_MILESTONE_SEQUENCE) as ShipmentPhase[]).map(phase => (
+                  <div key={phase}>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5">{PHASE_LABELS[phase]}</p>
                     <div className="space-y-1">
-                      {types.map(type => {
+                      {PHASE_MILESTONE_SEQUENCE[phase].map(type => {
                         const selected = priorityMilestones.includes(type);
                         return (
                           <button key={type} onClick={() => toggleMilestone(type)}
