@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
-import { MilestoneEvent, MilestoneType, JobRole } from '@/types';
+import { MilestoneEvent, MilestoneType, JobRole, MILESTONE_EVIDENCE_MODE } from '@/types';
 
 // ─── Role permission map ───────────────────────────────────────────────────────
 
@@ -72,12 +72,31 @@ export async function POST(
   try {
     const { id: shipmentId } = await params;
     const body = await req.json();
-    const { loggedById, type, description, evidenceUrl, occurredAt } = body;
+    const { loggedById, type, description, evidenceUrl, evidenceRef, occurredAt } = body;
 
-    // Validate required fields
-    if (!loggedById || !type || !evidenceUrl) {
+    // Validate required fields — at least one evidence field must be present
+    if (!loggedById || !type) {
       return NextResponse.json(
-        { success: false, error: 'loggedById, type, and evidenceUrl are required.' },
+        { success: false, error: 'loggedById and type are required.' },
+        { status: 400 }
+      );
+    }
+    const mode = MILESTONE_EVIDENCE_MODE[type as MilestoneType];
+    if (mode === 'REFERENCE_NUMBER' && !evidenceRef?.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'A reference number is required for this milestone.' },
+        { status: 400 }
+      );
+    }
+    if (mode === 'DOCUMENT' && !evidenceUrl?.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'A document upload is required for this milestone.' },
+        { status: 400 }
+      );
+    }
+    if (mode === 'PHOTO_OR_NOTE' && !evidenceUrl?.trim() && !description?.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'A photo upload or written description is required for this milestone.' },
         { status: 400 }
       );
     }
@@ -113,7 +132,8 @@ export async function POST(
       loggedById,
       type: type as MilestoneType,
       description: description ?? undefined,
-      evidenceUrl,
+      evidenceUrl: evidenceUrl ?? undefined,
+      evidenceRef: evidenceRef ?? undefined,
       occurredAt: occurredAt ?? new Date().toISOString(),
       verified: false,
     };

@@ -74,8 +74,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-sand-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white border border-sand-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+    <div className="min-h-screen bg-mist-light flex flex-col items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white border border-mist rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
 
         {/* Brand */}
         <div className="flex flex-col items-center text-center space-y-2">
@@ -88,13 +88,13 @@ export default function LoginPage() {
               priority
             />
           <div>
-            <h1 className="text-2xl font-black text-maritime-900 tracking-tight">MariTrade</h1>
-            <p className="text-xs text-gray-500 font-medium">Shipment Logistics Tracker & MSME Platform</p>
+            <h1 className="text-2xl font-display font-medium text-ink tracking-tight">MariTrade</h1>
+            <p className="text-xs text-ink-faint font-medium">Shipment Logistics Tracker & MSME Platform</p>
           </div>
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 bg-coral-50 border border-coral-200 text-coral-700 text-xs p-3 rounded-lg">
+          <div className="flex items-center gap-2 bg-wine-light border border-wine/20 text-wine text-xs p-3 rounded-lg">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -102,7 +102,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+            <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">
               Email Address
             </label>
             <input
@@ -110,14 +110,14 @@ export default function LoginPage() {
               required
               autoComplete="email"
               placeholder="juan@delacruz.ph"
-              className="w-full bg-sand-50 border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:bg-white"
+              className="w-full bg-mist-light border border-mist rounded-lg px-3 py-2 text-sm outline-none focus:border-amber focus:bg-white"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
           <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+            <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">
               Password
             </label>
             <input
@@ -125,7 +125,7 @@ export default function LoginPage() {
               required
               autoComplete="current-password"
               placeholder="••••••••"
-              className="w-full bg-sand-50 border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:bg-white"
+              className="w-full bg-mist-light border border-mist rounded-lg px-3 py-2 text-sm outline-none focus:border-amber focus:bg-white"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -134,15 +134,15 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-maritime-400 hover:bg-maritime-700 disabled:opacity-60 text-white font-bold py-2.5 rounded-lg text-sm transition-all shadow-sm cursor-pointer"
+            className="w-full bg-amber hover:bg-amber-hover disabled:opacity-60 text-white font-bold py-2.5 rounded-lg text-sm transition-all shadow-sm cursor-pointer"
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
-        <div className="border-t border-sand-200 pt-4 text-center text-xs text-gray-500">
+        <div className="border-t border-mist pt-4 text-center text-xs text-ink-faint">
           Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-maritime-400 hover:text-maritime-900 font-bold">
+          <Link href="/register" className="text-amber hover:text-amber-hover font-bold">
             Register here →
           </Link>
         </div>

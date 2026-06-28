@@ -9,11 +9,11 @@ import { authFetch } from '@/hooks/use-user-session';
 import { useFreighter } from '@/hooks/use-freighter';
 import {
   Ship, ChevronLeft, ChevronRight, Globe, MapPin, Coins,
-  ClipboardCheck, Zap, Upload, X, Check, Users, Lock,
+  ClipboardCheck, Upload, X, Check, Users, Lock,
   Wallet, RefreshCw, FileText, AlertTriangle, Plus, Calendar,
   Building2, Package, Weight, Search, ToggleLeft, ToggleRight,
   DollarSign, Hash, FolderLock, Key, Eye, EyeOff, Copy, CheckCircle2,
-  Shuffle, ShieldCheck, FolderOpen, ExternalLink, Receipt, Sparkles,
+  Shuffle, ShieldCheck, FolderOpen, ExternalLink, Receipt, Sparkles, MessageSquare,
 } from 'lucide-react';
 import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase, ShipmentReceipt, CURRENCY_SYMBOLS } from '@/types';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
@@ -125,17 +125,22 @@ function deriveFolderName(description: string, origin: string, dest: string): st
   return `${from}-${to}_${slug}_${year}`;
 }
 
-// Reads a File into a base64 data URL (e.g. "data:application/pdf;base64,...").
-// Matches the same approach already used for chat image attachments in
-// app/(dashboard)/messages/page.tsx — no Supabase Storage bucket exists yet,
-// so this keeps document upload working without adding new infrastructure.
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+// Uploads a list of File objects to the vault folder via the Storage-backed
+// API route POST /api/vault/folders/[folderId]/documents.
+// Returns an array of { fileName, fileUrl } for each successfully-uploaded file.
+async function uploadFilesToVault(
+  folderId: string,
+  files: File[],
+  fetchFn: typeof authFetch,
+): Promise<void> {
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append('file', file);
+    await fetchFn(`/api/vault/folders/${folderId}/documents`, {
+      method: 'POST',
+      body: fd,
+    });
+  }
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -213,8 +218,7 @@ export default function NewShipmentPage() {
 
   const [selectedExporterId, setSelectedExporterId] = useState<string | null>(null);
   const [exporterSearch,     setExporterSearch]     = useState('');
-  const [aiText,    setAiText]    = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
+
 
   // ── Step 2 · DOCUMENTS ──────────────────────────────────────────────────────
   const [documents,        setDocuments]        = useState<File[]>([]);
@@ -397,33 +401,6 @@ export default function NewShipmentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, shipmentScope]);
 
-  const handleAutofill = async () => {
-    if (!aiText.trim()) return;
-    setAiLoading(true);
-    setErrorText('');
-    try {
-      const res  = await fetch('/api/gemini/autofill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:   JSON.stringify({ invoiceText: aiText }),
-      });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setDescription(data.data.cargoDescription || '');
-        setInvoiceValue(String(data.data.invoiceValueUSD || ''));
-        setTotalValueUSD(String(data.data.invoiceValueUSD || ''));
-        if (shipmentScope === 'OVERSEAS') setOriginCountry(data.data.originCountry || '');
-        setDestinationPort(data.data.destinationPort || '');
-        if (data.data.shipmentScope) setShipmentScope(data.data.shipmentScope);
-      } else {
-        setErrorText('Autofill failed — please refine your invoice text.');
-      }
-    } catch {
-      setErrorText('Could not reach Gemini service.');
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   const handleDocAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -519,13 +496,6 @@ export default function NewShipmentPage() {
 
     try {
       // ── 1. Create the DB shipment record ────────────────────────────────────
-      const documentPayload = documents.length > 0
-        ? await Promise.all(documents.map(async (file) => ({
-            name:    file.name,
-            dataUrl: await fileToDataUrl(file),
-          })))
-        : [];
-
       const res = await authFetch('/api/shipments', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -540,7 +510,7 @@ export default function NewShipmentPage() {
           estimatedArrival:       estimatedArrival || undefined,
           selectedLogisticsUsers: assignedUserIds,
           requiredMilestones:     priorityMilestones,
-          documents:              documentPayload,
+          documents:              [], // files are uploaded to Storage after vault folder creation
           invoiceCurrency,
           invoiceValue:           Number(invoiceValue),
           hsCode,
@@ -566,6 +536,23 @@ export default function NewShipmentPage() {
       }
       shipmentId    = json.data.id;
       referenceCode = json.data.referenceCode;
+
+      // ── Upload documents to Supabase Storage via the vault folder API ──────
+      // The vault folder is created synchronously inside POST /api/shipments
+      // before this point, so we can look it up by shipmentId now.
+      if (documents.length > 0) {
+        setStellarStep('connect'); // reuse progress state to show we're still working
+        try {
+          const vfRes  = await authFetch(`/api/vault/folders?shipmentId=${shipmentId}`);
+          const vfJson = await vfRes.json();
+          if (vfJson.success && vfJson.data?.id) {
+            await uploadFilesToVault(vfJson.data.id, documents, authFetch);
+          }
+        } catch {
+          // Non-fatal: shipment is created, documents can be uploaded later from the vault
+          console.warn('[new-shipment] Document upload failed — files can be added via the vault folder.');
+        }
+      }
 
       // ── 2. Connect Freighter wallet ──────────────────────────────────────────
       setStellarStep('connect');
@@ -717,59 +704,79 @@ export default function NewShipmentPage() {
           STEP 1 — Cargo Details
       ══════════════════════════════════════════════════════════════════════ */}
       {step === 1 && (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-3 space-y-6">
+        <div className="space-y-6">
 
-            {/* SHIPMENT RECEIPTS — finalized chat planners that can prefill this form */}
-            {!receiptsLoading && receipts.length > 0 && (
-              <div className="bg-white border-2 border-ocean-100 p-6 rounded-2xl space-y-4">
-                <SubSectionHeader
-                  icon={Receipt}
-                  title="Shipment Receipts"
-                  description="Finalized planners from your chats. Pick one to prefill this form with what you and your counterparty already agreed on."
-                  accent="border-ocean-400 bg-ocean-50"
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {receipts.map(r => {
-                    const isApplied = appliedReceiptId === r.id;
-                    return (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => applyReceipt(r)}
-                        className={`text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer
-                          ${isApplied ? 'border-ocean-400 bg-ocean-50' : 'border-sand-200 hover:border-ocean-200'}`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-xs font-bold text-maritime-900 line-clamp-2">
-                            {r.cargoDescription || 'Untitled cargo'}
-                          </p>
-                          {isApplied && <CheckCircle2 className="w-4 h-4 text-ocean-400 flex-shrink-0" />}
-                        </div>
-                        <p className="text-[10px] text-gray-500 mt-1">
-                          {r.originCountry || '—'} → {r.destinationPort || '—'}
-                        </p>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-[11px] font-black text-ocean-600 font-mono">
-                            {r.invoiceValue != null ? `${CURRENCY_SYMBOLS[r.invoiceCurrency || 'USD']}${r.invoiceValue.toLocaleString()}` : '—'}
-                          </span>
-                          {r.counterparty && (
-                            <span className="text-[9px] font-bold text-gray-400 truncate max-w-[120px]">
-                              with {r.counterparty.fullName.split(' ')[0]}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
+            {/* IMPORT FROM CHAT — receipts selector, always visible */}
+            <div className="bg-white border-2 border-ocean-100 p-6 rounded-2xl space-y-4">
+              <SubSectionHeader
+                icon={Receipt}
+                title="Import from Chat"
+                description={receipts.length > 0 ? "Pick a finalized receipt from your messages to prefill this form with terms you and your counterparty already agreed on." : "No finalized receipts yet. Head to Messages to agree on shipment terms with your counterparty first, or fill in the form below manually."}
+                accent="border-ocean-400 bg-ocean-50"
+              />
+              {receiptsLoading ? (
+                <div className="flex items-center gap-2 py-4 text-xs text-gray-400">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading receipts from your chats…
                 </div>
-                {appliedReceiptId && (
-                  <p className="text-[10px] text-ocean-600 font-semibold flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3" /> Form prefilled — feel free to edit anything below before continuing.
-                  </p>
-                )}
-              </div>
-            )}
+              ) : receipts.length === 0 ? (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-sand-50 border border-sand-200 rounded-xl p-4">
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs font-bold text-gray-600">No finalized receipts yet</p>
+                    <p className="text-[11px] text-gray-400 leading-relaxed">
+                      Receipts are created when you and your counterparty agree on terms inside a chat thread. Go to Messages, open a thread, and use the &quot;Finalize Receipt&quot; action — then come back here to import it.
+                    </p>
+                  </div>
+                  <Link
+                    href="/messages"
+                    className="flex-shrink-0 flex items-center gap-1.5 bg-ocean-400 hover:bg-ocean-600 text-white text-[11px] font-black px-4 py-2 rounded-lg transition-all"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" /> Go to Messages
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {receipts.map(r => {
+                      const isApplied = appliedReceiptId === r.id;
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => applyReceipt(r)}
+                          className={`text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer
+                            ${isApplied ? 'border-ocean-400 bg-ocean-50 shadow-sm' : 'border-sand-200 hover:border-ocean-200'}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs font-bold text-maritime-900 line-clamp-2">
+                              {r.cargoDescription || 'Untitled cargo'}
+                            </p>
+                            {isApplied && <CheckCircle2 className="w-4 h-4 text-ocean-400 flex-shrink-0" />}
+                          </div>
+                          <p className="text-[10px] text-gray-500 mt-1">
+                            {r.originCountry || '—'} → {r.destinationPort || '—'}
+                          </p>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-[11px] font-black text-ocean-600 font-mono">
+                              {r.invoiceValue != null ? `${CURRENCY_SYMBOLS[r.invoiceCurrency || 'USD']}${r.invoiceValue.toLocaleString()}` : '—'}
+                            </span>
+                            {r.counterparty && (
+                              <span className="text-[9px] font-bold text-gray-400 truncate max-w-[120px]">
+                                with {r.counterparty.fullName.split(' ')[0]}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {appliedReceiptId && (
+                    <p className="text-[10px] text-ocean-600 font-semibold flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3" /> Form prefilled from receipt — feel free to edit anything below before continuing.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
 
             {/* A · SCOPE */}
             <div className="bg-white border border-sand-200 p-6 rounded-2xl">
@@ -998,19 +1005,6 @@ export default function NewShipmentPage() {
                 Next: Documents <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
-          
-          {/* AI Sidebar */}
-          <div className="lg:col-span-2">
-            <div className="bg-maritime-900 text-white p-6 rounded-2xl space-y-4 sticky top-6">
-              <h3 className="font-extrabold text-sm flex items-center gap-2"><Zap className="w-4 h-4 text-ocean-400" /> AI Invoice Autofill</h3>
-              <p className="text-[11px] text-maritime-200 leading-normal">Paste your commercial invoice text and Gemini AI will extract cargo details, port codes, and values automatically.</p>
-              <textarea rows={7} placeholder={"CONSIGNOR: Osaka Ltd\nITEM: 90 Cartons Solar Inverters\nVALUATION: USD 14,350\nPORT OF ENTRY: Cebu PH"} className="w-full bg-maritime-800 text-white border border-maritime-700 rounded-lg p-2.5 text-[11px] outline-none focus:ring-1 focus:ring-ocean-400 font-mono resize-none" value={aiText} onChange={e => setAiText(e.target.value)} />
-              <button type="button" onClick={handleAutofill} disabled={aiLoading} className="bg-ocean-400 hover:bg-ocean-600 text-maritime-900 w-full font-bold py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 text-xs cursor-pointer disabled:opacity-60">
-                {aiLoading ? 'Analysing…' : 'Extract Invoice Parameters'}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

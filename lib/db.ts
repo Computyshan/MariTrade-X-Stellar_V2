@@ -192,7 +192,8 @@ function rowToMilestoneEvent(row: any): MilestoneEvent {
     loggedById: row.logged_by_id,
     type: row.type,
     description: row.description ?? undefined,
-    evidenceUrl: row.evidence_url,
+    evidenceUrl: row.evidence_url ?? undefined,
+    evidenceRef: row.evidence_ref ?? undefined,
     occurredAt: row.occurred_at,
     verified: row.verified,
   };
@@ -205,7 +206,8 @@ function milestoneEventToRow(me: MilestoneEvent): any {
     logged_by_id: me.loggedById,
     type: me.type,
     description: me.description ?? null,
-    evidence_url: me.evidenceUrl,
+    evidence_url: me.evidenceUrl ?? null,
+    evidence_ref: me.evidenceRef ?? null,
     occurred_at: me.occurredAt,
     verified: me.verified,
   };

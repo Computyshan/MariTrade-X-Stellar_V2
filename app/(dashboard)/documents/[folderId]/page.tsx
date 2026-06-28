@@ -22,9 +22,12 @@ import {
   ChevronLeft,
   AlertCircle,
   RefreshCw,
+  Upload,
+  X,
+  Paperclip,
 } from 'lucide-react';
 import { ShipmentDocument, ShipmentScope, ShipmentStatus } from '@/types';
-import { canAccessBOCDocuments, canDownloadDocuments } from '@/lib/permissions/documents';
+import { canAccessBOCDocuments, canDownloadDocuments, canUploadDocuments } from '@/lib/permissions/documents';
 import { motion } from 'motion/react';
 
 // ── STATUS CONFIG ────────────────────────────────────────────────────────────
@@ -100,6 +103,13 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
   const [loading,  setLoading]  = useState(true);
   const [fetchErr, setFetchErr] = useState('');
 
+  // ── Upload state ──
+  const [uploadFile,     setUploadFile]     = useState<File | null>(null);
+  const [uploading,      setUploading]      = useState(false);
+  const [uploadError,    setUploadError]    = useState('');
+  const [uploadSuccess,  setUploadSuccess]  = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // ── Auth state ──
   const [unlocked,       setUnlocked]       = useState(false);
   const [passwordInput,  setPasswordInput]  = useState('');
@@ -153,6 +163,39 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
 
   const hasAccess   = canAccessBOCDocuments(currentUser.jobRole);
   const canDownload = canDownloadDocuments(currentUser.jobRole);
+  const canUpload   = canUploadDocuments(currentUser.jobRole);
+
+  // ── Upload handler ──
+  async function handleUpload() {
+    if (!uploadFile || uploading) return;
+    setUploading(true);
+    setUploadError('');
+    setUploadSuccess('');
+    try {
+      const fd = new FormData();
+      fd.append('file', uploadFile);
+      const res  = await authFetch(`/api/vault/folders/${folderId}/documents`, {
+        method: 'POST',
+        body:   fd,
+      });
+      const json = await res.json();
+      if (json.success) {
+        setUploadSuccess(`"${uploadFile.name}" uploaded successfully.`);
+        setUploadFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        // Refresh folder data so the new doc appears in the list
+        const refreshRes  = await authFetch(`/api/vault/folders/${folderId}`);
+        const refreshJson = await refreshRes.json();
+        if (refreshJson.success) setFolder(refreshJson.data);
+      } else {
+        setUploadError(json.error ?? 'Upload failed.');
+      }
+    } catch {
+      setUploadError('Network error — upload failed.');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   // ── LOADING ───────────────────────────────────────────────────────────────
   if (loading) {
@@ -462,6 +505,84 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
             Vault session active — this folder will lock automatically when you navigate away or click Lock.
           </span>
         </div>
+
+        {/* Upload section */}
+        {canUpload && (
+          <div className="bg-white border border-sand-200 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <Upload className="w-4 h-4 text-maritime-400" />
+              <h2 className="text-sm font-black text-maritime-900">Upload Document</h2>
+            </div>
+
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault();
+                const f = e.dataTransfer.files[0];
+                if (f) { setUploadFile(f); setUploadError(''); setUploadSuccess(''); }
+              }}
+              className="border-2 border-dashed border-sand-300 hover:border-maritime-300 hover:bg-maritime-50/30 rounded-xl p-8 text-center cursor-pointer transition-colors"
+            >
+              <Paperclip className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-xs font-semibold text-gray-500">
+                {uploadFile ? uploadFile.name : 'Click or drag & drop a file here'}
+              </p>
+              {uploadFile && (
+                <p className="text-[10px] text-gray-400 mt-1">
+                  {(uploadFile.size / 1024).toFixed(1)} KB
+                </p>
+              )}
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0] ?? null;
+                setUploadFile(f);
+                setUploadError('');
+                setUploadSuccess('');
+              }}
+            />
+
+            {uploadError && (
+              <div className="flex items-center gap-2 text-[11px] text-coral-500 bg-coral-50 border border-coral-100 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                {uploadError}
+              </div>
+            )}
+
+            {uploadSuccess && (
+              <div className="flex items-center gap-2 text-[11px] text-ocean-700 bg-ocean-50 border border-ocean-100 rounded-lg px-3 py-2">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                {uploadSuccess}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              {uploadFile && (
+                <button
+                  onClick={() => { setUploadFile(null); setUploadError(''); setUploadSuccess(''); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                  className="flex items-center gap-1.5 text-xs border border-sand-200 text-gray-500 hover:border-coral-200 hover:text-coral-400 px-3 py-2 rounded-xl transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" /> Clear
+                </button>
+              )}
+              <button
+                onClick={handleUpload}
+                disabled={!uploadFile || uploading}
+                className="flex-1 flex items-center justify-center gap-2 bg-maritime-400 hover:bg-maritime-700 disabled:bg-maritime-100 disabled:text-maritime-300 text-white font-bold py-2.5 rounded-xl text-sm transition-colors"
+              >
+                {uploading
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Uploading…</>
+                  : <><Upload className="w-4 h-4" /> Upload to Vault</>
+                }
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Document list */}
         {folder.documents.length === 0 ? (

@@ -87,8 +87,8 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-sand-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white border border-sand-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+    <div className="min-h-screen bg-mist-light flex flex-col items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white border border-mist rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
 
         {/* Brand */}
         <div className="flex flex-col items-center text-center space-y-2">
@@ -101,13 +101,13 @@ export default function RegisterPage() {
               priority
             />
           <div>
-            <h1 className="text-2xl font-black text-maritime-900 tracking-tight">MariTrade</h1>
-            <p className="text-xs text-gray-500 font-medium">Create your account</p>
+            <h1 className="text-2xl font-display font-medium text-ink tracking-tight">MariTrade</h1>
+            <p className="text-xs text-ink-faint font-medium">Create your account</p>
           </div>
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 bg-coral-50 border border-coral-200 text-coral-700 text-xs p-3 rounded-lg">
+          <div className="flex items-center gap-2 bg-wine-light border border-wine/20 text-wine text-xs p-3 rounded-lg">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -115,51 +115,51 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Full Name</label>
+            <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">Full Name</label>
             <input
               type="text"
               required
               placeholder="Juan Dela Cruz"
-              className="w-full bg-sand-50 border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:bg-white"
+              className="w-full bg-mist-light border border-mist rounded-lg px-3 py-2 text-sm outline-none focus:border-amber focus:bg-white"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
             />
           </div>
 
           <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Email Address</label>
+            <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">Email Address</label>
             <input
               type="email"
               required
               autoComplete="email"
               placeholder="juan@delacruz.ph"
-              className="w-full bg-sand-50 border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:bg-white"
+              className="w-full bg-mist-light border border-mist rounded-lg px-3 py-2 text-sm outline-none focus:border-amber focus:bg-white"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
           <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Password</label>
+            <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">Password</label>
             <input
               type="password"
               required
               autoComplete="new-password"
               placeholder="Min. 6 characters"
-              className="w-full bg-sand-50 border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:bg-white"
+              className="w-full bg-mist-light border border-mist rounded-lg px-3 py-2 text-sm outline-none focus:border-amber focus:bg-white"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 
           <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Confirm Password</label>
+            <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">Confirm Password</label>
             <input
               type="password"
               required
               autoComplete="new-password"
               placeholder="Re-enter password"
-              className="w-full bg-sand-50 border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:bg-white"
+              className="w-full bg-mist-light border border-mist rounded-lg px-3 py-2 text-sm outline-none focus:border-amber focus:bg-white"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
             />
@@ -167,12 +167,12 @@ export default function RegisterPage() {
 
           <div className="space-y-1">
             <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-              Contact Number <span className="text-gray-400 font-normal normal-case">(optional)</span>
+              Contact Number <span className="text-ink-faint/70 font-normal normal-case">(optional)</span>
             </label>
             <input
               type="text"
               placeholder="+63 917 123 4567"
-              className="w-full bg-sand-50 border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:bg-white font-mono"
+              className="w-full bg-mist-light border border-mist rounded-lg px-3 py-2 text-sm outline-none focus:border-amber focus:bg-white font-sans tracking-wide"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
@@ -180,12 +180,12 @@ export default function RegisterPage() {
 
           <div className="space-y-1">
             <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-              Address <span className="text-gray-400 font-normal normal-case">(optional)</span>
+              Address <span className="text-ink-faint/70 font-normal normal-case">(optional)</span>
             </label>
             <input
               type="text"
               placeholder="Binondo, Manila"
-              className="w-full bg-sand-50 border border-sand-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-maritime-400 focus:bg-white"
+              className="w-full bg-mist-light border border-mist rounded-lg px-3 py-2 text-sm outline-none focus:border-amber focus:bg-white"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
             />
@@ -194,15 +194,15 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-maritime-400 hover:bg-maritime-700 disabled:opacity-60 text-white font-bold py-2.5 rounded-lg text-sm transition-all shadow-sm cursor-pointer"
+            className="w-full bg-amber hover:bg-amber-hover disabled:opacity-60 text-white font-bold py-2.5 rounded-lg text-sm transition-all shadow-sm cursor-pointer"
           >
             {loading ? 'Creating account…' : 'Continue to Onboarding'}
           </button>
         </form>
 
-        <div className="border-t border-sand-200 pt-4 text-center text-xs text-gray-500">
+        <div className="border-t border-mist pt-4 text-center text-xs text-ink-faint">
           Already have an account?{' '}
-          <Link href="/login" className="text-maritime-400 hover:text-maritime-900 font-bold">
+          <Link href="/login" className="text-amber hover:text-amber-hover font-bold">
             Sign in →
           </Link>
         </div>

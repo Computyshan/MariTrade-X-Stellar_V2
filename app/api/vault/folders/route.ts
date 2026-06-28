@@ -8,6 +8,18 @@ export async function GET(req: NextRequest) {
   if (errorResponse) return errorResponse;
 
   try {
+    // ?shipmentId= shortcut — returns just the single matching folder
+    const shipmentId = req.nextUrl.searchParams.get('shipmentId');
+    if (shipmentId) {
+      const folder = await dbStore.getVaultFolderByShipmentId(shipmentId);
+      if (!folder) {
+        return NextResponse.json({ success: false, error: 'Vault folder not found for this shipment' }, { status: 404 });
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password: _pw, ...safeFolder } = folder;
+      return NextResponse.json({ success: true, data: safeFolder });
+    }
+
     const [folders, shipments, documents] = await Promise.all([
       dbStore.getVaultFolders(),
       dbStore.getShipments(),

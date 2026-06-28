@@ -246,13 +246,92 @@ export interface PriorityMilestone {
   isCompleted: boolean;
 }
 
+// ─── Milestone evidence modes ────────────────────────────────────────────────
+// REFERENCE_NUMBER — a text code from an external system (booking ref, container
+//   number, BOC entry series, etc.). Stored in evidenceRef. Fast to enter and
+//   actually meaningful for audit purposes.
+// DOCUMENT — a file upload (B/L PDF, customs approval cert, official receipt).
+//   Stored in evidenceUrl via the milestone-evidence Storage bucket.
+// PHOTO_OR_NOTE — physical events where a photo is natural but a written note
+//   is also acceptable. evidenceUrl is optional; description is required.
+export type MilestoneEvidenceMode = 'REFERENCE_NUMBER' | 'DOCUMENT' | 'PHOTO_OR_NOTE';
+
+export const MILESTONE_EVIDENCE_MODE: Record<MilestoneType, MilestoneEvidenceMode> = {
+  // ── Freight Forwarder ──────────────────────────────────────────────────────
+  BOOKING_CONFIRMED:               'REFERENCE_NUMBER', // booking ref / PO number
+  DOCUMENTS_SUBMITTED_TO_CARRIER:  'REFERENCE_NUMBER', // carrier receipt ref
+  SPACE_ON_VESSEL_SECURED:         'REFERENCE_NUMBER', // vessel / voyage number
+  CONTAINER_GATED_OUT_ORIGIN:      'REFERENCE_NUMBER', // container number
+  CONTAINER_LOADED_ON_VESSEL:      'REFERENCE_NUMBER', // container + vessel ref
+  VESSEL_CLEARED_TO_DEPART:        'REFERENCE_NUMBER', // port clearance number
+  VESSEL_DEPARTED_ORIGIN:          'REFERENCE_NUMBER', // vessel voyage ref
+  BILL_OF_LADING_ISSUED:           'DOCUMENT',         // upload the B/L PDF
+  VESSEL_ARRIVED_AT_BERTH:         'REFERENCE_NUMBER', // port arrival notice ref
+  VESSEL_ARRIVED_DESTINATION:      'REFERENCE_NUMBER', // ETA confirmation ref
+  CONTAINER_OFFLOADED:             'REFERENCE_NUMBER', // discharge ref
+  CONTAINER_GATED_IN_DESTINATION:  'REFERENCE_NUMBER', // container number
+  CARGO_RELEASED_FOR_PICKUP:       'REFERENCE_NUMBER', // release order number
+  IN_TRANSIT_TO_DESTINATION:       'REFERENCE_NUMBER', // waybill / tracking number
+  ARRIVED_AT_DELIVERY_ADDRESS:     'PHOTO_OR_NOTE',    // photo of arrival / POD note
+  DELIVERED_AND_SIGNED_OFF:        'PHOTO_OR_NOTE',    // photo of signed delivery receipt
+  // ── Customs Broker ────────────────────────────────────────────────────────
+  BOC_ENTRY_FILED:                 'REFERENCE_NUMBER', // BOC entry series number
+  PORT_HOLD_PLACED_OR_LIFTED:      'REFERENCE_NUMBER', // hold reference number
+  DUTIES_AND_TAXES_PAID:           'DOCUMENT',         // upload Official Receipt
+  CUSTOMS_EXAMINATION_REQUESTED:   'REFERENCE_NUMBER', // examination order number
+  CUSTOMS_CLEARANCE_APPROVED:      'DOCUMENT',         // upload CAO / release cert
+  // ── Warehouse Operator ────────────────────────────────────────────────────
+  CARGO_READY_FOR_COLLECTION:      'REFERENCE_NUMBER', // collection notice ref
+  CARGO_INSPECTED_AND_PACKED:      'PHOTO_OR_NOTE',    // inspection photo
+  CARGO_STAGED_FOR_PICKUP:         'REFERENCE_NUMBER', // staging ref / bay number
+  CARGO_HANDED_OFF_TO_CARRIER:     'REFERENCE_NUMBER', // handoff receipt number
+  CARGO_PICKED_UP_FROM_PORT:       'REFERENCE_NUMBER', // gate pass / pickup ref
+  CARGO_RECEIVED_AT_WAREHOUSE:     'PHOTO_OR_NOTE',    // receiving photo / GR note
+  INCOMING_CARGO_STORED:           'REFERENCE_NUMBER', // storage location / bin ref
+  FAILED_DELIVERY_ATTEMPT:         'PHOTO_OR_NOTE',    // photo + reason required
+};
+
+// Human-readable labels for the reference number field per milestone
+export const MILESTONE_EVIDENCE_REF_LABEL: Record<MilestoneType, string> = {
+  BOOKING_CONFIRMED:               'Booking Reference / PO Number',
+  DOCUMENTS_SUBMITTED_TO_CARRIER:  'Carrier Receipt Reference',
+  SPACE_ON_VESSEL_SECURED:         'Vessel / Voyage Number',
+  CONTAINER_GATED_OUT_ORIGIN:      'Container Number',
+  CONTAINER_LOADED_ON_VESSEL:      'Container & Vessel Reference',
+  VESSEL_CLEARED_TO_DEPART:        'Port Clearance Number',
+  VESSEL_DEPARTED_ORIGIN:          'Vessel Voyage Reference',
+  BILL_OF_LADING_ISSUED:           '', // document — no ref label
+  VESSEL_ARRIVED_AT_BERTH:         'Port Arrival Notice Reference',
+  VESSEL_ARRIVED_DESTINATION:      'ETA Confirmation Reference',
+  CONTAINER_OFFLOADED:             'Discharge Reference',
+  CONTAINER_GATED_IN_DESTINATION:  'Container Number',
+  CARGO_RELEASED_FOR_PICKUP:       'Release Order Number',
+  IN_TRANSIT_TO_DESTINATION:       'Waybill / Tracking Number',
+  ARRIVED_AT_DELIVERY_ADDRESS:     '', // photo or note
+  DELIVERED_AND_SIGNED_OFF:        '', // photo or note
+  BOC_ENTRY_FILED:                 'BOC Entry Series Number',
+  PORT_HOLD_PLACED_OR_LIFTED:      'Hold Reference Number',
+  DUTIES_AND_TAXES_PAID:           '', // document — no ref label
+  CUSTOMS_EXAMINATION_REQUESTED:   'Examination Order Number',
+  CUSTOMS_CLEARANCE_APPROVED:      '', // document — no ref label
+  CARGO_READY_FOR_COLLECTION:      'Collection Notice Reference',
+  CARGO_INSPECTED_AND_PACKED:      '', // photo or note
+  CARGO_STAGED_FOR_PICKUP:         'Staging Reference / Bay Number',
+  CARGO_HANDED_OFF_TO_CARRIER:     'Handoff Receipt Number',
+  CARGO_PICKED_UP_FROM_PORT:       'Gate Pass / Pickup Reference',
+  CARGO_RECEIVED_AT_WAREHOUSE:     '', // photo or note
+  INCOMING_CARGO_STORED:           'Storage Location / Bin Reference',
+  FAILED_DELIVERY_ATTEMPT:         '', // photo or note
+};
+
 export interface MilestoneEvent {
   id: string;
   shipmentId: string;
   loggedById: string;
   type: MilestoneType;
   description?: string;
-  evidenceUrl: string; // required
+  evidenceUrl?: string;  // file upload URL — required for DOCUMENT, optional for PHOTO_OR_NOTE
+  evidenceRef?: string;  // reference number — required for REFERENCE_NUMBER
   occurredAt: string;
   verified: boolean;
 }

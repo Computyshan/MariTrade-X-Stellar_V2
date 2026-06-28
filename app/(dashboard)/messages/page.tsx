@@ -391,13 +391,24 @@ export default function ChatNegotiationCenter() {
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  const handleCustomImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) { alert('Please select an image smaller than 2MB.'); return; }
-    const reader = new FileReader();
-    reader.onload = ev => { if (ev.target?.result) { setSelectedImage(ev.target.result as string); setShowImagePicker(false); } };
-    reader.readAsDataURL(file);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res  = await authFetch('/api/upload?bucket=chat-images', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (json.success) {
+        setSelectedImage(json.url);
+        setShowImagePicker(false);
+      } else {
+        alert(json.error ?? 'Image upload failed.');
+      }
+    } catch {
+      alert('Network error — image upload failed.');
+    }
   };
 
   const handleUnsendMessage = async (msgId: string) => {
