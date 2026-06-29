@@ -60,7 +60,7 @@ export default function PublicTrackingPage() {
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Ship className="w-5 h-5 text-maritime-400" />
-            <span className="font-extrabold text-lg text-maritime-900">MariTrade V2</span>
+            <span className="font-extrabold text-lg text-maritime-900">MariTrade</span>
           </Link>
           <Link
             href="/dashboard"
@@ -212,7 +212,7 @@ export default function PublicTrackingPage() {
             <div className="bg-maritime-900 p-6 sm:p-8 text-white rounded-2xl text-center space-y-4 relative overflow-hidden">
               <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-ocean-400 to-transparent"></div>
               <h3 className="text-lg font-bold">Are you a Filipino Importer or Carrier?</h3>
-              <p className="text-xs text-maritime-100 max-w-md mx-auto">Get absolute payment safety and end-to-end container logistics handoff transparency on MariTrade V2.</p>
+              <p className="text-xs text-maritime-100 max-w-md mx-auto">Get absolute payment safety and end-to-end container logistics handoff transparency on MariTrade.</p>
               <div>
                 <Link
                   href="/"
@@ -228,7 +228,7 @@ export default function PublicTrackingPage() {
 
       {/* Footer */}
       <footer className="bg-white border-t border-sand-200 py-6 text-center text-xs text-gray-500 mt-auto">
-        <p className="font-mono">MariTrade Secure Ledger Public Auditing. Verification ID: MARITRADE-PUBLIC-SECURE-V2</p>
+        <p className="font-mono">MariTrade Secure Ledger Public Auditing. Verification ID: MARITRADE-PUBLIC-SECURE</p>
       </footer>
     </div>
   );

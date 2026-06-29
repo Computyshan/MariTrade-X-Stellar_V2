@@ -628,8 +628,8 @@ export default function DashboardHome() {
                   <div className="flex items-center gap-3 flex-1 relative z-10">
                     <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center"><ClipboardList className="w-5 h-5 text-[color:var(--color-mist)]" /></div>
                     <div>
-                      <h2 className="text-white font-display font-medium text-[26px] tracking-tight">Log a Milestone</h2>
-                      <p className="text-white/55 text-[11px] mt-0.5">Every log is committed to the Stellar trade ledger and cannot be undone.</p>
+                      <h2 className="text-white font-display font-medium text-[32px] tracking-tight">Log a Milestone</h2>
+                      <p className="text-white/55 text-[13px] mt-0">Every log is committed to the Stellar trade ledger and cannot be undone.</p>
                     </div>
                   </div>
                   <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border relative z-10 ${selectedShipmentLogId ? 'bg-[color:var(--color-teal-light)] border-[color:var(--color-teal)] text-[color:var(--color-teal)]' : 'bg-white/5 border-white/10 text-white/40'}`}>
@@ -888,7 +888,7 @@ function LogisticsScopeBanner({ jobRole, shipments, milestones }: { jobRole: Job
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
       <div className={`lg:col-span-1 rounded-2xl border-2 ${meta.accentBorder} p-5 flex flex-col justify-between gap-3 text-white shadow-md relative overflow-hidden`} style={{ background: 'linear-gradient(140deg, var(--color-ink) 0%, var(--color-ink-soft) 40%, var(--color-steel) 115%)', boxShadow: '0 4px 16px rgba(20,32,52,0.25), 0 1px 3px rgba(129,151,198,0.2)' }}>
         <div className="absolute inset-0 opacity-30 pointer-events-none" style={{ background: 'radial-gradient(circle at 85% 15%, var(--color-mist) 0%, transparent 55%), radial-gradient(circle at 15% 90%, rgba(207,226,230,0.4) 0%, transparent 50%)' }} />
-        <div className="flex items-center gap-3 relative z-10"><div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/15 backdrop-blur-sm flex-shrink-0`}>{meta.icon}</div><div><p className="text-[9px] font-black uppercase tracking-widest text-white/55">Active Role</p><p className="text-[22px] font-display font-medium leading-snug text-white">{meta.label}</p></div></div>
+        <div className="flex items-center gap-3 relative z-10"><div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/15 backdrop-blur-sm flex-shrink-0`}>{meta.icon}</div><div><p className="text-[9px] font-black uppercase tracking-widest text-white/55">Active Role</p><p className="text-[28px] font-display font-medium leading-snug text-white">{meta.label}</p></div></div>
         <p className="text-[11px] text-white/70 leading-relaxed relative z-10">{meta.description}</p>
         <div className="flex items-center gap-1.5 relative z-10"><Lock className="w-3 h-3 text-[color:var(--color-mist)] opacity-80" /><span className="text-[9px] font-black uppercase tracking-widest text-[color:var(--color-mist)] opacity-90">{roleMillestones.length} milestones in scope</span></div>
       </div>

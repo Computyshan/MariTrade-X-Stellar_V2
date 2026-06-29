@@ -135,16 +135,11 @@ export default function LandingPage() {
             />
           </div>
 
-          <div className="relative z-10 max-w-3xl mx-auto space-y-6">
+          <div className="relative z-20 max-w-3xl mx-auto space-y-6">
 
-            {/* Trust badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/10 bg-white/5 text-mist text-[11px] font-semibold tracking-wide">
-              <ShieldCheck className="w-3.5 h-3.5 text-steel" />
-              <span>Secured by Stellar Blockchain Multi-Signature Contracts</span>
-            </div>
 
             {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl md:text-[56px] font-display font-medium text-white leading-[1.1] tracking-tight">
+            <h1 className="text-4xl sm:text-5xl md:text-[80px] font-display font-medium text-white leading-[1.1] tracking-tight">
               Track your Shipments.<br className="hidden sm:block" />
               <span>Digitize the Process.</span><br className="hidden sm:block" />
               <span className="inline whitespace-nowrap">Made for Filipino{' '}
@@ -160,7 +155,7 @@ export default function LandingPage() {
                 exit={{ y: '-110%', opacity: 0 }}
                 mainClassName="text-mist !inline-flex"
                 splitLevelClassName="overflow-hidden"
-                style={{ display: 'inline-flex', verticalAlign: 'baseline', minWidth: '19ch' }}
+                style={{ display: 'inline-flex', verticalAlign: 'baseline', minWidth: '10ch' }}
               /></span>
             </h1>
 
@@ -225,8 +220,8 @@ export default function LandingPage() {
         {/* How it works*/}
         <section className="py-20 px-6 sm:px-8 max-w-6xl mx-auto">
           <div className="text-center max-w-xl mx-auto mb-14">
-            <span className="text-[10px] font-sans uppercase tracking-widest text-amber font-bold">The MariTrade Flow</span>
-            <h2 className="text-2xl sm:text-[32px] font-display font-medium text-ink tracking-tight mt-2 leading-tight">
+            <span className="text-[26px] font-sans uppercase tracking-widest text-amber font-bold">The MariTrade Flow</span>
+            <h2 className="text-2xl sm:text-[55px] font-display font-medium text-ink tracking-tight mt-2 leading-tight">
               Payment-secured. Milestone-verified. Settled instantly.
             </h2>
             <p className="text-[13px] text-ink-faint mt-3 leading-relaxed">
