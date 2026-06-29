@@ -194,25 +194,31 @@ export async function POST(
 
     // ── 1. LOG MILESTONE ────────────────────────────────────────────────────
     if (action === 'LOG_MILESTONE') {
-      const { loggedById, type, description, evidenceUrl } = body;
+      const { loggedById, type, description, evidenceUrl, evidenceRef } = body;
 
-      if (!loggedById || !type || !evidenceUrl) {
+      if (!loggedById || !type) {
         return NextResponse.json(
-          { success: false, error: 'loggedById, type, and evidenceUrl are required' },
+          { success: false, error: 'loggedById and type are required' },
+          { status: 400 },
+        );
+      }
+      if (!evidenceUrl && !evidenceRef && !description) {
+        return NextResponse.json(
+          { success: false, error: 'At least one of evidenceUrl, evidenceRef, or description is required' },
           { status: 400 },
         );
       }
 
-      // Persist milestone event
       const newMilestone: MilestoneEvent = {
-        id:         'me_' + Math.random().toString(36).substring(2, 9),
-        shipmentId: shipment.id,
+        id:          'me_' + Math.random().toString(36).substring(2, 9),
+        shipmentId:  shipment.id,
         loggedById,
         type,
         description,
-        evidenceUrl,
-        occurredAt: new Date().toISOString(),
-        verified:   true,
+        evidenceUrl:  evidenceUrl ?? undefined,
+        evidenceRef:  evidenceRef ?? undefined,
+        occurredAt:  new Date().toISOString(),
+        verified:    true,
       };
 
       await dbStore.saveMilestone(newMilestone);

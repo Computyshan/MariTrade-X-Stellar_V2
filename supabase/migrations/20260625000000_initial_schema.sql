@@ -3,6 +3,13 @@
 --  Generated from: types/index.ts + lib/db.ts + API routes
 -- ============================================================
 
+-- ─── escrow_asset column (added post-initial schema) ─────────────────────────
+-- Tracks which denomination the importer chose at funding time.
+-- The Soroban contract always holds USDC; this column drives UI labels only.
+ALTER TABLE shipments
+  ADD COLUMN IF NOT EXISTS escrow_asset TEXT NOT NULL DEFAULT 'USDC'
+    CHECK (escrow_asset IN ('USDC', 'PPHP'));
+
 -- ─── Enable UUID extension ────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

@@ -207,6 +207,7 @@ export interface User {
   jobRole: JobRole;
   companyName?: string;
   stellarWallet?: string;
+  bankDetails?: string;
   kycStatus: KycStatus;
   kycDocumentUrl?: string;
   createdAt: string;
@@ -226,6 +227,12 @@ export interface Shipment {
   totalValueUSD: number;
   escrowStatus: EscrowStatus;
   escrowAmountUSD?: number;
+  /**
+   * Asset used to fund the escrow. Defaults to 'USDC'.
+   * 'PPHP' means the importer chose Philippine Peso denomination —
+   * the contract still holds USDC, but displays use the peso symbol.
+   */
+  escrowAsset?: 'USDC' | 'PPHP';
   stellarEscrowId?: string;
   estimatedArrival?: string;
   createdAt: string;

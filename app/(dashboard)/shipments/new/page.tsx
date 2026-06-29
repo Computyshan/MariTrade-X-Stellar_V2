@@ -19,6 +19,9 @@ import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, Shipme
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
 import { signAndSubmitWithRetry } from '@/lib/stellar/freighter';
 import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
+import AssetSelector from '@/components/AssetSelector';
+import { type AssetCode, formatAsset } from '@/lib/stellar/assets';
+import { convertPphpToUsdc } from '@/lib/stellar/fx';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -151,11 +154,11 @@ function SubSectionHeader({ icon: Icon, title, description, accent }: {
   return (
     <div className={`flex items-start gap-3 p-4 rounded-xl border-l-4 ${accent} bg-opacity-40 mb-5`}>
       <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Icon className="w-4 h-4 text-maritime-400" />
+        <Icon className="w-4 h-4 text-amber" />
       </div>
       <div>
-        <h4 className="text-sm font-extrabold text-maritime-900">{title}</h4>
-        <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{description}</p>
+        <h4 className="text-sm font-extrabold text-ink">{title}</h4>
+        <p className="text-[11px] text-ink-faint mt-0.5 leading-snug">{description}</p>
       </div>
     </div>
   );
@@ -163,10 +166,10 @@ function SubSectionHeader({ icon: Icon, title, description, accent }: {
 
 function PhilippinesBadge() {
   return (
-    <div className="flex items-center gap-2 bg-sand-100 border border-sand-200 rounded-lg px-3 py-2 text-xs cursor-not-allowed select-none">
+    <div className="flex items-center gap-2 bg-mist-light border border-mist rounded-lg px-3 py-2 text-xs cursor-not-allowed select-none">
       <span>🇵🇭</span>
-      <span className="font-bold text-maritime-900">Philippines</span>
-      <span className="ml-auto text-[9px] bg-maritime-100 text-maritime-400 font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Auto-set</span>
+      <span className="font-bold text-ink">Philippines</span>
+      <span className="ml-auto text-[9px] bg-amber-light text-amber font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Auto-set</span>
     </div>
   );
 }
@@ -239,6 +242,9 @@ export default function NewShipmentPage() {
   const [networkLoading,     setNetworkLoading]     = useState(false);
 
   // ── Step 4 · ESCROW ─────────────────────────────────────────────────────────
+  const [assetCode,    setAssetCode]    = useState<AssetCode>('USDC');
+  const [pphpPreview,  setPphpPreview]  = useState<{ php: number; usdc: number; rate: number; isLive: boolean } | null>(null);
+  const [pphpPreviewing, setPphpPreviewing] = useState(false);
   const [phpRate,       setPhpRate]       = useState<number | null>(null);
   const [rateLoading,   setRateLoading]   = useState(false);
   const [rateError,     setRateError]     = useState(false);
@@ -251,7 +257,7 @@ export default function NewShipmentPage() {
     return (
       <DashboardLayout>
         <div className="min-h-[60vh] flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-amber border-t-transparent rounded-full animate-spin" />
         </div>
       </DashboardLayout>
     );
@@ -401,6 +407,27 @@ export default function NewShipmentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, shipmentScope]);
 
+  // ── Recalculate PPHP↔USDC preview whenever asset or invoice changes ─────────
+  useEffect(() => {
+    if (step !== 4 || assetCode !== 'PPHP' || !totalValueUSD || Number(totalValueUSD) <= 0) {
+      setPphpPreview(null);
+      return;
+    }
+    setPphpPreviewing(true);
+    // totalValueUSD is already the USD equivalent of the invoice;
+    // we convert that USD amount into PHP to show the peso cost.
+    convertPphpToUsdc(Number(totalValueUSD) * (phpRate ?? 58.8)).then(result => {
+      // Actually we want: php = totalValueUSD * phpRate, usdc = totalValueUSD
+      // convertPphpToUsdc gives usdc from php. Use the live rate directly.
+      const phpAmount = phpRate
+        ? Number(totalValueUSD) * phpRate
+        : Number(totalValueUSD) * result.rate;
+      setPphpPreview({ php: phpAmount, usdc: Number(totalValueUSD), rate: result.rate, isLive: result.isLive });
+    }).catch(() => setPphpPreview(null))
+      .finally(() => setPphpPreviewing(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, assetCode, totalValueUSD, phpRate]);
+
 
   const handleDocAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -500,33 +527,34 @@ export default function NewShipmentPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          importerId:             currentUser.id,
-          exporterId: selectedExporterId,
-          description,
-          totalValueUSD:          Number(totalValueUSD),
-          originCountry,
-          destinationPort,
-          shipmentScope,
-          estimatedArrival:       estimatedArrival || undefined,
-          selectedLogisticsUsers: assignedUserIds,
-          requiredMilestones:     priorityMilestones,
-          documents:              [], // files are uploaded to Storage after vault folder creation
-          invoiceCurrency,
-          invoiceValue:           Number(invoiceValue),
-          hsCode,
-          isDangerousGoods,
-          packageCount:           Number(packageCount),
-          packagingType,
-          grossWeight:            Number(grossWeight),
-          weightUnit,
-          originAddress,
-          originPort,
-          destCountry,
-          destAddress,
-          importerContact,
-          exporterContact,
-          vaultFolderName,
-          vaultPassword,
+        importerId:             currentUser.id,
+        exporterId: selectedExporterId,
+        description,
+        totalValueUSD:          Number(totalValueUSD),
+        originCountry,
+        destinationPort,
+        shipmentScope,
+        estimatedArrival:       estimatedArrival || undefined,
+        selectedLogisticsUsers: assignedUserIds,
+        requiredMilestones:     priorityMilestones,
+        documents:              [], // files are uploaded to Storage after vault folder creation
+        invoiceCurrency,
+        invoiceValue:           Number(invoiceValue),
+        hsCode,
+        isDangerousGoods,
+        packageCount:           Number(packageCount),
+        packagingType,
+        grossWeight:            Number(grossWeight),
+        weightUnit,
+        originAddress,
+        originPort,
+        destCountry,
+        destAddress,
+        importerContact,
+        exporterContact,
+        vaultFolderName,
+        vaultPassword,
+          escrowAsset:            assetCode,
         }),
       });
       const json = await res.json();
@@ -657,12 +685,12 @@ export default function NewShipmentPage() {
       <div className="space-y-1 mb-6">
         <button
           onClick={() => router.push('/shipments')}
-          className="flex items-center gap-1.5 text-xs text-maritime-400 hover:text-maritime-900 font-bold cursor-pointer"
+          className="flex items-center gap-1.5 text-xs text-amber hover:text-ink font-bold cursor-pointer"
         >
           <ChevronLeft className="w-4 h-4" /> Back to Shipments
         </button>
-        <h1 className="text-3xl font-black text-maritime-900 tracking-tight">Book Shipping Record</h1>
-        <p className="text-xs text-gray-500">
+        <h1 className="text-3xl font-black text-ink tracking-tight">Book Shipping Record</h1>
+        <p className="text-xs text-ink-faint">
           Initiate a Stellar multi-signature escrow contract for your incoming cargo.
         </p>
       </div>
@@ -678,16 +706,16 @@ export default function NewShipmentPage() {
             <React.Fragment key={n}>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all
-                  ${completed ? 'bg-ocean-400 text-white' : active ? 'bg-maritime-400 text-white' : 'bg-sand-200 text-gray-400'}`}>
+                  ${completed ? 'bg-teal text-white' : active ? 'bg-amber text-white' : 'bg-mist text-ink-faint'}`}>
                   {completed ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
                 </div>
                 <span className={`text-xs font-bold hidden sm:block
-                  ${active ? 'text-maritime-900' : completed ? 'text-ocean-400' : 'text-gray-400'}`}>
+                  ${active ? 'text-ink' : completed ? 'text-teal' : 'text-ink-faint'}`}>
                   {s.label}
                 </span>
               </div>
               {i < STEPS.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-3 transition-all ${step > n ? 'bg-ocean-400' : 'bg-sand-200'}`} />
+                <div className={`flex-1 h-0.5 mx-3 transition-all ${step > n ? 'bg-teal' : 'bg-mist'}`} />
               )}
             </React.Fragment>
           );
@@ -695,7 +723,7 @@ export default function NewShipmentPage() {
       </div>
 
       {errorText && (
-        <div className="mb-4 bg-coral-50 border border-coral-400/20 text-coral-600 font-semibold text-xs py-2.5 px-3 rounded-lg flex items-center gap-2">
+        <div className="mb-4 bg-wine-light border border-wine/20 text-wine font-semibold text-xs py-2.5 px-3 rounded-lg flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {errorText}
         </div>
       )}
@@ -707,28 +735,28 @@ export default function NewShipmentPage() {
         <div className="space-y-6">
 
             {/* IMPORT FROM CHAT — receipts selector, always visible */}
-            <div className="bg-white border-2 border-ocean-100 p-6 rounded-2xl space-y-4">
+            <div className="bg-white border-2 border-steel-light p-6 rounded-2xl space-y-4">
               <SubSectionHeader
                 icon={Receipt}
                 title="Import from Chat"
                 description={receipts.length > 0 ? "Pick a finalized receipt from your messages to prefill this form with terms you and your counterparty already agreed on." : "No finalized receipts yet. Head to Messages to agree on shipment terms with your counterparty first, or fill in the form below manually."}
-                accent="border-ocean-400 bg-ocean-50"
+                accent="border-teal bg-teal-light"
               />
               {receiptsLoading ? (
-                <div className="flex items-center gap-2 py-4 text-xs text-gray-400">
+                <div className="flex items-center gap-2 py-4 text-xs text-ink-faint">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading receipts from your chats…
                 </div>
               ) : receipts.length === 0 ? (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-sand-50 border border-sand-200 rounded-xl p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-mist-light border border-mist rounded-xl p-4">
                   <div className="flex-1 space-y-1">
-                    <p className="text-xs font-bold text-gray-600">No finalized receipts yet</p>
-                    <p className="text-[11px] text-gray-400 leading-relaxed">
+                    <p className="text-xs font-bold text-ink-faint">No finalized receipts yet</p>
+                    <p className="text-[11px] text-ink-faint leading-relaxed">
                       Receipts are created when you and your counterparty agree on terms inside a chat thread. Go to Messages, open a thread, and use the &quot;Finalize Receipt&quot; action — then come back here to import it.
                     </p>
                   </div>
                   <Link
                     href="/messages"
-                    className="flex-shrink-0 flex items-center gap-1.5 bg-ocean-400 hover:bg-ocean-600 text-white text-[11px] font-black px-4 py-2 rounded-lg transition-all"
+                    className="flex-shrink-0 flex items-center gap-1.5 bg-teal hover:bg-steel text-white text-[11px] font-black px-4 py-2 rounded-lg transition-all"
                   >
                     <MessageSquare className="w-3.5 h-3.5" /> Go to Messages
                   </Link>
@@ -744,23 +772,23 @@ export default function NewShipmentPage() {
                           type="button"
                           onClick={() => applyReceipt(r)}
                           className={`text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer
-                            ${isApplied ? 'border-ocean-400 bg-ocean-50 shadow-sm' : 'border-sand-200 hover:border-ocean-200'}`}
+                            ${isApplied ? 'border-teal bg-teal-light shadow-sm' : 'border-mist hover:border-teal-light'}`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <p className="text-xs font-bold text-maritime-900 line-clamp-2">
+                            <p className="text-xs font-bold text-ink line-clamp-2">
                               {r.cargoDescription || 'Untitled cargo'}
                             </p>
-                            {isApplied && <CheckCircle2 className="w-4 h-4 text-ocean-400 flex-shrink-0" />}
+                            {isApplied && <CheckCircle2 className="w-4 h-4 text-teal flex-shrink-0" />}
                           </div>
-                          <p className="text-[10px] text-gray-500 mt-1">
+                          <p className="text-[10px] text-ink-faint mt-1">
                             {r.originCountry || '—'} → {r.destinationPort || '—'}
                           </p>
                           <div className="flex items-center justify-between mt-2">
-                            <span className="text-[11px] font-black text-ocean-600 font-mono">
+                            <span className="text-[11px] font-black text-steel font-sans">
                               {r.invoiceValue != null ? `${CURRENCY_SYMBOLS[r.invoiceCurrency || 'USD']}${r.invoiceValue.toLocaleString()}` : '—'}
                             </span>
                             {r.counterparty && (
-                              <span className="text-[9px] font-bold text-gray-400 truncate max-w-[120px]">
+                              <span className="text-[9px] font-bold text-ink-faint truncate max-w-[120px]">
                                 with {r.counterparty.fullName.split(' ')[0]}
                               </span>
                             )}
@@ -770,7 +798,7 @@ export default function NewShipmentPage() {
                     })}
                   </div>
                   {appliedReceiptId && (
-                    <p className="text-[10px] text-ocean-600 font-semibold flex items-center gap-1.5">
+                    <p className="text-[10px] text-steel font-semibold flex items-center gap-1.5">
                       <Sparkles className="w-3 h-3" /> Form prefilled from receipt — feel free to edit anything below before continuing.
                     </p>
                   )}
@@ -779,15 +807,15 @@ export default function NewShipmentPage() {
             </div>
 
             {/* A · SCOPE */}
-            <div className="bg-white border border-sand-200 p-6 rounded-2xl">
+            <div className="bg-white border border-mist p-6 rounded-2xl">
               <SubSectionHeader
                 icon={Globe}
                 title="Scope"
                 description="Define the shipment route, scope, and both parties' contact details."
-                accent="border-maritime-400 bg-maritime-50"
+                accent="border-amber bg-amber-light"
               />
               <div className="space-y-2 mb-5">
-                <label className="block text-xs font-bold text-gray-700">Shipment Scope</label>
+                <label className="block text-xs font-bold text-ink-faint">Shipment Scope</label>
                 <div className="grid grid-cols-2 gap-3">
                   {(['OVERSEAS', 'NATIONWIDE'] as ShipmentScope[]).map(scope => (
                     <button
@@ -795,12 +823,12 @@ export default function NewShipmentPage() {
                       type="button"
                       onClick={() => setShipmentScope(scope)}
                       className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer
-                        ${shipmentScope === scope ? 'border-maritime-400 bg-maritime-50' : 'border-sand-200 hover:border-maritime-200'}`}
+                        ${shipmentScope === scope ? 'border-amber bg-amber-light' : 'border-mist hover:border-amber/30'}`}
                     >
-                      <div className={`text-xs font-black ${shipmentScope === scope ? 'text-maritime-400' : 'text-gray-500'}`}>
+                      <div className={`text-xs font-black ${shipmentScope === scope ? 'text-amber' : 'text-ink-faint'}`}>
                         {scope === 'OVERSEAS' ? '🌏 OVERSEAS' : '🇵🇭 NATIONWIDE'}
                       </div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">
+                      <div className="text-[10px] text-ink-faint mt-0.5">
                         {scope === 'OVERSEAS' ? 'USD · International bank/wire transfer' : 'USDC escrow · PHP indicative rate shown'}
                       </div>
                     </button>
@@ -810,57 +838,57 @@ export default function NewShipmentPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-gray-700 flex items-center gap-1">
-                    <Building2 className="w-3.5 h-3.5 text-maritime-400" /> Importer Company / Contact
+                  <label className="block text-xs font-bold text-ink-faint flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-amber" /> Importer Company / Contact
                   </label>
-                  <input type="text" placeholder="e.g. Binondo Metals Importing Inc." className="w-full border border-sand-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-maritime-400" value={importerContact} onChange={e => setImporterContact(e.target.value)} />
+                  <input type="text" placeholder="e.g. Binondo Metals Importing Inc." className="w-full border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-amber" value={importerContact} onChange={e => setImporterContact(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-gray-700 flex items-center gap-1">
-                    <Building2 className="w-3.5 h-3.5 text-ocean-400" /> Exporter Company / Contact
+                  <label className="block text-xs font-bold text-ink-faint flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-teal" /> Exporter Company / Contact
                   </label>
-                  <input type="text" placeholder="e.g. Osaka Trading Ltd." className="w-full border border-sand-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-maritime-400" value={exporterContact} onChange={e => setExporterContact(e.target.value)} />
+                  <input type="text" placeholder="e.g. Osaka Trading Ltd." className="w-full border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-amber" value={exporterContact} onChange={e => setExporterContact(e.target.value)} />
                 </div>
               </div>
 
               <div className="space-y-1 mb-5">
-                <label className="block text-xs font-bold text-gray-700">Cargo Description <span className="text-coral-400">*</span></label>
-                <textarea rows={3} placeholder="e.g. 40ft container of high-precision automobile spares (Model RX-9)" className="w-full border border-sand-200 rounded-lg p-2.5 text-xs outline-none focus:border-maritime-400 resize-none" value={description} onChange={e => setDescription(e.target.value)} />
+                <label className="block text-xs font-bold text-ink-faint">Cargo Description <span className="text-wine">*</span></label>
+                <textarea rows={3} placeholder="e.g. 40ft container of high-precision automobile spares (Model RX-9)" className="w-full border border-mist rounded-lg p-2.5 text-xs outline-none focus:border-amber resize-none" value={description} onChange={e => setDescription(e.target.value)} />
               </div>
 
               <div className="space-y-1 mb-5">
-                <label className="block text-xs font-bold text-gray-700">Estimated Arrival (ETA)</label>
+                <label className="block text-xs font-bold text-ink-faint">Estimated Arrival (ETA)</label>
                 <div className="relative max-w-xs">
-                  <Calendar className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-                  <input type="date" className="w-full border border-sand-200 rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-maritime-400" value={estimatedArrival} onChange={e => setEstimatedArrival(e.target.value)} />
+                  <Calendar className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                  <input type="date" className="w-full border border-mist rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-amber" value={estimatedArrival} onChange={e => setEstimatedArrival(e.target.value)} />
                 </div>
               </div>
 
               <div className="mb-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-maritime-400 flex-shrink-0" />
-                  <span className="text-[10px] font-black text-maritime-900 uppercase tracking-widest">Origin</span>
-                  <div className="flex-1 h-px bg-sand-200" />
+                  <div className="w-2 h-2 rounded-full bg-amber flex-shrink-0" />
+                  <span className="text-[10px] font-black text-ink uppercase tracking-widest">Origin</span>
+                  <div className="flex-1 h-px bg-mist" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold text-gray-700">Country <span className="text-coral-400">*</span></label>
+                    <label className="block text-xs font-bold text-ink-faint">Country <span className="text-wine">*</span></label>
                     {isNationwide ? <PhilippinesBadge /> : (
                       <div className="relative">
-                        <MapPin className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-                        <input type="text" placeholder="e.g. Japan" className="w-full border border-sand-200 rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-maritime-400" value={originCountry} onChange={e => setOriginCountry(e.target.value)} />
+                        <MapPin className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                        <input type="text" placeholder="e.g. Japan" className="w-full border border-mist rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-amber" value={originCountry} onChange={e => setOriginCountry(e.target.value)} />
                       </div>
                     )}
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold text-gray-700">Address</label>
-                    <input type="text" placeholder={isNationwide ? 'e.g. Binondo, Manila' : 'e.g. 1-2-3 Namba, Osaka'} className="w-full border border-sand-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-maritime-400" value={originAddress} onChange={e => setOriginAddress(e.target.value)} />
+                    <label className="block text-xs font-bold text-ink-faint">Address</label>
+                    <input type="text" placeholder={isNationwide ? 'e.g. Binondo, Manila' : 'e.g. 1-2-3 Namba, Osaka'} className="w-full border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-amber" value={originAddress} onChange={e => setOriginAddress(e.target.value)} />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold text-gray-700">Port</label>
+                    <label className="block text-xs font-bold text-ink-faint">Port</label>
                     <div className="relative">
-                      <Ship className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-                      <input type="text" placeholder={isNationwide ? 'e.g. Port of Manila' : 'e.g. Port of Osaka'} className="w-full border border-sand-200 rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-maritime-400" value={originPort} onChange={e => setOriginPort(e.target.value)} />
+                      <Ship className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                      <input type="text" placeholder={isNationwide ? 'e.g. Port of Manila' : 'e.g. Port of Osaka'} className="w-full border border-mist rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-amber" value={originPort} onChange={e => setOriginPort(e.target.value)} />
                     </div>
                   </div>
                 </div>
@@ -868,29 +896,29 @@ export default function NewShipmentPage() {
 
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-ocean-400 flex-shrink-0" />
-                  <span className="text-[10px] font-black text-ocean-600 uppercase tracking-widest">Destination</span>
-                  <div className="flex-1 h-px bg-sand-200" />
+                  <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
+                  <span className="text-[10px] font-black text-steel uppercase tracking-widest">Destination</span>
+                  <div className="flex-1 h-px bg-mist" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold text-gray-700">Country</label>
+                    <label className="block text-xs font-bold text-ink-faint">Country</label>
                     {isNationwide ? <PhilippinesBadge /> : (
                       <div className="relative">
-                        <MapPin className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-                        <input type="text" placeholder="e.g. Philippines" className="w-full border border-sand-200 rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-maritime-400" value={destCountry} onChange={e => setDestCountry(e.target.value)} />
+                        <MapPin className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                        <input type="text" placeholder="e.g. Philippines" className="w-full border border-mist rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-amber" value={destCountry} onChange={e => setDestCountry(e.target.value)} />
                       </div>
                     )}
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold text-gray-700">Address</label>
-                    <input type="text" placeholder="e.g. Binondo, Manila 1006" className="w-full border border-sand-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-maritime-400" value={destAddress} onChange={e => setDestAddress(e.target.value)} />
+                    <label className="block text-xs font-bold text-ink-faint">Address</label>
+                    <input type="text" placeholder="e.g. Binondo, Manila 1006" className="w-full border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-amber" value={destAddress} onChange={e => setDestAddress(e.target.value)} />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold text-gray-700">Port <span className="text-coral-400">*</span></label>
+                    <label className="block text-xs font-bold text-ink-faint">Port <span className="text-wine">*</span></label>
                     <div className="relative">
-                      <Globe className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-                      <input type="text" placeholder="e.g. Port of Cebu" className="w-full border border-sand-200 rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-maritime-400" value={destinationPort} onChange={e => setDestinationPort(e.target.value)} />
+                      <Globe className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                      <input type="text" placeholder="e.g. Port of Cebu" className="w-full border border-mist rounded-lg pl-8 pr-2.5 py-2 text-xs outline-none focus:border-amber" value={destinationPort} onChange={e => setDestinationPort(e.target.value)} />
                     </div>
                   </div>
                 </div>
@@ -898,58 +926,58 @@ export default function NewShipmentPage() {
             </div>
 
             {/* B · COMMERCIAL VALUE */}
-            <div className="bg-white border border-sand-200 p-6 rounded-2xl">
-              <SubSectionHeader icon={Coins} title="Commercial Value" description="Invoice currency, value, live oracle conversion rate, and HS tariff code." accent="border-ocean-400 bg-ocean-50" />
+            <div className="bg-white border border-mist p-6 rounded-2xl">
+              <SubSectionHeader icon={Coins} title="Commercial Value" description="Invoice currency, value, live oracle conversion rate, and HS tariff code." accent="border-teal bg-teal-light" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-gray-700">Invoice Currency <span className="text-coral-400">*</span></label>
+                  <label className="block text-xs font-bold text-ink-faint">Invoice Currency <span className="text-wine">*</span></label>
                   <div className="flex gap-1.5 flex-wrap">
                     {(['USD', 'PHP', 'EUR', 'JPY'] as const).map(cur => (
                       <button key={cur} type="button" onClick={() => setInvoiceCurrency(cur)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-black border-2 transition-all cursor-pointer ${invoiceCurrency === cur ? 'border-ocean-400 bg-ocean-50 text-ocean-600' : 'border-sand-200 text-gray-500 hover:border-maritime-200'}`}>
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black border-2 transition-all cursor-pointer ${invoiceCurrency === cur ? 'border-teal bg-teal-light text-steel' : 'border-mist text-ink-faint hover:border-amber/30'}`}>
                         {cur}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-gray-700">Invoice Value <span className="text-coral-400">*</span></label>
+                  <label className="block text-xs font-bold text-ink-faint">Invoice Value <span className="text-wine">*</span></label>
                   <div className="relative">
-                    <DollarSign className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-                    <input type="number" min="0" placeholder="0.00" className="w-full border border-sand-200 rounded-lg pl-8 pr-14 py-2 text-xs font-mono outline-none focus:border-maritime-400" value={invoiceValue} onChange={e => setInvoiceValue(e.target.value)} />
-                    <span className="absolute right-3 top-2 text-[10px] text-gray-400 font-bold">{invoiceCurrency}</span>
+                    <DollarSign className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                    <input type="number" min="0" placeholder="0.00" className="w-full border border-mist rounded-lg pl-8 pr-14 py-2 text-xs font-sans outline-none focus:border-amber" value={invoiceValue} onChange={e => setInvoiceValue(e.target.value)} />
+                    <span className="absolute right-3 top-2 text-[10px] text-ink-faint font-bold">{invoiceCurrency}</span>
                   </div>
                 </div>
               </div>
-              <div className="mt-4 p-3 rounded-xl border border-sand-200 bg-sand-50 flex items-center gap-3 min-h-[46px]">
-                <RefreshCw className={`w-4 h-4 text-ocean-400 flex-shrink-0 ${oracleLoading ? 'animate-spin' : ''}`} />
-                {oracleLoading && <span className="text-[11px] text-gray-400 italic">Fetching live oracle rate…</span>}
+              <div className="mt-4 p-3 rounded-xl border border-mist bg-mist-light flex items-center gap-3 min-h-[46px]">
+                <RefreshCw className={`w-4 h-4 text-teal flex-shrink-0 ${oracleLoading ? 'animate-spin' : ''}`} />
+                {oracleLoading && <span className="text-[11px] text-ink-faint italic">Fetching live oracle rate…</span>}
                 {!oracleLoading && oracleRate && (
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-[11px] text-ocean-600 font-bold font-mono">{oracleRate.label}</span>
-                    {totalValueUSD && <span className="text-[11px] bg-ocean-50 text-ocean-600 border border-ocean-100 rounded px-2 py-0.5 font-black font-mono">≈ {Number(totalValueUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDC</span>}
+                    <span className="text-[11px] text-steel font-bold font-sans">{oracleRate.label}</span>
+                    {totalValueUSD && <span className="text-[11px] bg-teal-light text-steel border border-steel-light rounded px-2 py-0.5 font-black font-sans">≈ {Number(totalValueUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDC</span>}
                   </div>
                 )}
-                {!oracleLoading && !oracleRate && <span className="text-[11px] text-gray-400">{invoiceValue && Number(invoiceValue) > 0 ? 'Rate unavailable.' : 'Enter an invoice value to see live conversion rate.'}</span>}
+                {!oracleLoading && !oracleRate && <span className="text-[11px] text-ink-faint">{invoiceValue && Number(invoiceValue) > 0 ? 'Rate unavailable.' : 'Enter an invoice value to see live conversion rate.'}</span>}
               </div>
               <div className="mt-5 space-y-1" ref={hsRef}>
-                <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                  <Hash className="w-3.5 h-3.5 text-maritime-400" /> HS Code / Tariff Code <span className="text-[10px] font-normal text-gray-400">(6–10 digits)</span>
+                <label className="block text-xs font-bold text-ink-faint flex items-center gap-1.5">
+                  <Hash className="w-3.5 h-3.5 text-amber" /> HS Code / Tariff Code <span className="text-[10px] font-normal text-ink-faint">(6–10 digits)</span>
                 </label>
                 <div className="relative">
-                  <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-                  <input type="text" placeholder="Type code or keyword…" className="w-full border border-sand-200 rounded-lg pl-8 pr-2.5 py-2 text-xs font-mono outline-none focus:border-maritime-400"
+                  <Search className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                  <input type="text" placeholder="Type code or keyword…" className="w-full border border-mist rounded-lg pl-8 pr-2.5 py-2 text-xs font-sans outline-none focus:border-amber"
                     value={hsCode || hsSearch}
                     onChange={e => { setHsSearch(e.target.value); setHsCode(e.target.value); setHsDropOpen(true); }}
                     onFocus={() => setHsDropOpen(true)}
                   />
                   {hsDropOpen && filteredHs.length > 0 && (
-                    <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-sand-200 rounded-xl shadow-lg overflow-hidden">
+                    <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-mist rounded-xl shadow-lg overflow-hidden">
                       {filteredHs.map(h => (
                         <button key={h.code} type="button" onClick={() => { setHsCode(h.code); setHsSearch(h.code); setHsDropOpen(false); }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-maritime-50 text-left transition-all group">
-                          <span className="font-mono text-xs font-black text-maritime-400 flex-shrink-0 group-hover:text-maritime-900">{h.code}</span>
-                          <span className="text-[11px] text-gray-500 truncate">{h.description}</span>
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-amber-light text-left transition-all group">
+                          <span className="font-sans text-xs font-black text-amber flex-shrink-0 group-hover:text-ink">{h.code}</span>
+                          <span className="text-[11px] text-ink-faint truncate">{h.description}</span>
                         </button>
                       ))}
                     </div>
@@ -959,38 +987,38 @@ export default function NewShipmentPage() {
             </div>
 
             {/* C · PHYSICAL SPECIFICATIONS */}
-            <div className="bg-white border border-sand-200 p-6 rounded-2xl">
-              <SubSectionHeader icon={Package} title="Physical Specifications" description="Dangerous goods classification, package count, and gross weight details." accent="border-coral-400 bg-coral-50" />
-              <div className="flex items-center justify-between p-4 bg-sand-50 rounded-xl border border-sand-200 mb-5">
+            <div className="bg-white border border-mist p-6 rounded-2xl">
+              <SubSectionHeader icon={Package} title="Physical Specifications" description="Dangerous goods classification, package count, and gross weight details." accent="border-wine bg-wine-light" />
+              <div className="flex items-center justify-between p-4 bg-mist-light rounded-xl border border-mist mb-5">
                 <div>
-                  <p className="text-xs font-bold text-maritime-900 flex items-center gap-1.5">
-                    <AlertTriangle className={`w-4 h-4 ${isDangerousGoods ? 'text-coral-400' : 'text-gray-300'}`} /> Dangerous Goods / HazMat
+                  <p className="text-xs font-bold text-ink flex items-center gap-1.5">
+                    <AlertTriangle className={`w-4 h-4 ${isDangerousGoods ? 'text-wine' : 'text-mist-dark'}`} /> Dangerous Goods / HazMat
                   </p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">IMDG-classified hazardous materials?</p>
+                  <p className="text-[10px] text-ink-faint mt-0.5">IMDG-classified hazardous materials?</p>
                 </div>
                 <button type="button" onClick={() => setIsDangerousGoods(prev => !prev)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black border-2 transition-all cursor-pointer ${isDangerousGoods ? 'border-coral-400 bg-coral-50 text-coral-600' : 'border-sand-200 bg-white text-gray-400 hover:border-gray-300'}`}>
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black border-2 transition-all cursor-pointer ${isDangerousGoods ? 'border-wine bg-wine-light text-wine' : 'border-mist bg-white text-ink-faint hover:border-mist-dark'}`}>
                   {isDangerousGoods ? <><ToggleRight className="w-4 h-4" /> YES — HazMat</> : <><ToggleLeft className="w-4 h-4" /> NO</>}
                 </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5"><Package className="w-3.5 h-3.5 text-maritime-400" /> Total Package / Piece Count</label>
+                  <label className="block text-xs font-bold text-ink-faint flex items-center gap-1.5"><Package className="w-3.5 h-3.5 text-amber" /> Total Package / Piece Count</label>
                   <div className="flex gap-2">
-                    <input type="number" min="1" placeholder="00" className="w-24 border border-sand-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-maritime-400 flex-shrink-0" value={packageCount} onChange={e => setPackageCount(e.target.value)} />
-                    <select className="flex-1 border border-sand-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-maritime-400 bg-white cursor-pointer" value={packagingType} onChange={e => setPackagingType(e.target.value)}>
+                    <input type="number" min="1" placeholder="00" className="w-24 border border-mist rounded-lg px-3 py-2 text-xs font-sans outline-none focus:border-amber flex-shrink-0" value={packageCount} onChange={e => setPackageCount(e.target.value)} />
+                    <select className="flex-1 border border-mist rounded-lg px-2.5 py-2 text-xs outline-none focus:border-amber bg-white cursor-pointer" value={packagingType} onChange={e => setPackagingType(e.target.value)}>
                       {PACKAGING_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5"><Weight className="w-3.5 h-3.5 text-maritime-400" /> Total Gross Weight</label>
+                  <label className="block text-xs font-bold text-ink-faint flex items-center gap-1.5"><Weight className="w-3.5 h-3.5 text-amber" /> Total Gross Weight</label>
                   <div className="flex gap-2">
-                    <input type="number" min="0" step="0.01" placeholder="0000" className="flex-1 border border-sand-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-maritime-400" value={grossWeight} onChange={e => setGrossWeight(e.target.value)} />
+                    <input type="number" min="0" step="0.01" placeholder="0000" className="flex-1 border border-mist rounded-lg px-3 py-2 text-xs font-sans outline-none focus:border-amber" value={grossWeight} onChange={e => setGrossWeight(e.target.value)} />
                     <div className="flex gap-1">
                       {(['KG', 'LBS'] as const).map(unit => (
                         <button key={unit} type="button" onClick={() => setWeightUnit(unit)}
-                          className={`px-3 py-2 rounded-lg text-xs font-black border-2 transition-all cursor-pointer ${weightUnit === unit ? 'border-maritime-400 bg-maritime-50 text-maritime-400' : 'border-sand-200 text-gray-400 hover:border-maritime-200'}`}>
+                          className={`px-3 py-2 rounded-lg text-xs font-black border-2 transition-all cursor-pointer ${weightUnit === unit ? 'border-amber bg-amber-light text-amber' : 'border-mist text-ink-faint hover:border-amber/30'}`}>
                           {unit}
                         </button>
                       ))}
@@ -1001,7 +1029,7 @@ export default function NewShipmentPage() {
             </div>
 
             <div className="flex justify-end pb-4">
-              <button onClick={nextStep} className="flex items-center gap-2 bg-maritime-400 hover:bg-maritime-900 text-white font-black py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider cursor-pointer transition-all shadow-sm">
+              <button onClick={nextStep} className="flex items-center gap-2 bg-amber hover:bg-ink text-white font-black py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider cursor-pointer transition-all shadow-sm">
                 Next: Documents <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -1016,34 +1044,34 @@ export default function NewShipmentPage() {
           <div className="lg:col-span-3 space-y-6">
 
             {/* DOCUMENT UPLOAD */}
-            <div className="bg-white border border-sand-200 p-6 rounded-2xl space-y-5">
-              <h3 className="font-extrabold text-sm text-maritime-900 flex items-center gap-2 border-b border-sand-100 pb-3">
-                <FileText className="w-5 h-5 text-maritime-400" /> Upload Shipping Documents
+            <div className="bg-white border border-mist p-6 rounded-2xl space-y-5">
+              <h3 className="font-extrabold text-sm text-ink flex items-center gap-2 border-b border-mist-light pb-3">
+                <FileText className="w-5 h-5 text-amber" /> Upload Shipping Documents
               </h3>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-ink-faint">
                 Upload bills of lading, commercial invoices, packing lists, or any BOC-relevant files.
                 All uploads will be grouped inside the vault folder you configure below.
               </p>
 
-              <label className="block border-2 border-dashed border-sand-200 hover:border-maritime-400 rounded-xl p-10 text-center cursor-pointer transition-all group">
-                <Upload className="w-9 h-9 text-gray-300 group-hover:text-maritime-400 mx-auto mb-2 transition-all" />
-                <p className="text-xs font-bold text-gray-500 group-hover:text-maritime-400">Click to upload or drag &amp; drop</p>
-                <p className="text-[10px] text-gray-400 mt-1">PDF, DOC, XLS, PNG, JPG — any file type accepted</p>
+              <label className="block border-2 border-dashed border-mist hover:border-amber rounded-xl p-10 text-center cursor-pointer transition-all group">
+                <Upload className="w-9 h-9 text-mist-dark group-hover:text-amber mx-auto mb-2 transition-all" />
+                <p className="text-xs font-bold text-ink-faint group-hover:text-amber">Click to upload or drag &amp; drop</p>
+                <p className="text-[10px] text-ink-faint mt-1">PDF, DOC, XLS, PNG, JPG — any file type accepted</p>
                 <input type="file" multiple className="hidden" onChange={handleDocAdd} />
               </label>
 
               {documents.length > 0 && (
                 <div className="space-y-2">
                   {documents.map((doc, i) => (
-                    <div key={i} className="flex items-center justify-between bg-sand-50 border border-sand-200 rounded-lg px-3 py-2.5">
+                    <div key={i} className="flex items-center justify-between bg-mist-light border border-mist rounded-lg px-3 py-2.5">
                       <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-maritime-400 flex-shrink-0" />
+                        <FileText className="w-4 h-4 text-amber flex-shrink-0" />
                         <div>
-                          <p className="text-xs font-semibold text-gray-700 truncate max-w-sm">{doc.name}</p>
-                          <p className="text-[10px] text-gray-400">{(doc.size / 1024).toFixed(1)} KB</p>
+                          <p className="text-xs font-semibold text-ink-faint truncate max-w-sm">{doc.name}</p>
+                          <p className="text-[10px] text-ink-faint">{(doc.size / 1024).toFixed(1)} KB</p>
                         </div>
                       </div>
-                      <button onClick={() => handleDocRemove(i)} className="text-gray-400 hover:text-coral-400 cursor-pointer transition-colors">
+                      <button onClick={() => handleDocRemove(i)} className="text-ink-faint hover:text-wine cursor-pointer transition-colors">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -1052,7 +1080,7 @@ export default function NewShipmentPage() {
               )}
 
               {skipDocWarning && documents.length === 0 && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs p-3 rounded-lg">
+                <div className="flex items-start gap-2 bg-amber-light border border-amber/30 text-amber text-xs p-3 rounded-lg">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>No documents uploaded. You can continue, but documents must be added before customs clearance. <strong>Click Next again to skip.</strong></span>
                 </div>
@@ -1060,69 +1088,69 @@ export default function NewShipmentPage() {
             </div>
 
             {/* BOC DOCUMENT VAULT SETUP */}
-            <div className="bg-white border-2 border-maritime-100 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-maritime-900 px-6 py-4 flex items-center gap-3">
-                <div className="w-9 h-9 bg-maritime-700 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <FolderLock className="w-5 h-5 text-maritime-200" />
+            <div className="bg-white border-2 border-amber-light rounded-2xl overflow-hidden shadow-sm">
+              <div className="bg-ink px-6 py-4 flex items-center gap-3">
+                <div className="w-9 h-9 bg-ink-soft rounded-xl flex items-center justify-center flex-shrink-0">
+                  <FolderLock className="w-5 h-5 text-amber" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-white">BOC Document Vault — Folder Setup</h3>
-                  <p className="text-[10px] text-maritime-300">Configure the vault folder that will hold all documents for this shipment.</p>
+                  <p className="text-[10px] text-amber-light">Configure the vault folder that will hold all documents for this shipment.</p>
                 </div>
-                <span className="ml-auto text-[9px] font-black bg-ocean-400/20 text-ocean-400 border border-ocean-400/30 px-2 py-1 rounded-lg tracking-widest uppercase">Required</span>
+                <span className="ml-auto text-[9px] font-black bg-teal/20 text-teal border border-teal/30 px-2 py-1 rounded-lg tracking-widest uppercase">Required</span>
               </div>
 
               <div className="p-6 space-y-6">
-                <div className="flex items-start gap-3 bg-maritime-50 border border-maritime-100 rounded-xl p-4 text-xs text-maritime-700">
-                  <ShieldCheck className="w-4 h-4 text-maritime-400 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 bg-amber-light border border-amber-light rounded-xl p-4 text-xs text-ink-soft">
+                  <ShieldCheck className="w-4 h-4 text-amber flex-shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
                     <strong className="font-bold">How Vault Folders work:</strong> A password-protected folder is created in the BOC Document Vault for this shipment. All authorized users can <em>see</em> the folder, but must enter the correct vault password to open it and access the documents inside.
-                    <span className="block mt-1 text-maritime-400">Share the password only with those who need direct document access.</span>
+                    <span className="block mt-1 text-amber">Share the password only with those who need direct document access.</span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-xs font-bold text-maritime-900 flex items-center gap-1.5">
-                    <FolderOpen className="w-4 h-4 text-maritime-400" />
-                    Vault Folder Name <span className="text-coral-400">*</span>
-                    <span className="text-[10px] font-normal text-gray-400 ml-1">— visible to all authorized users</span>
+                  <label className="block text-xs font-bold text-ink flex items-center gap-1.5">
+                    <FolderOpen className="w-4 h-4 text-amber" />
+                    Vault Folder Name <span className="text-wine">*</span>
+                    <span className="text-[10px] font-normal text-ink-faint ml-1">— visible to all authorized users</span>
                   </label>
                   <div className="relative">
                     <input type="text" placeholder="e.g. JPN-MNL_STEEL_COILS_2026"
-                      className="w-full border border-sand-200 rounded-xl px-4 py-3 pr-10 text-sm font-mono outline-none focus:border-maritime-400 bg-sand-50 text-maritime-900 tracking-wide"
+                      className="w-full border border-mist rounded-xl px-4 py-3 pr-10 text-sm font-sans outline-none focus:border-amber bg-mist-light text-ink tracking-wide"
                       value={vaultFolderName} onChange={e => setVaultFolderName(e.target.value.toUpperCase().replace(/\s+/g, '_'))} />
-                    <button type="button" onClick={handleCopyName} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maritime-400 transition-colors" title="Copy folder name">
-                      {nameCopied ? <CheckCircle2 className="w-4 h-4 text-ocean-400" /> : <Copy className="w-4 h-4" />}
+                    <button type="button" onClick={handleCopyName} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-amber transition-colors" title="Copy folder name">
+                      {nameCopied ? <CheckCircle2 className="w-4 h-4 text-teal" /> : <Copy className="w-4 h-4" />}
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={() => setVaultFolderName(deriveFolderName(description, originCountry, destinationPort))}
-                      className="flex items-center gap-1.5 text-[11px] font-bold text-maritime-400 hover:text-maritime-900 transition-colors border border-maritime-100 bg-maritime-50 px-2.5 py-1 rounded-lg">
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-amber hover:text-ink transition-colors border border-amber-light bg-amber-light px-2.5 py-1 rounded-lg">
                       <Shuffle className="w-3 h-3" /> Re-suggest from cargo details
                     </button>
-                    <p className="text-[10px] text-gray-400">Letters, numbers, hyphens and underscores only.</p>
+                    <p className="text-[10px] text-ink-faint">Letters, numbers, hyphens and underscores only.</p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-xs font-bold text-maritime-900 flex items-center gap-1.5">
-                    <Key className="w-4 h-4 text-maritime-400" />
-                    Vault Password <span className="text-coral-400">*</span>
-                    <span className="text-[10px] font-normal text-gray-400 ml-1">— required to open this folder in the BOC Vault</span>
+                  <label className="block text-xs font-bold text-ink flex items-center gap-1.5">
+                    <Key className="w-4 h-4 text-amber" />
+                    Vault Password <span className="text-wine">*</span>
+                    <span className="text-[10px] font-normal text-ink-faint ml-1">— required to open this folder in the BOC Vault</span>
                   </label>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <input type={showVaultPw ? 'text' : 'password'} placeholder="Type a custom password or generate one →"
-                        className={`w-full border rounded-xl px-4 py-3 pr-20 text-sm font-mono tracking-widest outline-none transition-colors ${vaultPassword ? 'border-ocean-400 bg-ocean-50/40 text-maritime-900 focus:border-ocean-400' : 'border-sand-200 bg-sand-50 focus:border-maritime-400 text-maritime-900'}`}
+                        className={`w-full border rounded-xl px-4 py-3 pr-20 text-sm font-sans tracking-widest outline-none transition-colors ${vaultPassword ? 'border-teal bg-teal-light/40 text-ink focus:border-teal' : 'border-mist bg-mist-light focus:border-amber text-ink'}`}
                         value={vaultPassword} onChange={e => setVaultPassword(e.target.value)} />
-                      <button type="button" onClick={() => setShowVaultPw(v => !v)} className="absolute right-9 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors" title={showVaultPw ? 'Hide' : 'Show'}>
+                      <button type="button" onClick={() => setShowVaultPw(v => !v)} className="absolute right-9 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink transition-colors" title={showVaultPw ? 'Hide' : 'Show'}>
                         {showVaultPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
-                      <button type="button" onClick={handleCopyPassword} disabled={!vaultPassword} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maritime-400 disabled:opacity-30 transition-colors" title="Copy password">
-                        {pwCopied ? <CheckCircle2 className="w-4 h-4 text-ocean-400" /> : <Copy className="w-4 h-4" />}
+                      <button type="button" onClick={handleCopyPassword} disabled={!vaultPassword} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-amber disabled:opacity-30 transition-colors" title="Copy password">
+                        {pwCopied ? <CheckCircle2 className="w-4 h-4 text-teal" /> : <Copy className="w-4 h-4" />}
                       </button>
                     </div>
-                    <button type="button" onClick={handleGeneratePassword} className="flex items-center gap-1.5 bg-maritime-400 hover:bg-maritime-900 text-white font-bold px-4 py-3 rounded-xl text-xs transition-all whitespace-nowrap flex-shrink-0">
+                    <button type="button" onClick={handleGeneratePassword} className="flex items-center gap-1.5 bg-amber hover:bg-ink text-white font-bold px-4 py-3 rounded-xl text-xs transition-all whitespace-nowrap flex-shrink-0">
                       <Shuffle className="w-3.5 h-3.5" /> Generate
                     </button>
                   </div>
@@ -1132,18 +1160,18 @@ export default function NewShipmentPage() {
                         const len = vaultPassword.length;
                         const score = [len >= 8, /[A-Z]/.test(vaultPassword), /[0-9]/.test(vaultPassword), /[^A-Za-z0-9]/.test(vaultPassword)].filter(Boolean).length;
                         const configs = [
-                          { label: 'Too short', color: 'bg-coral-400', text: 'text-coral-400' },
-                          { label: 'Weak',      color: 'bg-coral-400', text: 'text-coral-400' },
-                          { label: 'Fair',      color: 'bg-amber-400', text: 'text-amber-600' },
-                          { label: 'Good',      color: 'bg-ocean-400', text: 'text-ocean-600' },
-                          { label: 'Strong',    color: 'bg-ocean-400', text: 'text-ocean-600' },
+                          { label: 'Too short', color: 'bg-wine', text: 'text-wine' },
+                          { label: 'Weak',      color: 'bg-wine', text: 'text-wine' },
+                          { label: 'Fair',      color: 'bg-amber', text: 'text-amber' },
+                          { label: 'Good',      color: 'bg-teal', text: 'text-steel' },
+                          { label: 'Strong',    color: 'bg-teal', text: 'text-steel' },
                         ];
                         const cfg = len < 6 ? configs[0] : configs[score];
                         return (
                           <>
-                            <div className="flex gap-1">{[0,1,2,3].map(i => <div key={i} className={`h-1 w-8 rounded-full transition-colors ${i < score ? cfg.color : 'bg-sand-200'}`} />)}</div>
+                            <div className="flex gap-1">{[0,1,2,3].map(i => <div key={i} className={`h-1 w-8 rounded-full transition-colors ${i < score ? cfg.color : 'bg-mist'}`} />)}</div>
                             <span className={`text-[10px] font-bold ${cfg.text}`}>{cfg.label}</span>
-                            <span className="text-[10px] text-gray-400">{vaultPassword.length} characters</span>
+                            <span className="text-[10px] text-ink-faint">{vaultPassword.length} characters</span>
                           </>
                         );
                       })()}
@@ -1152,17 +1180,17 @@ export default function NewShipmentPage() {
                 </div>
 
                 {(vaultFolderName || vaultPassword) && (
-                  <div className="bg-sand-50 border border-sand-200 rounded-xl p-4 space-y-3">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Vault Folder Preview</p>
+                  <div className="bg-mist-light border border-mist rounded-xl p-4 space-y-3">
+                    <p className="text-[10px] font-black text-ink-faint uppercase tracking-widest">Vault Folder Preview</p>
                     <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-maritime-100 rounded-xl flex items-center justify-center flex-shrink-0"><FolderLock className="w-5 h-5 text-maritime-400" /></div>
+                      <div className="w-10 h-10 bg-amber-light rounded-xl flex items-center justify-center flex-shrink-0"><FolderLock className="w-5 h-5 text-amber" /></div>
                       <div className="min-w-0 space-y-1">
-                        <p className="text-sm font-black text-maritime-900 font-mono truncate">{vaultFolderName || <span className="text-gray-300 font-normal">Folder name not set</span>}</p>
+                        <p className="text-sm font-black text-ink font-sans truncate">{vaultFolderName || <span className="text-mist-dark font-normal">Folder name not set</span>}</p>
                         <div className="flex items-center gap-2 text-[10px]">
-                          <span className={`flex items-center gap-1 font-bold ${vaultPassword ? 'text-ocean-600' : 'text-coral-400'}`}>
+                          <span className={`flex items-center gap-1 font-bold ${vaultPassword ? 'text-steel' : 'text-wine'}`}>
                             {vaultPassword ? <><Lock className="w-3 h-3" /> Password set</> : <><AlertTriangle className="w-3 h-3" /> No password</>}
                           </span>
-                          {documents.length > 0 && <><span className="text-gray-300">·</span><span className="text-gray-500">{documents.length} document{documents.length > 1 ? 's' : ''} will be added</span></>}
+                          {documents.length > 0 && <><span className="text-mist-dark">·</span><span className="text-ink-faint">{documents.length} document{documents.length > 1 ? 's' : ''} will be added</span></>}
                         </div>
                       </div>
                     </div>
@@ -1172,10 +1200,10 @@ export default function NewShipmentPage() {
             </div>
 
             <div className="flex items-center justify-between pb-4">
-              <button onClick={prevStep} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-maritime-900 font-bold cursor-pointer">
+              <button onClick={prevStep} className="flex items-center gap-1.5 text-xs text-ink-faint hover:text-ink font-bold cursor-pointer">
                 <ChevronLeft className="w-4 h-4" /> Back
               </button>
-              <button onClick={nextStep} className="flex items-center gap-2 bg-maritime-400 hover:bg-maritime-900 text-white font-black py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider cursor-pointer transition-all">
+              <button onClick={nextStep} className="flex items-center gap-2 bg-amber hover:bg-ink text-white font-black py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider cursor-pointer transition-all">
                 Next: Assign Logistics <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -1183,16 +1211,16 @@ export default function NewShipmentPage() {
 
           {/* Vault sidebar guide */}
           <div className="lg:col-span-2">
-            <div className="bg-maritime-900 text-white p-6 rounded-2xl space-y-5 sticky top-6">
-              <h3 className="font-extrabold text-sm flex items-center gap-2"><FolderLock className="w-4 h-4 text-ocean-400" /> Vault Setup Guide</h3>
-              <div className="space-y-4 text-[11px] text-maritime-200 leading-relaxed">
+            <div className="bg-ink text-white p-6 rounded-2xl space-y-5 sticky top-6">
+              <h3 className="font-extrabold text-sm flex items-center gap-2"><FolderLock className="w-4 h-4 text-teal" /> Vault Setup Guide</h3>
+              <div className="space-y-4 text-[11px] text-mist leading-relaxed">
                 {[
-                  { icon: FolderOpen, color: 'text-maritime-400', title: 'Folder Name', desc: "A human-readable identifier for this shipment's document folder. Visible to all authorized BOC Vault users." },
-                  { icon: Key, color: 'text-ocean-400', title: 'Vault Password', desc: 'Required to open the folder and access its documents. Use Generate for a cryptographically random password.' },
-                  { icon: ShieldCheck, color: 'text-coral-400', title: 'Security Note', desc: 'MariTrade does not store vault passwords in plain text. Once created, this password cannot be retrieved — only reset by the shipment owner.' },
+                  { icon: FolderOpen, color: 'text-amber', title: 'Folder Name', desc: "A human-readable identifier for this shipment's document folder. Visible to all authorized BOC Vault users." },
+                  { icon: Key, color: 'text-teal', title: 'Vault Password', desc: 'Required to open the folder and access its documents. Use Generate for a cryptographically random password.' },
+                  { icon: ShieldCheck, color: 'text-wine', title: 'Security Note', desc: 'MariTrade does not store vault passwords in plain text. Once created, this password cannot be retrieved — only reset by the shipment owner.' },
                 ].map(item => (
-                  <div key={item.title} className="flex items-start gap-3 border-b border-maritime-700 pb-4 last:border-0 last:pb-0">
-                    <div className="w-7 h-7 rounded-lg bg-maritime-800 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div key={item.title} className="flex items-start gap-3 border-b border-ink-soft pb-4 last:border-0 last:pb-0">
+                    <div className="w-7 h-7 rounded-lg bg-ink-soft flex items-center justify-center flex-shrink-0 mt-0.5">
                       <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
                     </div>
                     <div>
@@ -1214,21 +1242,21 @@ export default function NewShipmentPage() {
         <div className="space-y-6">
 
           {/* EXPORTER PICKER */}
-          <div className="bg-white border-2 border-ocean-100 p-6 rounded-2xl space-y-4">
-            <h3 className="font-extrabold text-sm text-maritime-900 flex items-center gap-2 border-b border-sand-100 pb-3">
-              <Building2 className="w-5 h-5 text-ocean-400" /> Select Exporter <span className="text-coral-400">*</span>
+          <div className="bg-white border-2 border-steel-light p-6 rounded-2xl space-y-4">
+            <h3 className="font-extrabold text-sm text-ink flex items-center gap-2 border-b border-mist-light pb-3">
+              <Building2 className="w-5 h-5 text-teal" /> Select Exporter <span className="text-wine">*</span>
             </h3>
-            <p className="text-xs text-gray-500">Search for a registered MariTrade user with the Exporter role. They will be the counterparty who receives USDC when funds are released.</p>
-            <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-[11px] text-amber-700">
-              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-500" />
+            <p className="text-xs text-ink-faint">Search for a registered MariTrade user with the Exporter role. They will be the counterparty who receives USDC when funds are released.</p>
+            <div className="flex items-start gap-2.5 bg-amber-light border border-amber/30 rounded-xl px-3 py-2.5 text-[11px] text-amber">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber" />
               <span>The exporter must have a <strong>Stellar wallet address</strong> saved in their MariTrade profile before they can be selected. Ask them to go to <strong>My Profile → Stellar Public Wallet Key</strong> and save their Freighter address (starts with G…).</span>
             </div>
             <div className="relative">
-              <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
+              <Search className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
               <input
                 type="text"
                 placeholder="Search by name, company, or email…"
-                className="w-full border border-sand-200 rounded-lg pl-8 pr-3 py-2 text-xs outline-none focus:border-ocean-400"
+                className="w-full border border-mist rounded-lg pl-8 pr-3 py-2 text-xs outline-none focus:border-teal"
                 value={exporterSearch}
                 onChange={e => setExporterSearch(e.target.value)}
               />
@@ -1244,9 +1272,9 @@ export default function NewShipmentPage() {
                     (u.email || '').toLowerCase().includes(exporterSearch.toLowerCase()))
                 );
                 if (exporters.length === 0) return (
-                  <div className="py-6 text-center border border-dashed border-sand-200 rounded-xl bg-sand-50">
-                    <Building2 className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-gray-500">{exporterSearch ? 'No exporters match your search' : 'No exporters registered yet'}</p>
+                  <div className="py-6 text-center border border-dashed border-mist rounded-xl bg-mist-light">
+                    <Building2 className="w-8 h-8 text-mist mx-auto mb-2" />
+                    <p className="text-xs font-bold text-ink-faint">{exporterSearch ? 'No exporters match your search' : 'No exporters registered yet'}</p>
                   </div>
                 );
                 return exporters.map(user => {
@@ -1258,19 +1286,19 @@ export default function NewShipmentPage() {
                       disabled={!hasWallet}
                       className={`w-full flex items-center justify-between p-3 rounded-xl border-2 text-left transition-all ${
                         !hasWallet
-                          ? 'border-sand-200 bg-sand-50 opacity-60 cursor-not-allowed'
+                          ? 'border-mist bg-mist-light opacity-60 cursor-not-allowed'
                           : selected
-                          ? 'border-ocean-400 bg-ocean-50 cursor-pointer'
-                          : 'border-sand-200 hover:border-ocean-200 cursor-pointer'
+                          ? 'border-teal bg-teal-light cursor-pointer'
+                          : 'border-mist hover:border-teal-light cursor-pointer'
                       }`}>
                       <div>
-                        <p className="text-xs font-bold text-maritime-900">{user.fullName}</p>
-                        <p className={`text-[10px] ${hasWallet ? 'text-gray-500' : 'text-coral-400 font-semibold'}`}>
+                        <p className="text-xs font-bold text-ink">{user.fullName}</p>
+                        <p className={`text-[10px] ${hasWallet ? 'text-ink-faint' : 'text-wine font-semibold'}`}>
                           {user.companyName} · {hasWallet ? '🔗 Stellar wallet linked' : '⚠️ No Stellar wallet — cannot be selected'}
                         </p>
                       </div>
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        selected ? 'bg-ocean-400 text-white' : 'bg-sand-100 text-gray-400'
+                        selected ? 'bg-teal text-white' : 'bg-mist-light text-ink-faint'
                       }`}>
                         {selected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                       </div>
@@ -1282,44 +1310,44 @@ export default function NewShipmentPage() {
             {selectedExporterId && (() => {
               const exp = allUsers.find(u => u.id === selectedExporterId);
               return exp ? (
-                <div className="flex items-center gap-3 bg-ocean-50 border border-ocean-200 rounded-xl px-4 py-3">
-                  <Check className="w-4 h-4 text-ocean-400 flex-shrink-0" />
+                <div className="flex items-center gap-3 bg-teal-light border border-teal-light rounded-xl px-4 py-3">
+                  <Check className="w-4 h-4 text-teal flex-shrink-0" />
                   <div>
-                    <p className="text-xs font-black text-ocean-700">{exp.fullName}</p>
-                    <p className="text-[10px] text-ocean-500">{exp.companyName} — selected as exporter</p>
+                    <p className="text-xs font-black text-steel-hover">{exp.fullName}</p>
+                    <p className="text-[10px] text-steel">{exp.companyName} — selected as exporter</p>
                   </div>
-                  <button onClick={() => setSelectedExporterId(null)} className="ml-auto text-gray-400 hover:text-coral-400 transition-colors"><X className="w-4 h-4" /></button>
+                  <button onClick={() => setSelectedExporterId(null)} className="ml-auto text-ink-faint hover:text-wine transition-colors"><X className="w-4 h-4" /></button>
                 </div>
               ) : null;
             })()}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white border border-sand-200 p-6 rounded-2xl space-y-4">
-              <h3 className="font-extrabold text-sm text-maritime-900 flex items-center gap-2 border-b border-sand-100 pb-3">
-                <Users className="w-5 h-5 text-maritime-400" /> Assign Logistics Chain Users
+            <div className="bg-white border border-mist p-6 rounded-2xl space-y-4">
+              <h3 className="font-extrabold text-sm text-ink flex items-center gap-2 border-b border-mist-light pb-3">
+                <Users className="w-5 h-5 text-amber" /> Assign Logistics Chain Users
               </h3>
-              <p className="text-xs text-gray-500">Assigned users can log milestone events. Customs Brokers also gain BOC vault access.</p>
-              <input type="text" placeholder="Search by name, company, or role..." className="w-full border border-sand-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-maritime-400" value={logisticsSearch} onChange={e => setLogisticsSearch(e.target.value)} />
+              <p className="text-xs text-ink-faint">Assigned users can log milestone events. Customs Brokers also gain BOC vault access.</p>
+              <input type="text" placeholder="Search by name, company, or role..." className="w-full border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-amber" value={logisticsSearch} onChange={e => setLogisticsSearch(e.target.value)} />
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {networkLoading ? (
-                  <div className="py-8 text-center"><div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" /><p className="text-xs text-gray-400">Loading your Trusted Network…</p></div>
+                  <div className="py-8 text-center"><div className="w-6 h-6 border-2 border-amber border-t-transparent rounded-full animate-spin mx-auto mb-2" /><p className="text-xs text-ink-faint">Loading your Trusted Network…</p></div>
                 ) : logisticsUsers.length === 0 ? (
-                  <div className="py-6 px-3 text-center space-y-2 border border-dashed border-sand-200 rounded-xl bg-sand-50">
-                    <Users className="w-8 h-8 text-gray-200 mx-auto" />
-                    <p className="text-xs font-bold text-gray-500">No trusted vendors yet</p>
-                    <Link href="/network" target="_blank" className="inline-flex items-center gap-1 text-[11px] font-black text-maritime-400 hover:text-maritime-900 transition-colors">Build your network →</Link>
+                  <div className="py-6 px-3 text-center space-y-2 border border-dashed border-mist rounded-xl bg-mist-light">
+                    <Users className="w-8 h-8 text-mist mx-auto" />
+                    <p className="text-xs font-bold text-ink-faint">No trusted vendors yet</p>
+                    <Link href="/network" target="_blank" className="inline-flex items-center gap-1 text-[11px] font-black text-amber hover:text-ink transition-colors">Build your network →</Link>
                   </div>
                 ) : logisticsUsers.map(user => {
                   const assigned = assignedUserIds.includes(user.id);
                   return (
                     <button key={user.id} onClick={() => toggleUser(user.id)}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${assigned ? 'border-ocean-400 bg-ocean-50' : 'border-sand-200 hover:border-maritime-200'}`}>
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${assigned ? 'border-teal bg-teal-light' : 'border-mist hover:border-amber/30'}`}>
                       <div>
-                        <p className="text-xs font-bold text-maritime-900">{user.fullName}</p>
-                        <p className="text-[10px] text-gray-500">{user.companyName} · {JOB_ROLE_LABELS[user.jobRole]}</p>
+                        <p className="text-xs font-bold text-ink">{user.fullName}</p>
+                        <p className="text-[10px] text-ink-faint">{user.companyName} · {JOB_ROLE_LABELS[user.jobRole]}</p>
                       </div>
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${assigned ? 'bg-ocean-400 text-white' : 'bg-sand-100 text-gray-400'}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${assigned ? 'bg-teal text-white' : 'bg-mist-light text-ink-faint'}`}>
                         {assigned ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                       </div>
                     </button>
@@ -1328,22 +1356,22 @@ export default function NewShipmentPage() {
               </div>
             </div>
 
-            <div className="bg-white border border-sand-200 p-6 rounded-2xl space-y-4">
-              <h3 className="font-extrabold text-sm text-maritime-900 flex items-center gap-2 border-b border-sand-100 pb-3">
-                <Lock className="w-5 h-5 text-maritime-400" /> Priority Milestones for Escrow Release
+            <div className="bg-white border border-mist p-6 rounded-2xl space-y-4">
+              <h3 className="font-extrabold text-sm text-ink flex items-center gap-2 border-b border-mist-light pb-3">
+                <Lock className="w-5 h-5 text-amber" /> Priority Milestones for Escrow Release
               </h3>
-              <p className="text-xs text-gray-500">The <strong>Release Funds</strong> button stays locked until <strong>all</strong> selected milestones are confirmed.</p>
+              <p className="text-xs text-ink-faint">The <strong>Release Funds</strong> button stays locked until <strong>all</strong> selected milestones are confirmed.</p>
               <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
                 {(Object.keys(PHASE_MILESTONE_SEQUENCE) as ShipmentPhase[]).map(phase => (
                   <div key={phase}>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5">{PHASE_LABELS[phase]}</p>
+                    <p className="text-[10px] font-black text-ink-faint uppercase tracking-wider mb-1.5">{PHASE_LABELS[phase]}</p>
                     <div className="space-y-1">
                       {PHASE_MILESTONE_SEQUENCE[phase].map(type => {
                         const selected = priorityMilestones.includes(type);
                         return (
                           <button key={type} onClick={() => toggleMilestone(type)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all cursor-pointer text-xs ${selected ? 'border-maritime-400 bg-maritime-50 text-maritime-900 font-semibold' : 'border-sand-200 text-gray-500 hover:border-maritime-200'}`}>
-                            <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${selected ? 'bg-maritime-400' : 'bg-sand-100'}`}>
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all cursor-pointer text-xs ${selected ? 'border-amber bg-amber-light text-ink font-semibold' : 'border-mist text-ink-faint hover:border-amber/30'}`}>
+                            <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${selected ? 'bg-amber' : 'bg-mist-light'}`}>
                               {selected && <Check className="w-2.5 h-2.5 text-white" />}
                             </div>
                             {MILESTONE_LABELS[type]}
@@ -1358,10 +1386,10 @@ export default function NewShipmentPage() {
           </div>
 
           <div className="flex items-center justify-between">
-            <button onClick={prevStep} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-maritime-900 font-bold cursor-pointer">
+            <button onClick={prevStep} className="flex items-center gap-1.5 text-xs text-ink-faint hover:text-ink font-bold cursor-pointer">
               <ChevronLeft className="w-4 h-4" /> Back
             </button>
-            <button onClick={nextStep} className="flex items-center gap-2 bg-maritime-400 hover:bg-maritime-900 text-white font-black py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider cursor-pointer transition-all">
+            <button onClick={nextStep} className="flex items-center gap-2 bg-amber hover:bg-ink text-white font-black py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider cursor-pointer transition-all">
               Next: Fund Escrow <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -1373,15 +1401,15 @@ export default function NewShipmentPage() {
       ══════════════════════════════════════════════════════════════════════ */}
       {step === 4 && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-3 bg-white border border-sand-200 p-6 rounded-2xl space-y-5">
-            <h3 className="font-extrabold text-sm text-maritime-900 flex items-center gap-2 border-b border-sand-100 pb-3">
-              <ClipboardCheck className="w-5 h-5 text-maritime-400" /> Shipment Summary
+          <div className="lg:col-span-3 bg-white border border-mist p-6 rounded-2xl space-y-5">
+            <h3 className="font-extrabold text-sm text-ink flex items-center gap-2 border-b border-mist-light pb-3">
+              <ClipboardCheck className="w-5 h-5 text-amber" /> Shipment Summary
             </h3>
 
-            <dl className="text-xs divide-y divide-sand-100">
+            <dl className="text-xs divide-y divide-mist-light">
               {([
                 ['Scope', (
-                  <span key="scope" className={`font-black px-2 py-0.5 rounded text-[10px] ${shipmentScope === 'OVERSEAS' ? 'bg-maritime-100 text-maritime-700' : 'bg-ocean-50 text-ocean-600'}`}>{shipmentScope}</span>
+                  <span key="scope" className={`font-black px-2 py-0.5 rounded text-[10px] ${shipmentScope === 'OVERSEAS' ? 'bg-amber-light text-ink-soft' : 'bg-teal-light text-steel'}`}>{shipmentScope}</span>
                 )],
                 ['Cargo',         description],
                 ['Importer',      importerContact || currentUser.fullName],
@@ -1398,46 +1426,46 @@ export default function NewShipmentPage() {
                 ['Priority Milestones', `${priorityMilestones.length} required for release`],
               ] as [string, React.ReactNode][]).map(([label, value], i) => (
                 <div key={i} className="flex items-start justify-between py-2.5 gap-4">
-                  <dt className="text-gray-400 font-semibold flex-shrink-0">{label}</dt>
-                  <dd className="text-right font-semibold text-maritime-900">{value}</dd>
+                  <dt className="text-ink-faint font-semibold flex-shrink-0">{label}</dt>
+                  <dd className="text-right font-semibold text-ink">{value}</dd>
                 </div>
               ))}
             </dl>
 
             {/* Vault summary */}
-            <div className="border border-maritime-100 bg-maritime-50 rounded-xl p-4 space-y-3">
+            <div className="border border-amber-light bg-amber-light rounded-xl p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <FolderLock className="w-4 h-4 text-maritime-400" />
-                <p className="text-xs font-extrabold text-maritime-900">BOC Vault Folder</p>
-                <span className="ml-auto text-[9px] font-black bg-ocean-100 text-ocean-600 px-1.5 py-0.5 rounded uppercase">Will be created on submit</span>
+                <FolderLock className="w-4 h-4 text-amber" />
+                <p className="text-xs font-extrabold text-ink">BOC Vault Folder</p>
+                <span className="ml-auto text-[9px] font-black bg-steel-light text-steel px-1.5 py-0.5 rounded uppercase">Will be created on submit</span>
               </div>
-              <dl className="divide-y divide-maritime-100 text-xs">
+              <dl className="divide-y divide-amber-light text-xs">
                 <div className="flex items-center justify-between py-2">
-                  <dt className="text-maritime-500 font-semibold">Folder Name</dt>
-                  <dd className="font-black text-maritime-900 font-mono text-right truncate max-w-[200px]">{vaultFolderName}</dd>
+                  <dt className="text-amber font-semibold">Folder Name</dt>
+                  <dd className="font-black text-ink font-sans text-right truncate max-w-[200px]">{vaultFolderName}</dd>
                 </div>
                 <div className="flex items-center justify-between py-2">
-                  <dt className="text-maritime-500 font-semibold">Vault Password</dt>
+                  <dt className="text-amber font-semibold">Vault Password</dt>
                   <dd className="flex items-center gap-2">
-                    <span className="font-mono font-black text-maritime-900 tracking-widest">{'•'.repeat(Math.min(vaultPassword.length, 12))}</span>
-                    <button type="button" onClick={handleCopyPassword} className="text-maritime-400 hover:text-maritime-900 transition-colors" title="Copy password">
-                      {pwCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-ocean-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span className="font-sans font-black text-ink tracking-widest">{'•'.repeat(Math.min(vaultPassword.length, 12))}</span>
+                    <button type="button" onClick={handleCopyPassword} className="text-amber hover:text-ink transition-colors" title="Copy password">
+                      {pwCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-teal" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </dd>
                 </div>
                 <div className="flex items-center justify-between py-2">
-                  <dt className="text-maritime-500 font-semibold">Initial Documents</dt>
-                  <dd className="font-semibold text-maritime-900">{documents.length > 0 ? `${documents.length} file${documents.length > 1 ? 's' : ''}` : 'None'}</dd>
+                  <dt className="text-amber font-semibold">Initial Documents</dt>
+                  <dd className="font-semibold text-ink">{documents.length > 0 ? `${documents.length} file${documents.length > 1 ? 's' : ''}` : 'None'}</dd>
                 </div>
               </dl>
-              <div className="flex items-start gap-2 text-[10px] text-maritime-600 bg-white border border-maritime-100 rounded-lg p-2.5">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2 text-[10px] text-ink-soft bg-white border border-amber-light rounded-lg p-2.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber flex-shrink-0 mt-0.5" />
                 <span>Save your vault password before submitting. It cannot be retrieved from MariTrade after the folder is created.</span>
               </div>
             </div>
 
             <div className="pt-2">
-              <button onClick={prevStep} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-maritime-900 font-bold cursor-pointer">
+              <button onClick={prevStep} className="flex items-center gap-1.5 text-xs text-ink-faint hover:text-ink font-bold cursor-pointer">
                 <ChevronLeft className="w-4 h-4" /> Back
               </button>
             </div>
@@ -1445,60 +1473,108 @@ export default function NewShipmentPage() {
 
           {/* ── Escrow panel ── */}
           <div className="lg:col-span-2">
-            <div className="bg-maritime-900 text-white p-6 rounded-2xl space-y-5">
-              <h3 className="font-extrabold text-sm flex items-center gap-2"><Wallet className="w-5 h-5 text-ocean-400" /> Stellar Escrow</h3>
+            <div className="bg-ink text-white p-6 rounded-2xl space-y-5">
+              <h3 className="font-extrabold text-sm flex items-center gap-2"><Wallet className="w-5 h-5 text-teal" /> Stellar Escrow</h3>
 
-              {/* Amount */}
-              <div className="bg-maritime-800 rounded-xl p-4 space-y-1">
-                <p className="text-[10px] text-maritime-300 font-semibold uppercase tracking-wider">Escrow Amount</p>
-                <p className="text-3xl font-black text-white font-mono">{Number(totalValueUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                <p className="text-xs text-ocean-400 font-bold">USDC · Stellar {STELLAR_NETWORK}</p>
-                {invoiceCurrency !== 'USD' && invoiceValue && <p className="text-[10px] text-maritime-300 pt-1">Invoice: {invoiceValue} {invoiceCurrency}</p>}
+              {/* Asset selector */}
+              <div className="space-y-2">
+                <p className="text-[10px] text-amber-light font-semibold uppercase tracking-wider">Pay With</p>
+                <AssetSelector
+                  value={assetCode}
+                  onChange={(code) => { setAssetCode(code); setPphpPreview(null); }}
+                  className=""
+                />
+                {assetCode === 'PPHP' && (
+                  <p className="text-[10px] text-amber leading-relaxed">
+                    Your PPHP balance covers the peso equivalent. The Stellar escrow contract locks the USDC equivalent on-chain.
+                  </p>
+                )}
               </div>
 
-              {shipmentScope === 'NATIONWIDE' && (
-                <div className="bg-maritime-800 rounded-xl p-4 space-y-2">
+              {/* Amount block */}
+              <div className="bg-ink-soft rounded-xl p-4 space-y-1">
+                <p className="text-[10px] text-amber-light font-semibold uppercase tracking-wider">Escrow Amount</p>
+                <p className="text-3xl font-black text-white font-sans">{Number(totalValueUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-xs text-teal font-bold">USDC · Stellar {STELLAR_NETWORK}</p>
+                {invoiceCurrency !== 'USD' && invoiceValue && <p className="text-[10px] text-amber-light pt-1">Invoice: {invoiceValue} {invoiceCurrency}</p>}
+              </div>
+
+              {/* PPHP conversion preview */}
+              {assetCode === 'PPHP' && (
+                <div className="bg-yellow-900/30 border border-yellow-600/30 rounded-xl p-4 space-y-2">
+                  <p className="text-[10px] text-yellow-400 font-semibold uppercase tracking-wider">Philippine Peso Bridge</p>
+                  {pphpPreviewing && (
+                    <p className="text-sm text-yellow-300 animate-pulse">Fetching live rate…</p>
+                  )}
+                  {!pphpPreviewing && pphpPreview && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-yellow-200">You pay (PPHP)</span>
+                        <span className="text-lg font-black text-yellow-300 font-sans">
+                          ₱{pphpPreview.php.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-yellow-200">Escrow locks (USDC)</span>
+                        <span className="text-lg font-black text-white font-sans">
+                          ${pphpPreview.usdc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-yellow-400 border-t border-yellow-600/30 pt-2">
+                        Rate: 1 USD = ₱{pphpPreview.rate.toFixed(4)}{!pphpPreview.isLive && ' (est.)'}
+                      </p>
+                    </>
+                  )}
+                  {!pphpPreviewing && !pphpPreview && totalValueUSD && (
+                    <p className="text-xs text-yellow-400">Rate unavailable — enter invoice value to calculate.</p>
+                  )}
+                </div>
+              )}
+
+              {/* PHP equivalent panel for NATIONWIDE + USDC (existing behaviour) */}
+              {shipmentScope === 'NATIONWIDE' && assetCode === 'USDC' && (
+                <div className="bg-ink-soft rounded-xl p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-maritime-300 font-semibold uppercase tracking-wider">PHP Equivalent</p>
-                    <button onClick={fetchPhpRate} disabled={rateLoading} className="text-ocean-400 hover:text-ocean-300 cursor-pointer disabled:opacity-40"><RefreshCw className={`w-3 h-3 ${rateLoading ? 'animate-spin' : ''}`} /></button>
+                    <p className="text-[10px] text-amber-light font-semibold uppercase tracking-wider">PHP Equivalent</p>
+                    <button onClick={fetchPhpRate} disabled={rateLoading} className="text-teal hover:text-teal-hover cursor-pointer disabled:opacity-40"><RefreshCw className={`w-3 h-3 ${rateLoading ? 'animate-spin' : ''}`} /></button>
                   </div>
-                  {rateLoading && <p className="text-sm text-maritime-400 animate-pulse">Fetching live rate…</p>}
+                  {rateLoading && <p className="text-sm text-amber animate-pulse">Fetching live rate…</p>}
                   {!rateLoading && phpEquivalent && (
-                    <><p className="text-2xl font-black text-white font-mono">₱ {phpEquivalent}</p><p className="text-[10px] text-maritime-400">Live rate: 1 USD = ₱{phpRate?.toFixed(4)}</p></>
+                    <><p className="text-2xl font-black text-white font-sans">₱ {phpEquivalent}</p><p className="text-[10px] text-amber">Live rate: 1 USD = ₱{phpRate?.toFixed(4)}</p></>
                   )}
                 </div>
               )}
 
               {/* Freighter wallet status */}
-              <div className="bg-maritime-800 rounded-xl p-3 space-y-2">
-                <p className="text-[10px] text-maritime-300 font-semibold uppercase tracking-wider">Freighter Wallet</p>
+              <div className="bg-ink-soft rounded-xl p-3 space-y-2">
+                <p className="text-[10px] text-amber-light font-semibold uppercase tracking-wider">Freighter Wallet</p>
                 {freighter.publicKey ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-ocean-400 flex-shrink-0" />
-                    <span className="font-mono text-[10px] text-white truncate">{freighter.publicKey}</span>
+                    <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
+                    <span className="font-sans text-[10px] text-white truncate">{freighter.publicKey}</span>
                   </div>
                 ) : (
                   <button onClick={freighter.connect} disabled={freighter.connecting}
-                    className="w-full flex items-center justify-center gap-1.5 bg-maritime-700 hover:bg-maritime-600 text-white border border-maritime-600 font-bold py-2 rounded-lg text-xs transition-all cursor-pointer disabled:opacity-50">
+                    className="w-full flex items-center justify-center gap-1.5 bg-ink-soft hover:bg-ink-soft/80 text-white border border-ink-soft font-bold py-2 rounded-lg text-xs transition-all cursor-pointer disabled:opacity-50">
                     <Wallet className="w-3.5 h-3.5" />
                     {freighter.connecting ? 'Connecting…' : 'Connect Freighter Wallet'}
                   </button>
                 )}
-                {freighter.error && <p className="text-[10px] text-coral-400">{freighter.error}</p>}
+                {freighter.error && <p className="text-[10px] text-wine">{freighter.error}</p>}
               </div>
 
               {/* Stellar step progress */}
               {escrowLoading && currentStellarLabel && (
-                <div className="bg-maritime-800 rounded-xl p-3 flex items-center gap-2.5">
-                  <RefreshCw className="w-4 h-4 text-ocean-400 animate-spin flex-shrink-0" />
-                  <p className="text-[11px] text-maritime-200 leading-snug">{currentStellarLabel}</p>
+                <div className="bg-ink-soft rounded-xl p-3 flex items-center gap-2.5">
+                  <RefreshCw className="w-4 h-4 text-teal animate-spin flex-shrink-0" />
+                  <p className="text-[11px] text-mist leading-snug">{currentStellarLabel}</p>
                 </div>
               )}
 
               {/* Tx hash on success */}
               {txHash && (
                 <a href={`https://stellar.expert/explorer/testnet/tx/${txHash}`} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-1.5 text-[10px] text-ocean-400 hover:text-ocean-300 font-mono break-all">
+                  className="flex items-center gap-1.5 text-[10px] text-teal hover:text-teal-hover font-sans break-all">
                   <ExternalLink className="w-3 h-3 flex-shrink-0" />
                   {txHash.substring(0, 16)}…{txHash.substring(txHash.length - 8)} ↗
                 </a>
@@ -1506,7 +1582,7 @@ export default function NewShipmentPage() {
 
               {/* CTA */}
               {escrowSuccess ? (
-                <div className="bg-ocean-400 rounded-xl p-4 flex items-center gap-3">
+                <div className="bg-teal rounded-xl p-4 flex items-center gap-3">
                   <Check className="w-6 h-6 text-white flex-shrink-0" />
                   <div>
                     <p className="text-sm font-black text-white">Escrow Funded on Stellar!</p>
@@ -1515,15 +1591,18 @@ export default function NewShipmentPage() {
                 </div>
               ) : (
                 <button onClick={handleFundEscrow} disabled={escrowLoading}
-                  className="w-full bg-ocean-400 hover:bg-ocean-600 text-maritime-900 font-black py-3 rounded-xl text-sm uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                  className="w-full bg-teal hover:bg-steel text-ink font-black py-3 rounded-xl text-sm uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
                   {escrowLoading
                     ? <><RefreshCw className="w-4 h-4 animate-spin" /> Processing…</>
                     : <><Ship className="w-4 h-4" /> Fund Escrow via Stellar</>}
                 </button>
               )}
 
-              <p className="text-[10px] text-maritime-400 text-center leading-relaxed">
-                You will be prompted to sign <strong className="text-maritime-300">up to 3 transactions</strong> in Freighter: create vault, assign team, and deposit USDC.
+              <p className="text-[10px] text-amber text-center leading-relaxed">
+                {assetCode === 'PPHP'
+                  ? <>You will be prompted to sign <strong className="text-amber-light">up to 3 transactions</strong> in Freighter. Your PPHP balance covers the peso cost; the contract locks the USDC equivalent.</>
+                  : <>You will be prompted to sign <strong className="text-amber-light">up to 3 transactions</strong> in Freighter: create vault, assign team, and deposit USDC.</>
+                }
               </p>
             </div>
           </div>

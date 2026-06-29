@@ -238,19 +238,71 @@ export async function POST(
       }
     }
 
-    // ── Step 3: release() ─────────────────────────────────────────────────────
+    // ── Step 3: build release() tx and return XDR for Freighter to sign ───────
+    // release() requires importer.require_auth() — the platform keypair cannot
+    // sign on the importer's behalf. We build the tx with the importer as the
+    // source account (so Soroban uses source-account credentials, meaning the
+    // envelope signature alone authorises the importer's auth entry), serialise
+    // it, and send it back to the browser. Freighter signs the envelope there,
+    // then the browser posts the signed XDR back via the submit_release action.
     try {
-      const releaseTx = await client.release({
+      const importerClient = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
+      const releaseTx = await importerClient.release({
         reference_code: referenceCode,
         importer: importerAddress,
       });
-
-      const txHash = await platformSignAndSubmit(releaseTx);
-      return NextResponse.json({ success: true, data: { txHash } });
+      const releaseXdr = releaseTx.toXDR();
+      return NextResponse.json({ success: true, data: { releaseXdr } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[escrow-release-prep] release() failed:', msg);
+      console.error('[escrow-release-prep] release() build failed:', msg);
+      const friendly =
+        msg.includes('#16') || msg.includes('PriorityMilestonesIncomplete')
+          ? 'The on-chain milestone gate is not satisfied. All priority milestones must be confirmed on Stellar before release.'
+          : msg.includes('#9')  || msg.includes('NotFunded')
+          ? 'This escrow is not in a funded state on-chain and cannot be released.'
+          : msg.includes('#17') || msg.includes('AlreadySettled')
+          ? 'This escrow has already been released or refunded on-chain.'
+          : msg;
+      return NextResponse.json({ success: false, error: friendly }, { status: 500 });
+    }
+  }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ACTION: submit_release
+  //  Receives the importer-signed release XDR from the browser, submits it
+  //  to Stellar, and returns the confirmed tx hash.
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (action === 'submit_release') {
+    const { releaseSignedXdr } = body as any;
+    if (!releaseSignedXdr) {
+      return NextResponse.json({ success: false, error: 'releaseSignedXdr is required.' }, { status: 400 });
+    }
+    try {
+      const server = new SorobanServer(RPC_URL);
+      const tx = new Transaction(releaseSignedXdr, NETWORK_PASSPHRASE);
+      const sendResult = await server.sendTransaction(tx);
+      if (sendResult.status === 'ERROR') {
+        const detail = JSON.stringify((sendResult as any).errorResult ?? (sendResult as any).error ?? 'unknown');
+        throw new Error(`release rejected by Stellar: ${detail}`);
+      }
+      const { hash } = sendResult;
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const check = await server.getTransaction(hash);
+        if (check.status === 'SUCCESS') {
+          console.log(`[escrow-release-prep] ✓ release confirmed. Hash: ${hash}`);
+          return NextResponse.json({ success: true, data: { txHash: hash } });
+        }
+        if (check.status === 'FAILED') {
+          const resultXdr = (check as any).resultXdr ?? '';
+          throw new Error(`release failed on-chain (hash: ${hash})${resultXdr ? ` · ${resultXdr}` : ''}`);
+        }
+      }
+      throw new Error(`release timed out. Check: https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${hash}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[escrow-release-prep] submit_release failed:', msg);
       const friendly =
         msg.includes('#3')  || msg.includes('NotImporter')
           ? 'Wrong importer address. The wallet you connected does not match the escrow record.'
@@ -261,7 +313,6 @@ export async function POST(
           : msg.includes('#17') || msg.includes('AlreadySettled')
           ? 'This escrow has already been released or refunded on-chain.'
           : msg;
-
       return NextResponse.json({ success: false, error: friendly }, { status: 500 });
     }
   }

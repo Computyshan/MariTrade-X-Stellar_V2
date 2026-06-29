@@ -10,7 +10,7 @@ import {
   ShieldCheck, Search, X, AlertTriangle,
   RefreshCw,
 } from 'lucide-react';
-import { VaultFolder, ShipmentStatus, ShipmentScope } from '@/types';
+import { VaultFolder, ShipmentStatus, ShipmentScope, ShipmentDocument } from '@/types';
 import { canAccessBOCDocuments } from '@/lib/permissions/documents';
 
 // ── API SHAPE ────────────────────────────────────────────────────────────────

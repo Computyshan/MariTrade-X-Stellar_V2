@@ -15,6 +15,7 @@ import {
   Search
 } from 'lucide-react';
 import { Shipment } from '@/types';
+import { formatAsset } from '@/lib/stellar/assets';
 
 export default function ShipmentsList() {
   const { currentUser, loading: sessionLoading } = useUserSession();
@@ -166,7 +167,7 @@ export default function ShipmentsList() {
               <div className="border-t border-mist pt-4 flex justify-between items-center text-xs">
                 <div className="space-y-0.5">
                   <span className="text-[9px] text-ink-faint font-sans block">ESCROW AMOUNT</span>
-                  <strong className="text-ink font-bold font-sans text-sm">${ship.totalValueUSD?.toLocaleString()} USDC</strong>
+                  <strong className="text-ink font-bold font-sans text-sm">{formatAsset(ship.totalValueUSD ?? 0, 'USDC')}</strong>
                 </div>
                 
                 <Link

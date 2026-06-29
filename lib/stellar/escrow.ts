@@ -1,4 +1,5 @@
-import * as StellarSdk from 'stellar-sdk';
+import * as StellarSdk from '@stellar/stellar-sdk';
+import { SUPPORTED_ASSETS } from './assets';
 
 // Safe lazy loaded horizon server
 let horizonServer: StellarSdk.Horizon.Server | null = null;
@@ -13,33 +14,54 @@ function getHorizonServer(): StellarSdk.Horizon.Server {
   return horizonServer;
 }
 
-// Check USDC balance of a Stellar account
+/**
+ * Fetch XLM, USDC, and PPHP balances for a Stellar account.
+ * Falls back to sandbox mock values if the account is not yet funded on testnet.
+ */
 export async function getAccountBalance(publicKey: string): Promise<{
   xlm: string;
   usdc: string;
+  pphp: string;
 }> {
   if (!publicKey || publicKey.trim() === '') {
-    return { xlm: '0.00', usdc: '0.00' };
+    return { xlm: '0.00', usdc: '0.00', pphp: '0.00' };
   }
   try {
     const server = getHorizonServer();
     const account = await server.loadAccount(publicKey);
-    
-    let xlm = '0.00';
+
+    let xlm  = '0.00';
     let usdc = '0.00';
+    let pphp = '0.00';
+
+    const usdcIssuer = SUPPORTED_ASSETS.USDC.issuer;
+    const pphpIssuer = SUPPORTED_ASSETS.PPHP.issuer;
 
     for (const balance of account.balances) {
       if (balance.asset_type === 'native') {
         xlm = balance.balance;
-      } else if ('asset_code' in balance && balance.asset_code === 'USDC') {
+      } else if (
+        'asset_code' in balance &&
+        balance.asset_code === 'USDC' &&
+        'asset_issuer' in balance &&
+        (!usdcIssuer || balance.asset_issuer === usdcIssuer)
+      ) {
         usdc = balance.balance;
+      } else if (
+        'asset_code' in balance &&
+        balance.asset_code === 'PPHP' &&
+        'asset_issuer' in balance &&
+        pphpIssuer &&
+        balance.asset_issuer === pphpIssuer
+      ) {
+        pphp = balance.balance;
       }
     }
-    return { xlm, usdc };
+    return { xlm, usdc, pphp };
   } catch (error) {
     console.warn(`Stellar loadAccount failed for ${publicKey}, returning mock values for sandbox convenience:`, error);
-    // Return realistic test sandbox values if account isn't funded yet
-    return { xlm: '125.40', usdc: '45000.00' };
+    // Realistic testnet sandbox fallbacks
+    return { xlm: '125.40', usdc: '45000.00', pphp: '2646000.00' };
   }
 }
 

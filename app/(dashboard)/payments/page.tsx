@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import { Shipment } from '@/types';
 import { getMariTradeEscrowClient } from '@/lib/stellar/escrow-contract';
+import { formatAsset, SUPPORTED_ASSETS } from '@/lib/stellar/assets';
+import { useFreighter } from '@/hooks/use-freighter';
+import PphpWalletPanel from '@/components/PphpWalletPanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,10 +30,6 @@ interface OnChainRecord {
 }
 
 type ChainMap = Record<string, OnChainRecord | 'loading' | 'error' | null>;
-
-// CLEANUP FIX: PHP rate is indicative only. In production, fetch a live rate.
-// Using a named constant so it's easy to spot and replace.
-const PHP_PER_USD_INDICATIVE = 58.7;
 
 const STELLAR_NETWORK =
   (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as 'testnet' | 'mainnet';
@@ -53,6 +52,7 @@ const CONTRACT_STATUS_LABEL: Record<number, string> = {
 
 export default function EscrowLedger() {
   const { currentUser } = useUserSession();
+  const freighter = useFreighter();
   const [shipments,   setShipments]   = useState<Shipment[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [chainMap,    setChainMap]    = useState<ChainMap>({});
@@ -254,10 +254,10 @@ export default function EscrowLedger() {
             Active Contracts Locked
           </span>
           <strong className="text-3xl text-maritime-900 font-extrabold font-mono block">
-            ${totalLocked.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+            {formatAsset(totalLocked, 'USDC')}
           </strong>
           <span className="text-[9px] text-ocean-600 block italic">
-            ₱{(totalLocked * PHP_PER_USD_INDICATIVE).toLocaleString()} PHP indicative
+            {formatAsset(totalLocked / SUPPORTED_ASSETS.PPHP.rateToUsd, 'PPHP')} PHP indicative
           </span>
           {chainLoading && (
             <span className="text-[9px] text-gray-400 flex items-center gap-1">
@@ -272,10 +272,10 @@ export default function EscrowLedger() {
             Cumulative Settled Payouts
           </span>
           <strong className="text-3xl text-maritime-900 font-extrabold font-mono block">
-            ${totalReleased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+            {formatAsset(totalReleased, 'USDC')}
           </strong>
           <span className="text-[9px] text-ocean-600 block italic">
-            ₱{(totalReleased * PHP_PER_USD_INDICATIVE).toLocaleString()} PHP indicative
+            {formatAsset(totalReleased / SUPPORTED_ASSETS.PPHP.rateToUsd, 'PPHP')} PHP indicative
           </span>
         </div>
 
@@ -293,6 +293,9 @@ export default function EscrowLedger() {
           </div>
         </div>
       </div>
+
+      {/* PPHP wallet onboarding — trustline, fund wallet, balances */}
+      <PphpWalletPanel publicKey={freighter.publicKey} onConnect={freighter.connect} />
 
       {/* Escrow table */}
       <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm space-y-4">
@@ -322,6 +325,7 @@ export default function EscrowLedger() {
                 <tr>
                   <th className="px-4 py-3">Shipment Ref</th>
                   <th className="px-4 py-3">Scope</th>
+                  <th className="px-4 py-3">Asset</th>
                   <th className="px-4 py-3">Amount</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Milestones</th>
@@ -347,11 +351,22 @@ export default function EscrowLedger() {
                         {s.shipmentScope?.replace(/_/g, ' ')}
                       </td>
 
-                      {/* Amount — prefer on-chain value */}
+                      {/* Asset badge */}
+                      <td className="px-4 py-3.5">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${
+                          (s.escrowAsset ?? 'USDC') === 'PPHP'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {(s.escrowAsset ?? 'USDC') === 'PPHP' ? '₱ PPHP' : '$ USDC'}
+                        </span>
+                      </td>
+
+                      {/* Amount */}
                       <td className="px-4 py-3.5 font-bold font-mono text-maritime-900">
                         {chain
-                          ? `$${chain.amountUsdc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`
-                          : `$${s.totalValueUSD?.toLocaleString() ?? '—'}`}
+                          ? formatAsset(chain.amountUsdc, 'USDC')
+                          : (s.totalValueUSD != null ? formatAsset(s.totalValueUSD, 'USDC') : '—')}
                       </td>
 
                       {/* Status pill — live chain or DB fallback */}

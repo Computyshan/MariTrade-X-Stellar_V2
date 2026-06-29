@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "clean": "next clean"
+    "clean": "next clean",
+    "mint-pphp": "npx tsx scripts/mint-pphp.ts",
+    "setup-pphp-trustline": "npx tsx scripts/setup-pphp-trustline.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

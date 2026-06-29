@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
       documents,
       vaultFolderName,
       vaultPassword,
+      escrowAsset,
     } = body;
 
     if (!importerId || !description || !originCountry || !destinationPort || !shipmentScope || !totalValueUSD) {
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
       totalValueUSD: parseFloat(totalValueUSD),
       escrowStatus: 'FUNDED',
       escrowAmountUSD: parseFloat(totalValueUSD),
+      escrowAsset: (escrowAsset === 'PPHP' ? 'PPHP' : 'USDC') as 'USDC' | 'PPHP',
       stellarEscrowId: 'G' + Math.random().toString(36).toUpperCase().substring(2, 10) + '...ESCROW_MT' + randomNum,
       estimatedArrival: estimatedArrival || new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
       createdAt: new Date().toISOString(),
