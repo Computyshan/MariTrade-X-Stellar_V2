@@ -448,7 +448,7 @@ export default function DashboardHome() {
   );
 
   return (
-    <DashboardLayout>
+    <DashboardLayout tradeParty={currentUser.userType === 'TRADE_PARTY'}>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-[42px] font-display font-medium text-ink tracking-tight leading-tight">
@@ -470,10 +470,10 @@ export default function DashboardHome() {
         )}
         {currentUser.userType === 'TRADE_PARTY' && (
           <button onClick={() => setPortActivityDrawerOpen(true)}
-            className="flex items-center gap-2 bg-white border border-[color:var(--color-mist-dark)] hover:border-[color:var(--color-teal)] hover:text-[color:var(--color-teal)] text-[color:var(--color-ink-faint)] text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-sm flex-shrink-0">
+            className="flex items-center gap-2 bg-[color:var(--color-wine)] hover:bg-[color:var(--color-wine-hover)] text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-sm flex-shrink-0">
             <Activity className="w-3.5 h-3.5" />
             Port Activity
-            {milestones.length > 0 && <span className="bg-[color:var(--color-teal)] text-white text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none">{milestones.length}</span>}
+            {milestones.length > 0 && <span className="bg-[color:var(--color-amber)] text-white text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none">{milestones.length}</span>}
           </button>
         )}
       </div>
@@ -487,50 +487,67 @@ export default function DashboardHome() {
         <>
           {currentUser.userType === 'TRADE_PARTY' ? (
             <div className="space-y-5">
+              {/* Trade Party identity banner */}
+              <div className="rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(110deg, var(--color-wine) 0%, #6E1138 55%, #4A0A26 100%)' }}>
+                <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 80% 50%, rgba(254,153,0,0.18) 0%, transparent 60%)' }} />
+                <div className="px-6 py-5 flex items-center gap-4 relative z-10">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(254,153,0,0.2)', border: '1px solid rgba(254,153,0,0.35)' }}>
+                    <Shield className="w-6 h-6" style={{ color: 'var(--color-amber)' }} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-white font-display font-medium text-2xl leading-none tracking-tight">Trade Party Dashboard</p>
+                    <p className="text-white/60 text-[11px] mt-1 font-medium">Your payments are cryptographically locked until all milestones are verified.</p>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: 'rgba(254,153,0,0.15)', border: '1px solid rgba(254,153,0,0.3)' }}>
+                    <Lock className="w-3.5 h-3.5" style={{ color: 'var(--color-amber)' }} />
+                    <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--color-amber)' }}>Escrow Protected</span>
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white border border-mist p-5 rounded-xl shadow-sm flex items-center justify-between">
+                <div className="p-5 rounded-xl shadow-sm flex items-center justify-between" style={{ background: 'linear-gradient(135deg, var(--color-wine) 0%, #6E1138 100%)', border: '1px solid #6E1138' }}>
                   <div>
-                    <span className="block text-[10px] text-ink-faint uppercase font-medium tracking-widest mb-2">Active Cargoes</span>
-                    <strong className="text-[28px] text-ink font-display font-medium leading-none">
+                    <span className="block text-[10px] text-white/60 uppercase font-medium tracking-widest mb-2">Active Cargoes</span>
+                    <strong className="text-[28px] text-white font-display font-medium leading-none">
                       {String(shipments.filter(s => s.status !== 'DELIVERED' && s.status !== 'CANCELLED').length).padStart(2, '0')}
                     </strong>
                   </div>
-                  <div className="w-10 h-10 bg-mist-light rounded-lg flex items-center justify-center text-ink-faint"><Ship className="w-5 h-5" /></div>
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.15)' }}><Ship className="w-5 h-5 text-white" /></div>
                 </div>
                 {(() => {
                   const totalEscrow = shipments.filter(s => s.escrowStatus === 'FUNDED').reduce((acc, s) => acc + (s.escrowAmountUSD ?? s.totalValueUSD ?? 0), 0);
                   return (
-                    <EscrowHoldingsCard totalEscrow={totalEscrow} />
+                    <EscrowHoldingsCard totalEscrow={totalEscrow} variant="trade" />
                   );
                 })()}
-                <div className="bg-white border border-mist p-5 rounded-xl shadow-sm flex items-center justify-between">
+                <div className="bg-white border p-5 rounded-xl shadow-sm flex items-center justify-between" style={{ borderColor: 'var(--color-wine-light)', borderWidth: '1.5px' }}>
                   <div>
-                    <span className="block text-[10px] text-ink-faint uppercase font-medium tracking-widest mb-2">Completed (MO)</span>
-                    <strong className="text-[28px] text-ink font-display font-medium leading-none">{String(shipments.filter(s => s.status === 'DELIVERED').length).padStart(2, '0')}</strong>
+                    <span className="block text-[10px] uppercase font-medium tracking-widest mb-2" style={{ color: 'var(--color-wine)' }}>Completed (MO)</span>
+                    <strong className="text-[28px] font-display font-medium leading-none" style={{ color: 'var(--color-wine)' }}>{String(shipments.filter(s => s.status === 'DELIVERED').length).padStart(2, '0')}</strong>
                   </div>
-                  <div className="w-10 h-10 bg-mist-light rounded-lg flex items-center justify-center text-ink-faint"><CheckSquare className="w-5 h-5" /></div>
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-wine-light)' }}><CheckSquare className="w-5 h-5" style={{ color: 'var(--color-wine)' }} /></div>
                 </div>
                 {(() => {
                   const funded = shipments.filter(s => s.escrowStatus === 'FUNDED').length;
                   const total = shipments.length;
                   return (
-                    <div className="bg-white border border-mist p-5 rounded-xl shadow-sm flex items-center justify-between">
-                      <div>
-                        <span className="block text-[10px] text-ink-faint uppercase font-medium tracking-widest mb-2">Smart Locks</span>
-                        <strong className="text-[28px] text-ink font-display font-medium leading-none">{funded}/{total}</strong>
-                      </div>
-                      <div className="w-10 h-10 bg-mist-light rounded-lg flex items-center justify-center text-ink-faint"><TrendingUp className="w-5 h-5" /></div>
-                    </div>
+                  <div className="p-5 rounded-xl shadow-sm flex items-center justify-between" style={{ background: 'linear-gradient(135deg, var(--color-amber) 0%, #E08700 100%)', border: '1px solid #E08700' }}>
+                  <div>
+                  <span className="block text-[10px] text-white/70 uppercase font-medium tracking-widest mb-2">Smart Locks</span>
+                  <strong className="text-[28px] text-white font-display font-medium leading-none">{funded}/{total}</strong>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><TrendingUp className="w-5 h-5 text-white" /></div>
+                  </div>
                   );
                 })()}
               </div>
 
-              <div className="bg-white border border-mist rounded-xl shadow-sm overflow-hidden">
-                <div className="px-5 py-4 flex items-center justify-between border-b border-mist-light">
-                  <h2 className="text-sm font-display font-medium text-ink">Active Shipments</h2>
+              <div className="rounded-xl shadow-sm overflow-hidden" style={{ border: '1.5px solid var(--color-wine)' }}>
+                <div className="px-5 py-4 flex items-center justify-between" style={{ background: 'linear-gradient(110deg, var(--color-wine) 0%, #6E1138 60%, #4A0A26 100%)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <h2 className="text-sm font-display font-medium text-white">Active Shipments</h2>
                   <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-mist-dark absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input type="text" placeholder="Search reference..." className="bg-mist-light border border-mist pl-8 pr-3 py-1.5 rounded-lg text-[11px] outline-none focus:border-mist-dark w-44" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                    <input type="text" placeholder="Search reference..." className="pl-8 pr-3 py-1.5 rounded-lg text-[11px] outline-none w-44" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', color: 'white' }} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                   </div>
                 </div>
                 {filteredShipments.length === 0 ? (
@@ -539,12 +556,12 @@ export default function DashboardHome() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
                       <thead>
-                        <tr className="border-b border-mist-light">
-                          <th className="px-5 py-3 text-[10px] font-semibold text-ink-faint uppercase tracking-widest">Reference</th>
-                          <th className="px-5 py-3 text-[10px] font-semibold text-ink-faint uppercase tracking-widest">Origin &amp; Route</th>
-                          <th className="px-5 py-3 text-[10px] font-semibold text-ink-faint uppercase tracking-widest">Status</th>
-                          <th className="px-5 py-3 text-[10px] font-semibold text-ink-faint uppercase tracking-widest">Escrow</th>
-                          <th className="px-5 py-3 text-[10px] font-semibold text-ink-faint uppercase tracking-widest">Actions</th>
+                        <tr style={{ background: 'var(--color-wine-light)', borderBottom: '1px solid rgba(139,22,70,0.15)' }}>
+                          <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-wine)' }}>Reference</th>
+                          <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-wine)' }}>Origin &amp; Route</th>
+                          <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-wine)' }}>Status</th>
+                          <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-wine)' }}>Escrow</th>
+                          <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-wine)' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-mist-light">
@@ -560,15 +577,15 @@ export default function DashboardHome() {
                             </td>
                             <td className="px-5 py-4">
                               {ship.status === 'DELIVERED' ? <span className="inline-flex items-center gap-1.5 bg-teal text-white text-[10px] font-bold px-2.5 py-1 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />DELIVERED</span>
-                              : ship.status === 'IN_TRANSIT' ? <span className="inline-flex items-center gap-1.5 bg-ink text-white text-[10px] font-bold px-2.5 py-1 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />IN TRANSIT</span>
-                              : <span className="inline-flex items-center gap-1.5 bg-amber-light text-amber text-[10px] font-bold px-2.5 py-1 rounded-full">{ship.status?.replace(/_/g, ' ')}</span>}
+                              : ship.status === 'IN_TRANSIT' ? <span className="inline-flex items-center gap-1.5 text-white text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: 'var(--color-wine)' }}><span className="w-1.5 h-1.5 rounded-full bg-white/70 inline-block" />IN TRANSIT</span>
+                              : <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: 'rgba(254,153,0,0.15)', color: 'var(--color-amber)' }}>{ship.status?.replace(/_/g, ' ')}</span>}
                             </td>
                             <td className="px-5 py-4">
                               <span className="text-[12px] font-bold text-ink block">{formatAsset(ship.totalValueUSD ?? 0, 'USDC')}</span>
-                              <span className={`text-[10px] font-semibold ${ship.escrowStatus === 'FUNDED' ? 'text-teal' : 'text-ink-faint'}`}>{ship.escrowStatus}</span>
+                              <span className="text-[10px] font-semibold" style={{ color: ship.escrowStatus === 'FUNDED' ? 'var(--color-amber)' : 'var(--color-ink-faint)' }}>{ship.escrowStatus}</span>
                             </td>
                             <td className="px-5 py-4">
-                              <Link href={`/shipments/${ship.id}`} className="inline-block border border-mist hover:bg-mist-light text-ink text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors">
+                              <Link href={`/shipments/${ship.id}`} className="inline-block text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors hover:opacity-90" style={{ background: ship.status === 'DELIVERED' ? 'var(--color-ink-faint)' : 'var(--color-wine)' }}>
                                 {ship.status === 'DELIVERED' ? 'DETAILS' : 'MANAGE'}
                               </Link>
                             </td>
@@ -584,9 +601,9 @@ export default function DashboardHome() {
                 <>
                   <div className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[2px]" onClick={() => setPortActivityDrawerOpen(false)} />
                   <div className="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl flex flex-col">
-                    <div className="bg-[color:var(--color-ink)] px-5 py-4 flex items-center justify-between flex-shrink-0">
+                    <div className="px-5 py-4 flex items-center justify-between flex-shrink-0" style={{ background: 'linear-gradient(110deg, var(--color-wine) 0%, #6E1138 100%)' }}>
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><Activity className="w-4 h-4 text-[color:var(--color-teal)]" /></div>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(254,153,0,0.2)', border: '1px solid rgba(254,153,0,0.3)' }}><Activity className="w-4 h-4" style={{ color: 'var(--color-amber)' }} /></div>
                         <div>
                           <p className="text-white font-black text-sm">Port Activity</p>
                           <p className="text-white/40 text-[10px]">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''} on record</p>
@@ -604,12 +621,12 @@ export default function DashboardHome() {
                         <div className="divide-y divide-[color:var(--color-mist)]">
                           {milestones.map((me, idx) => (
                             <div key={idx} className="px-5 py-4 flex gap-3">
-                              <div className="w-8 h-8 rounded-xl bg-[color:var(--color-teal-light)] flex items-center justify-center flex-shrink-0 mt-0.5"><PackageCheck className="w-4 h-4 text-[color:var(--color-teal)]" /></div>
-                              <div className="min-w-0 space-y-1">
-                                <p className="text-[11px] font-black text-[color:var(--color-ink)] uppercase tracking-tight leading-tight">{me.type.replace(/_/g, ' ')}</p>
-                                <p className="text-[11px] text-[color:var(--color-ink-faint)] leading-relaxed">{me.description || '—'}</p>
-                                <span className="text-[9px] font-mono text-[color:var(--color-ink-faint)] opacity-60">{new Date(me.occurredAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                              </div>
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: 'var(--color-wine-light)' }}><PackageCheck className="w-4 h-4" style={{ color: 'var(--color-wine)' }} /></div>
+                            <div className="min-w-0 space-y-1">
+                            <p className="text-[11px] font-black text-[color:var(--color-ink)] uppercase tracking-tight leading-tight">{me.type.replace(/_/g, ' ')}</p>
+                            <p className="text-[11px] text-[color:var(--color-ink-faint)] leading-relaxed">{me.description || '—'}</p>
+                            <span className="text-[9px] font-mono text-[color:var(--color-ink-faint)] opacity-60">{new Date(me.occurredAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
                             </div>
                           ))}
                         </div>
@@ -821,7 +838,7 @@ export default function DashboardHome() {
 
 // ─── EscrowHoldingsCard (live FX rate for PHP equivalent) ───────────────────
 
-function EscrowHoldingsCard({ totalEscrow }: { totalEscrow: number }) {
+function EscrowHoldingsCard({ totalEscrow, variant = 'admin' }: { totalEscrow: number; variant?: 'admin' | 'trade' }) {
   const [phpEquiv, setPhpEquiv] = React.useState<string | null>(null);
   const [isLive, setIsLive] = React.useState(false);
 
@@ -832,15 +849,22 @@ function EscrowHoldingsCard({ totalEscrow }: { totalEscrow: number }) {
     });
   }, [totalEscrow]);
 
+  const cardStyle = variant === 'trade'
+    ? { background: 'linear-gradient(135deg, #8B1646 0%, #6E1138 60%, #4A0A26 100%)', border: '1px solid rgba(254,153,0,0.35)' }
+    : { background: 'linear-gradient(135deg, #142034 0%, #2A3A56 100%)', border: '1px solid rgba(254,153,0,0.3)' };
+
   return (
-    <div className="bg-ink border border-ink-soft p-5 rounded-xl shadow-sm col-span-1">
-      <span className="block text-[10px] text-white/40 uppercase font-medium tracking-widest mb-2">Escrow Holdings</span>
-      <strong className="text-[28px] text-white font-display font-medium leading-none">
+    <div className="p-5 rounded-xl shadow-sm col-span-1 relative overflow-hidden" style={cardStyle}>
+      {variant === 'trade' && (
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 85% 10%, rgba(254,153,0,0.2) 0%, transparent 55%)' }} />
+      )}
+      <span className="block text-[10px] text-white/50 uppercase font-medium tracking-widest mb-2 relative z-10">Escrow Holdings</span>
+      <strong className="text-[28px] text-white font-display font-medium leading-none relative z-10">
         {totalEscrow.toLocaleString()} <span className="text-sm font-semibold text-white/60">USDC</span>
       </strong>
       {phpEquiv && (
-        <span className="block text-[11px] text-white/40 mt-1.5 font-sans">
-          ₱{phpEquiv} EQV{!isLive && <span className="text-white/25 ml-1">(est.)</span>}
+        <span className="block text-[11px] mt-1.5 font-sans relative z-10" style={{ color: variant === 'trade' ? 'rgba(254,153,0,0.7)' : 'rgba(255,255,255,0.4)' }}>
+          ₱{phpEquiv} EQV{!isLive && <span className="ml-1" style={{ opacity: 0.5 }}>(est.)</span>}
         </span>
       )}
     </div>
