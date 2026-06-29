@@ -1484,7 +1484,16 @@ export default function ChatNegotiationCenter() {
                               <div>
                                 <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Scope</label>
                                 <select disabled={isFinalized} className={inputCls} value={r?.shipmentScope || ''}
-                                  onChange={e => field('shipmentScope', e.target.value as ShipmentScope)}>
+                                  onChange={e => {
+                                    const scope = e.target.value as ShipmentScope;
+                                    field('shipmentScope', scope);
+                                    // Nationwide shipments are always within the Philippines —
+                                    // auto-fill both origin and destination country.
+                                    if (scope === 'NATIONWIDE') {
+                                      updateReceiptField('originCountry', 'Philippines');
+                                      updateReceiptField('destCountry', 'Philippines');
+                                    }
+                                  }}>
                                   <option value="">—</option>
                                   <option value="OVERSEAS">Overseas</option>
                                   <option value="NATIONWIDE">Nationwide</option>

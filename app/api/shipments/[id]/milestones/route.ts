@@ -56,7 +56,11 @@ export async function GET(
   if (errorResponse) return errorResponse;
 
   const { id } = await params;
-  const milestones = await dbStore.getMilestones(id);
+  const shipment = await dbStore.getShipmentById(id);
+  if (!shipment) {
+    return NextResponse.json({ success: false, error: 'Shipment not found' }, { status: 404 });
+  }
+  const milestones = await dbStore.getMilestones(shipment.id);
   return NextResponse.json({ success: true, data: milestones });
 }
 
@@ -128,7 +132,7 @@ export async function POST(
     // Build and persist the milestone event
     const milestone: MilestoneEvent = {
       id: `me-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      shipmentId,
+      shipmentId: shipment.id,
       loggedById,
       type: type as MilestoneType,
       description: description ?? undefined,
@@ -141,10 +145,10 @@ export async function POST(
     await dbStore.saveMilestone(milestone);
 
     // Auto-complete any matching priority milestone
-    const priorityMilestones = await dbStore.getPriorityMilestones(shipmentId);
+    const priorityMilestones = await dbStore.getPriorityMilestones(shipment.id);
     const matchingPriority = priorityMilestones.find(pm => pm.type === type && !pm.isCompleted);
     if (matchingPriority) {
-      await dbStore.updatePriorityMilestoneStatus(shipmentId, type, true);
+      await dbStore.updatePriorityMilestoneStatus(shipment.id, type, true);
     }
 
     return NextResponse.json({ success: true, data: milestone });

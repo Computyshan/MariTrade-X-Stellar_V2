@@ -91,6 +91,9 @@ export default function DashboardHome() {
   // Recent logs drawer
   const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
 
+  // Port Activity drawer (Trade Party) — mirrors Logistics' Recent Logs drawer
+  const [portActivityDrawerOpen, setPortActivityDrawerOpen] = useState(false);
+
   // Description modal (Step 3 expanded input)
   const [descriptionModalOpen, setDescriptionModalOpen] = useState(false);
 
@@ -248,6 +251,22 @@ export default function DashboardHome() {
             )}
           </button>
         )}
+
+        {/* Port Activity button — Trade Party only */}
+        {currentUser.userType === 'TRADE_PARTY' && (
+          <button
+            onClick={() => setPortActivityDrawerOpen(true)}
+            className="flex items-center gap-2 bg-white border border-[color:var(--color-mist-dark)] hover:border-[color:var(--color-teal)] hover:text-[color:var(--color-teal)] text-[color:var(--color-ink-faint)] text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-sm flex-shrink-0"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            Port Activity
+            {milestones.length > 0 && (
+              <span className="bg-[color:var(--color-teal)] text-white text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none">
+                {milestones.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -323,12 +342,8 @@ export default function DashboardHome() {
                 })()}
               </div>
 
-              {/* Grid: Active Shipments (left) + Port Activity (right) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-                {/* Shipments Table */}
-                <div className="lg:col-span-2">
-                  <div className="bg-white border border-mist rounded-xl shadow-sm overflow-hidden">
+              {/* Active Shipments — full width since Port Activity moved to header button + drawer */}
+              <div className="bg-white border border-mist rounded-xl shadow-sm overflow-hidden">
                     {/* Table header */}
                     <div className="px-5 py-4 flex items-center justify-between border-b border-mist-light">
                       <h2 className="text-sm font-display font-medium text-ink">Active Shipments</h2>
@@ -410,53 +425,79 @@ export default function DashboardHome() {
                         </table>
                       </div>
                     )}
-                  </div>
-                </div>
+              </div>
 
-                {/* Right column: Port Activity + Support */}
-                <div className="space-y-4">
-                  {/* Port Activity — driven by real milestones from Supabase */}
-                  <div className="bg-white border border-mist rounded-xl shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 flex items-center justify-between border-b border-mist-light">
-                      <h3 className="text-sm font-display font-medium text-ink">Port Activity</h3>
-                      <button className="text-[11px] font-semibold text-steel hover:text-steel-hover">VIEW ALL</button>
+              {/* PORT ACTIVITY SLIDE-OVER DRAWER — mirrors Logistics' Recent Logs drawer */}
+              {portActivityDrawerOpen && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[2px]"
+                    onClick={() => setPortActivityDrawerOpen(false)}
+                  />
+                  {/* Panel */}
+                  <div className="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl flex flex-col">
+                    {/* Drawer header */}
+                    <div className="bg-[color:var(--color-ink)] px-5 py-4 flex items-center justify-between flex-shrink-0">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                          <Activity className="w-4 h-4 text-[color:var(--color-teal)]" />
+                        </div>
+                        <div>
+                          <p className="text-white font-black text-sm">Port Activity</p>
+                          <p className="text-white/40 text-[10px]">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''} on record</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setPortActivityDrawerOpen(false)}
+                        className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                      >
+                        <X className="w-4 h-4 text-white" />
+                      </button>
                     </div>
-                    <div className="px-5 py-4 space-y-0 relative">
+
+                    {/* Drawer body — scrollable */}
+                    <div className="flex-1 overflow-y-auto">
                       {milestones.length === 0 ? (
-                        <div className="py-8 text-center">
-                          <CircleDot className="w-7 h-7 text-mist mx-auto mb-2" />
-                          <p className="text-[11px] text-ink-faint font-sans">NO RECENT PORT ACTIVITY</p>
+                        <div className="h-full flex flex-col items-center justify-center py-16 px-6 text-center">
+                          <CircleDot className="w-10 h-10 text-[color:var(--color-mist-dark)] mb-3" />
+                          <p className="text-xs text-[color:var(--color-ink-faint)] font-mono font-bold">NO RECENT PORT ACTIVITY</p>
+                          <p className="text-[11px] text-[color:var(--color-ink-faint)] opacity-60 mt-1 leading-relaxed">Milestones logged by your logistics partners will appear here.</p>
                         </div>
                       ) : (
-                        <>
-                          {/* Timeline line */}
-                          <div className="absolute left-[26px] top-6 bottom-6 w-px bg-mist-light" />
-                          {milestones.slice(0, 3).map((me, idx) => (
-                            <div key={me.id} className={`flex gap-4 ${idx < milestones.slice(0, 3).length - 1 ? 'pb-5' : ''}`}>
-                              <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 z-10 ${
-                                idx === 0 ? 'bg-ink' : idx === 1 ? 'bg-mist-dark' : 'bg-mist-light border border-mist'
-                              }`}>
-                                <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        <div className="divide-y divide-[color:var(--color-mist)]">
+                          {milestones.map((me, idx) => (
+                            <div key={idx} className="px-5 py-4 flex gap-3">
+                              <div className="w-8 h-8 rounded-xl bg-[color:var(--color-teal-light)] flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <PackageCheck className="w-4 h-4 text-[color:var(--color-teal)]" />
                               </div>
-                              <div className={idx === 2 ? 'opacity-40' : ''}>
-                                <p className="text-[11px] font-bold text-ink uppercase tracking-wide">
+                              <div className="min-w-0 space-y-1">
+                                <p className="text-[11px] font-black text-[color:var(--color-ink)] uppercase tracking-tight leading-tight">
                                   {me.type.replace(/_/g, ' ')}
                                 </p>
-                                <p className="text-[11px] text-ink-faint mt-0.5 leading-relaxed">{me.description}</p>
-                                {me.shipmentId && (
-                                  <p className="text-[10px] text-steel mt-1 font-medium">
-                                    REF: {me.shipmentId.slice(-10).toUpperCase()}
-                                  </p>
-                                )}
+                                <p className="text-[11px] text-[color:var(--color-ink-faint)] leading-relaxed">{me.description || '—'}</p>
+                                <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                                  <span className="text-[9px] font-mono text-[color:var(--color-ink-faint)] opacity-60">
+                                    {new Date(me.occurredAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  {me.verified && (
+                                    <span className="text-[9px] bg-[color:var(--color-teal-light)] text-[color:var(--color-teal)] font-black px-1.5 py-0.5 rounded">VERIFIED</span>
+                                  )}
+                                  {me.shipmentId && (
+                                    <span className="text-[9px] font-mono text-[color:var(--color-steel)] opacity-80">
+                                      REF: {me.shipmentId.slice(-10).toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           ))}
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
-                </div>
-              </div>
+                </>
+              )}
             </div>
           ) : (
             /* ─────────────────────────────────────────────────────────────
