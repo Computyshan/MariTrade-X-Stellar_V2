@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -73,7 +74,7 @@ export default function EscrowLedger() {
     }
   }, []);
 
-  useEffect(() => { fetchShipments(); }, [fetchShipments]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchShipments(); }, [fetchShipments]);
 
   // ── Query on-chain status for all funded/on-chain shipments ───────────────
   const refreshChainData = useCallback(async (list: Shipment[]) => {

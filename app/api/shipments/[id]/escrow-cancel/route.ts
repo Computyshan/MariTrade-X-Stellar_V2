@@ -427,12 +427,20 @@ export async function POST(
   //  resolve_dispute — platform admin splits the locked funds and closes escrow
   // ═══════════════════════════════════════════════════════════════════════════
   if (action === 'resolve_dispute') {
-    // Gate: must be the platform wallet or, in sandbox, any authenticated user
-    const callerIsPlatform =
-      authedUser.stellarWallet === PLATFORM_ADDRESS ||
-      process.env.NODE_ENV === 'development'; // allow any authed user in dev
+    // Gate: must be the platform wallet or, in sandbox, any authenticated user.
+    // requireAuth only returns { id, email } from the JWT — not stellarWallet —
+    // so we do a quick DB lookup to get the caller's full profile.
+    let resolvedIsPlatform = process.env.NODE_ENV === 'development';
+    if (!resolvedIsPlatform && PLATFORM_ADDRESS) {
+      try {
+        const callerProfile = await dbStore.getUserById(authedUser!.id);
+        resolvedIsPlatform = callerProfile?.stellarWallet === PLATFORM_ADDRESS;
+      } catch {
+        resolvedIsPlatform = false;
+      }
+    }
 
-    if (!callerIsPlatform) {
+    if (!resolvedIsPlatform) {
       return NextResponse.json(
         { success: false, error: 'Only the MariTrade platform may resolve disputes' },
         { status: 403 },

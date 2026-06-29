@@ -555,7 +555,7 @@ export default function LogMilestonePage({ params }: PageProps) {
             </div>
 
             <div className="border-t border-maritime-700 pt-4 text-[10px] text-maritime-400 leading-relaxed">
-              Milestones logged here are appended to the shipment's immutable event ledger.
+              Milestones logged here are appended to the shipment&apos;s immutable event ledger.
               Priority milestones gate the Stellar escrow release.
             </div>
           </div>

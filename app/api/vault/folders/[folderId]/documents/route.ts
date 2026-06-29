@@ -12,7 +12,7 @@ const BUCKET = 'vault-documents';
 // Uploads to Supabase Storage and inserts a shipment_documents row.
 export async function POST(req: NextRequest, { params }: Ctx) {
   const { user, errorResponse } = await requireAuth(req);
-  if (errorResponse) return errorResponse;
+  if (errorResponse || !user) return errorResponse ?? NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
   try {
     const { folderId } = await params;

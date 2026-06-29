@@ -86,6 +86,7 @@ export default function DocumentVaultPage() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchFolders(); }, [fetchFolders]);
 
   // ── SESSION STILL LOADING ───────────────────────────────────────────────────

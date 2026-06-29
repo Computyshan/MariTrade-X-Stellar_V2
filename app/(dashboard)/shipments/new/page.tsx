@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -15,7 +16,7 @@ import {
   DollarSign, Hash, FolderLock, Key, Eye, EyeOff, Copy, CheckCircle2,
   Shuffle, ShieldCheck, FolderOpen, ExternalLink, Receipt, Sparkles, MessageSquare,
 } from 'lucide-react';
-import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase, ShipmentReceipt, CURRENCY_SYMBOLS } from '@/types';
+import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase, ShipmentReceipt, CURRENCY_SYMBOLS, ROLE_MILESTONES } from '@/types';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
 import { signAndSubmitWithRetry } from '@/lib/stellar/freighter';
 import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
@@ -253,17 +254,58 @@ export default function NewShipmentPage() {
   const [stellarStep,   setStellarStep]   = useState(''); // current step label
   const [txHash,        setTxHash]        = useState('');
 
-  if (loading || !currentUser) {
-    return (
-      <DashboardLayout>
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-amber border-t-transparent rounded-full animate-spin" />
-        </div>
-      </DashboardLayout>
-    );
-  }
+  // ── ALL HOOKS MUST BE BEFORE EARLY RETURNS (Rules of Hooks) ───────────────
 
-  // ── Oracle rate fetcher (declared before the useEffect that calls it) ────────
+  // ── Fetch finalized Shipment Receipts ───────────────────────────────────────────
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    setReceiptsLoading(true);
+    authFetch(`/api/shipments/receipts?userId=${currentUser.id}`)
+      .then(r => r.json())
+      .then(json => { if (json.success) setReceipts(json.data || []); })
+      .catch(() => {})
+      .finally(() => setReceiptsLoading(false));
+  }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-suggest vault folder name when Step 2 becomes active ─────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (step === 2 && !vaultFolderName) {
+      const suggested = deriveFolderName(description, originCountry, destinationPort);
+      setVaultFolderName(suggested);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  // ── Fetch Trusted Network when reaching Step 3 ────────────────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (step !== 3) return;
+    setNetworkLoading(true);
+    authFetch(`/api/network/connections?userId=${currentUser?.id}`)
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) {
+          const acceptedIds: string[] = json.data
+            .filter((c: { status: string }) => c.status === 'ACCEPTED')
+            .map((c: { otherParty?: { id: string } }) => c.otherParty?.id)
+            .filter(Boolean);
+          setTrustedNetworkIds(acceptedIds);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setNetworkLoading(false));
+  }, [step, currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-lock country fields when scope is NATIONWIDE ───────────────────
+  useEffect(() => {
+    if (shipmentScope === 'NATIONWIDE') {
+      setOriginCountry('Philippines');
+      setDestCountry('Philippines');
+    }
+  }, [shipmentScope]);
+
+  // ── Oracle rate fetcher ────────────────────────────────────────────────────
   const fetchOracleRate = async (currency: string) => {
     setOracleLoading(true);
     try {
@@ -287,7 +329,7 @@ export default function NewShipmentPage() {
     }
   };
 
-  // ── PHP rate fetcher (declared before the useEffect that calls it) ───────────
+  // ── PHP rate fetcher ─────────────────────────────────────────────────────────
   const fetchPhpRate = async () => {
     setRateLoading(true);
     setRateError(false);
@@ -303,17 +345,57 @@ export default function NewShipmentPage() {
     }
   };
 
-  // ── Fetch finalized Shipment Receipts the user can pick from ───────────────
+  // ── Fetch oracle rate ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!currentUser?.id) return;
-    setReceiptsLoading(true);
-    authFetch(`/api/shipments/receipts?userId=${currentUser.id}`)
-      .then(r => r.json())
-      .then(json => { if (json.success) setReceipts(json.data || []); })
-      .catch(() => {})
-      .finally(() => setReceiptsLoading(false));
+    if (!invoiceValue || Number(invoiceValue) <= 0) {
+      setOracleRate(null);
+      setTotalValueUSD('');
+      return;
+    }
+    const timeout = setTimeout(() => fetchOracleRate(invoiceCurrency), 600);
+    return () => clearTimeout(timeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
+  }, [invoiceCurrency, invoiceValue]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (hsRef.current && !hsRef.current.contains(e.target as Node)) setHsDropOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (step === 4 && shipmentScope === 'NATIONWIDE') fetchPhpRate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, shipmentScope]);
+
+  // ── Recalculate PPHP↔USDC preview ──────────────────────────────────────────
+  useEffect(() => {
+    if (step !== 4 || assetCode !== 'PPHP' || !totalValueUSD || Number(totalValueUSD) <= 0) {
+      setPphpPreview(null);
+      return;
+    }
+    setPphpPreviewing(true);
+    convertPphpToUsdc(Number(totalValueUSD) * (phpRate ?? 58.8)).then(result => {
+      const phpAmount = phpRate
+        ? Number(totalValueUSD) * phpRate
+        : Number(totalValueUSD) * result.rate;
+      setPphpPreview({ php: phpAmount, usdc: Number(totalValueUSD), rate: result.rate, isLive: result.isLive });
+    }).catch(() => setPphpPreview(null))
+      .finally(() => setPphpPreviewing(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, assetCode, totalValueUSD, phpRate]);
+
+  if (loading || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-amber border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   // Prefills the Step 1 form fields from a finalized chat Shipment Receipt.
   // The person can still edit anything afterwards — this is just a head start.
@@ -342,92 +424,9 @@ export default function NewShipmentPage() {
     setAppliedReceiptId(r.id);
   };
 
-  // ── Auto-suggest vault folder name when Step 2 becomes active ───────────────
-  useEffect(() => {
-    if (step === 2 && !vaultFolderName) {
-      const suggested = deriveFolderName(description, originCountry, destinationPort);
-      setVaultFolderName(suggested);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  // ── Fetch Trusted Network when reaching Step 3 ─────────────────────────────
-  useEffect(() => {
-    if (step !== 3) return;
-    setNetworkLoading(true);
-    authFetch(`/api/network/connections?userId=${currentUser.id}`)
-      .then(r => r.json())
-      .then(json => {
-        if (json.success) {
-          const acceptedIds: string[] = json.data
-            .filter((c: { status: string }) => c.status === 'ACCEPTED')
-            .map((c: { otherParty?: { id: string } }) => c.otherParty?.id)
-            .filter(Boolean);
-          setTrustedNetworkIds(acceptedIds);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setNetworkLoading(false));
-  }, [step, currentUser.id]);
-
-  // ── Auto-lock country fields when scope is NATIONWIDE ───────────────────────
-  useEffect(() => {
-    if (shipmentScope === 'NATIONWIDE') {
-      setOriginCountry('Philippines');
-      setDestCountry('Philippines');
-    }
-  }, [shipmentScope]);
-
-  // ── Fetch oracle rate ────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!invoiceValue || Number(invoiceValue) <= 0) {
-      setOracleRate(null);
-      setTotalValueUSD('');
-      return;
-    }
-    const timeout = setTimeout(() => fetchOracleRate(invoiceCurrency), 600);
-    return () => clearTimeout(timeout);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceCurrency, invoiceValue]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (hsRef.current && !hsRef.current.contains(e.target as Node)) setHsDropOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
   const filteredHs = HS_CODE_SUGGESTIONS.filter(h =>
     h.code.includes(hsSearch) || h.description.toLowerCase().includes(hsSearch.toLowerCase())
   );
-
-  useEffect(() => {
-    if (step === 4 && shipmentScope === 'NATIONWIDE') fetchPhpRate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, shipmentScope]);
-
-  // ── Recalculate PPHP↔USDC preview whenever asset or invoice changes ─────────
-  useEffect(() => {
-    if (step !== 4 || assetCode !== 'PPHP' || !totalValueUSD || Number(totalValueUSD) <= 0) {
-      setPphpPreview(null);
-      return;
-    }
-    setPphpPreviewing(true);
-    // totalValueUSD is already the USD equivalent of the invoice;
-    // we convert that USD amount into PHP to show the peso cost.
-    convertPphpToUsdc(Number(totalValueUSD) * (phpRate ?? 58.8)).then(result => {
-      // Actually we want: php = totalValueUSD * phpRate, usdc = totalValueUSD
-      // convertPphpToUsdc gives usdc from php. Use the live rate directly.
-      const phpAmount = phpRate
-        ? Number(totalValueUSD) * phpRate
-        : Number(totalValueUSD) * result.rate;
-      setPphpPreview({ php: phpAmount, usdc: Number(totalValueUSD), rate: result.rate, isLive: result.isLive });
-    }).catch(() => setPphpPreview(null))
-      .finally(() => setPphpPreviewing(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, assetCode, totalValueUSD, phpRate]);
-
 
   const handleDocAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -1340,14 +1339,36 @@ export default function NewShipmentPage() {
                   </div>
                 ) : logisticsUsers.map(user => {
                   const assigned = assignedUserIds.includes(user.id);
+                  const roleConfig: Record<string, { label: string; color: string; phases: string }> = {
+                    FREIGHT_FORWARDER:  { label: '🚢 Freight Forwarder',  color: 'bg-amber-light text-amber',       phases: 'Vessel booking, B/L, port ops' },
+                    CUSTOMS_BROKER:     { label: '🛃 Customs Broker',     color: 'bg-wine-light text-wine',         phases: 'BOC filing, duties, clearance' },
+                    WAREHOUSE_OPERATOR: { label: '🏬 Warehouse Operator', color: 'bg-steel-light text-steel-hover', phases: 'Packing, staging, handoff' },
+                  };
+                  const rc = roleConfig[user.jobRole] ?? { label: JOB_ROLE_LABELS[user.jobRole], color: 'bg-mist text-ink-faint', phases: '' };
+                  const ownedCount = (ROLE_MILESTONES[user.jobRole as JobRole] ?? []).length;
                   return (
                     <button key={user.id} onClick={() => toggleUser(user.id)}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${assigned ? 'border-teal bg-teal-light' : 'border-mist hover:border-amber/30'}`}>
-                      <div>
-                        <p className="text-xs font-bold text-ink">{user.fullName}</p>
-                        <p className="text-[10px] text-ink-faint">{user.companyName} · {JOB_ROLE_LABELS[user.jobRole]}</p>
+                      className={`w-full flex items-start justify-between p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                        assigned ? 'border-teal bg-teal-light' : 'border-mist hover:border-amber/30'
+                      }`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs font-bold text-ink">{user.fullName}</p>
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide ${rc.color}`}>
+                            {rc.label}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-ink-faint mt-0.5">{user.companyName}</p>
+                        {rc.phases && (
+                          <p className="text-[10px] text-ink-faint mt-1 leading-tight">
+                            <span className="font-semibold">Responsible for:</span> {rc.phases}
+                            {ownedCount > 0 && <span className="ml-1 text-[9px] bg-mist text-ink-faint px-1 rounded">{ownedCount} milestones</span>}
+                          </p>
+                        )}
                       </div>
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${assigned ? 'bg-teal text-white' : 'bg-mist-light text-ink-faint'}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ml-2 ${
+                        assigned ? 'bg-teal text-white' : 'bg-mist-light text-ink-faint'
+                      }`}>
                         {assigned ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                       </div>
                     </button>
@@ -1368,13 +1389,28 @@ export default function NewShipmentPage() {
                     <div className="space-y-1">
                       {PHASE_MILESTONE_SEQUENCE[phase].map(type => {
                         const selected = priorityMilestones.includes(type);
+                        const responsibleRole =
+                          (ROLE_MILESTONES.FREIGHT_FORWARDER  as MilestoneType[]).includes(type) ? { label: 'FF',  color: 'bg-amber-light text-amber',       title: 'Freight Forwarder' } :
+                          (ROLE_MILESTONES.CUSTOMS_BROKER     as MilestoneType[]).includes(type) ? { label: 'CB',  color: 'bg-wine-light text-wine',         title: 'Customs Broker' } :
+                          (ROLE_MILESTONES.WAREHOUSE_OPERATOR as MilestoneType[]).includes(type) ? { label: 'WO',  color: 'bg-steel-light text-steel-hover', title: 'Warehouse Operator' } :
+                          null;
                         return (
                           <button key={type} onClick={() => toggleMilestone(type)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all cursor-pointer text-xs ${selected ? 'border-amber bg-amber-light text-ink font-semibold' : 'border-mist text-ink-faint hover:border-amber/30'}`}>
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all cursor-pointer text-xs ${
+                              selected ? 'border-amber bg-amber-light text-ink font-semibold' : 'border-mist text-ink-faint hover:border-amber/30'
+                            }`}>
                             <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${selected ? 'bg-amber' : 'bg-mist-light'}`}>
                               {selected && <Check className="w-2.5 h-2.5 text-white" />}
                             </div>
-                            {MILESTONE_LABELS[type]}
+                            <span className="flex-1">{MILESTONE_LABELS[type]}</span>
+                            {responsibleRole && (
+                              <span
+                                className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0 ${responsibleRole.color}`}
+                                title={responsibleRole.title}
+                              >
+                                {responsibleRole.label}
+                              </span>
+                            )}
                           </button>
                         );
                       })}

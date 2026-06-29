@@ -43,15 +43,13 @@ async function platformSignAndSend(
   const keypair = Keypair.fromSecret(PLATFORM_SECRET);
 
   const sent = await assembled.signAndSend({
-    signTransaction: async (xdr: string): Promise<string> => {
-      // In SDK v16 the signTransaction callback receives the unsigned XDR
-      // string and must return the signed XDR as a plain base64 string.
+    signTransaction: async (xdr: string): Promise<{ signedTxXdr: string }> => {
+      // In SDK v16 the signTransaction callback must return { signedTxXdr: string }.
       // We parse with Transaction (not TransactionBuilder) so the Soroban
       // auth footprint entries embedded by the SDK are preserved.
       const tx = new Transaction(xdr, NETWORK_PASSPHRASE);
       tx.sign(keypair);
-      // toEnvelope().toXDR('base64') returns a string in stellar-sdk v16.
-      return tx.toEnvelope().toXDR('base64') as string;
+      return { signedTxXdr: tx.toEnvelope().toXDR('base64') as string };
     },
   });
 

@@ -108,8 +108,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const [checkingRelease, setCheckingRelease] = useState(false);
   const [bocAuthOpen, setBocAuthOpen] = useState(false);
   const [uploadOpen,    setUploadOpen]    = useState(false);
-  const [uploadFileName, setUploadFileName] = useState('');
-  const [uploadFileUrl,  setUploadFileUrl]  = useState('');
+
   const [uploadFile,     setUploadFile]     = useState<File | null>(null);
   const [uploading,     setUploading]     = useState(false);
   const [uploadError,   setUploadError]   = useState('');
@@ -139,6 +138,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
   useEffect(() => {
     if (shipmentId) fetchDetails();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipmentId]);
 
   const allPriorityCompleted = data?.priorityMilestones?.every(pm => pm.isCompleted) ?? false;
@@ -146,6 +146,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const hasRealEscrowId = !!data?.shipment?.stellarEscrowId &&
     /^[0-9a-fA-F]{64}$/.test(data.shipment.stellarEscrowId);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!data?.shipment || data.shipment.escrowStatus !== 'FUNDED') return;
     if (!data.shipment.referenceCode) return;
@@ -880,17 +881,16 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       {/* BOC Vault Documents Centre */}
       <div className="bg-white border border-mist p-6 rounded-2xl shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-mist-light pb-3">
-            <h3 className="font-extrabold text-sm text-ink flex items-center gap-2">
-              <FileText className="w-5 h-5 text-wine" /><span>BOC Vault Documents Centre</span>
-            </h3>
-            <p className="text-[10px] text-ink-faint mt-0.5">Encrypted compliance files attached to this shipment.</p>
-          </div>
-          <button onClick={handleUploadBOCClick}
-            className="bg-amber-light hover:bg-ink border border-amber/30 text-ink hover:text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
-            <FolderLock className="w-4 h-4" /><span>Upload BOC Document</span>
-            <ExternalLink className="w-3 h-3 opacity-60" />
-          </button>
+          <h3 className="font-extrabold text-sm text-ink flex items-center gap-2">
+            <FileText className="w-5 h-5 text-wine" /><span>BOC Vault Documents Centre</span>
+          </h3>
+          <p className="text-[10px] text-ink-faint mt-0.5">Encrypted compliance files attached to this shipment.</p>
         </div>
+        <button onClick={handleUploadBOCClick}
+          className="bg-amber-light hover:bg-ink border border-amber/30 text-ink hover:text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
+          <FolderLock className="w-4 h-4" /><span>Upload BOC Document</span>
+          <ExternalLink className="w-3 h-3 opacity-60" />
+        </button>
 
         {documents.length === 0 ? (
           <div className="text-center py-12 text-ink-faint text-xs font-sans">NO ENCRYPTED CARGO FILES IN THE BOC HUB.</div>

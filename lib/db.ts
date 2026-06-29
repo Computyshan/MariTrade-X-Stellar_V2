@@ -26,6 +26,7 @@
  *   total_value_usd    ↔ totalValueUSD
  *   escrow_status      ↔ escrowStatus
  *   escrow_amount_usd  ↔ escrowAmountUSD
+ *   escrow_asset       ↔ escrowAsset
  *   stellar_escrow_id  ↔ stellarEscrowId
  *   estimated_arrival  ↔ estimatedArrival
  *   shipment_id        ↔ shipmentId
@@ -123,6 +124,7 @@ function rowToShipment(row: any): Shipment {
     totalValueUSD: Number(row.total_value_usd),
     escrowStatus: row.escrow_status,
     escrowAmountUSD: row.escrow_amount_usd != null ? Number(row.escrow_amount_usd) : undefined,
+    escrowAsset: (row.escrow_asset ?? 'USDC') as 'USDC' | 'PPHP',
     stellarEscrowId: row.stellar_escrow_id ?? undefined,
     estimatedArrival: row.estimated_arrival ?? undefined,
     createdAt: row.created_at,
@@ -144,6 +146,7 @@ function shipmentToRow(s: Shipment): any {
     total_value_usd: s.totalValueUSD,
     escrow_status: s.escrowStatus,
     escrow_amount_usd: s.escrowAmountUSD ?? null,
+    escrow_asset: s.escrowAsset ?? 'USDC',
     stellar_escrow_id: s.stellarEscrowId ?? null,
     estimated_arrival: s.estimatedArrival ?? null,
     created_at: s.createdAt,

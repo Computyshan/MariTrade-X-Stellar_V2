@@ -318,20 +318,10 @@ export default function DashboardHome() {
   const [aiResult, setAiResult] = useState<{estimatedUSD: number, confidence: string, breakdown: string} | null>(null);
   const [estimating, setEstimating] = useState(false);
 
-  // ── Admin: render completely separate view, no shared data fetching needed ──
-  if (!currentUser) {
-    return null;
-  }
-
-  if (currentUser.email === ADMIN_EMAIL) {
-    return (
-      <DashboardLayout>
-        <AdminDashboard />
-      </DashboardLayout>
-    );
-  }
-
+  // ── All hooks must be declared before any early return (Rules of Hooks) ────
+  // fetchData is defined here so useEffect below can reference it.
   const fetchData = async () => {
+    if (!currentUser) return;
     try {
       setLoading(true);
       const shipRes = await authFetch('/api/shipments');
@@ -348,12 +338,31 @@ export default function DashboardHome() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [currentUser]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchData(); }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!currentUser) return;
     const list = MILESTONE_BY_JOB[currentUser.jobRole];
     if (list && list.length > 0) setLogMilestoneType(list[0]);
-  }, [currentUser]);
+  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[logMilestoneType]);
+  }, [logMilestoneType]);
+
+  // ── Admin: render completely separate view, no shared data fetching needed ──
+  if (!currentUser) {
+    return null;
+  }
+
+  if (currentUser.email === ADMIN_EMAIL) {
+    return (
+      <DashboardLayout>
+        <AdminDashboard />
+      </DashboardLayout>
+    );
+  }
 
   const handleAIEstimate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -381,10 +390,6 @@ export default function DashboardHome() {
     setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[type]);
     if (logFileInputRef.current) logFileInputRef.current.value = '';
   };
-
-  useEffect(() => {
-    setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[logMilestoneType]);
-  }, [logMilestoneType]);
 
   const handleLogFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
