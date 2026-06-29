@@ -103,10 +103,13 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
     <div data-theme={themeAttr} className="min-h-screen bg-mist-light text-ink font-sans flex">
 
       {/* ── SIDEBAR ── */}
-      <aside className="hidden md:flex flex-col w-[220px] bg-ink text-white flex-shrink-0 select-none h-screen sticky top-0">
+      <aside className="hidden md:flex flex-col w-[220px] text-white flex-shrink-0 select-none h-screen sticky top-0 relative" style={{ background: 'linear-gradient(175deg, var(--color-ink) 0%, var(--color-ink-soft) 45%, var(--color-steel) 160%)' }}>
+
+        {/* Subtle mist shimmer overlay on the sidebar */}
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 110% 5%, rgba(207,226,230,0.18) 0%, transparent 45%), radial-gradient(ellipse at -10% 95%, rgba(207,226,230,0.12) 0%, transparent 50%)' }} />
 
         {/* Main MariTrade logo — always shown, always the master brand */}
-        <div className="px-4 py-4 border-b border-white/5">
+        <div className="px-4 py-4 border-b border-white/5 relative z-10">
           <Image
             src="/MariTrade logo.png"
             alt="MariTrade"
@@ -118,7 +121,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         </div>
 
         {/* Portal badge — shows which branch this user belongs to */}
-        <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2.5">
+        <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2.5 relative z-10" style={{ background: 'linear-gradient(90deg, rgba(207,226,230,0.08) 0%, rgba(129,151,198,0.13) 100%)' }}>
           <Image
             src={isTradeParty ? '/MariTrade-Trade-Party-Logo.png' : '/MariTrade-Logistic-Chain-Logo.png'}
             alt={isTradeParty ? 'Trade Party Portal' : 'Logistics Chain Portal'}
@@ -135,7 +138,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         </div>
 
         {/* User block */}
-        <Link href="/profile" className="px-4 py-4 flex items-center gap-3 border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer group">
+        <Link href="/profile" className="px-4 py-4 flex items-center gap-3 border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer group relative z-10">
           <div className="w-9 h-9 rounded-lg bg-ink-soft flex items-center justify-center font-bold text-xs text-white shrink-0 tracking-wide">
             {userInitials}
           </div>
@@ -146,7 +149,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         </Link>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto relative z-10">
           {navItems.map((item) => {
             const IconComp = item.icon;
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href + '/'));
@@ -157,12 +160,15 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[12px] font-semibold transition-all duration-150 ${
                   isActive
                     ? ''
-                    : 'text-white/50 hover:bg-white/5 hover:text-white/80'
+                    : 'text-white/55 hover:text-white/90'
                 }`}
                 style={isActive ? {
-                  backgroundColor: 'var(--theme-sidebar-active-bg)',
+                  background: 'linear-gradient(90deg, var(--theme-sidebar-active-bg) 0%, rgba(207,226,230,0.10) 100%)',
                   color: 'var(--theme-sidebar-active-text)',
-                } : {}}
+                  borderLeft: '2px solid var(--theme-sidebar-active-text)',
+                } : { transition: 'background 0.15s' }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(90deg, rgba(207,226,230,0.07) 0%, rgba(129,151,198,0.10) 100%)'; }}
+                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = ''; }}
               >
                 <IconComp className="w-[15px] h-[15px] shrink-0" />
                 <span>{item.name}</span>
@@ -172,7 +178,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         </nav>
 
         {/* NEW SHIPMENT */}
-        <div className="px-4 py-4 border-t border-white/5">
+        <div className="px-4 py-4 border-t border-white/5 relative z-10" style={{ background: 'linear-gradient(90deg, rgba(207,226,230,0.05) 0%, rgba(129,151,198,0.10) 100%)' }}>
           <Link
             href="/shipments/new"
             className="w-full text-white/80 hover:bg-white/10 hover:text-white font-bold py-2.5 rounded-lg text-[11px] tracking-wider transition-all flex items-center justify-center gap-1.5 uppercase border"
@@ -187,7 +193,7 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
 
         {/* TOP BAR */}
-        <header className="bg-white border-b border-mist px-6 py-3 flex items-center justify-between flex-shrink-0">
+        <header className="border-b border-mist px-6 py-3 flex items-center justify-between flex-shrink-0" style={{ background: 'linear-gradient(90deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%)' }}>
           {/* CLEANUP FIX: removed non-functional "DEMO WORKSPACE" pill */}
           <div className="flex items-center gap-3">
             <button

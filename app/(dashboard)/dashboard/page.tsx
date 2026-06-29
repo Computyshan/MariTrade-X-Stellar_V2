@@ -451,7 +451,7 @@ export default function DashboardHome() {
     <DashboardLayout>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-[28px] font-display font-medium text-ink tracking-tight leading-tight">
+          <h1 className="text-[42px] font-display font-medium text-ink tracking-tight leading-tight">
             Kamusta, {currentUser.fullName.split(' ')[0]}.
           </h1>
           <p className="text-[11px] text-ink-faint mt-1.5 flex items-center gap-3 font-medium tracking-wide">
@@ -623,15 +623,16 @@ export default function DashboardHome() {
             <div className="space-y-6">
               <LogisticsScopeBanner jobRole={currentUser.jobRole} shipments={shipments} milestones={milestones} />
               <div className="bg-white border border-[color:var(--color-mist-dark)] rounded-3xl shadow-sm overflow-hidden">
-                <div className="bg-[color:var(--color-ink)] px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-3">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"><ClipboardList className="w-5 h-5 text-[color:var(--color-teal)]" /></div>
+                <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-3 relative overflow-hidden" style={{ background: 'linear-gradient(110deg, var(--color-ink) 0%, var(--color-ink-soft) 55%, var(--color-steel) 145%)' }}>
+                  <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle at 90% 0%, var(--color-mist) 0%, transparent 55%)' }} />
+                  <div className="flex items-center gap-3 flex-1 relative z-10">
+                    <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center"><ClipboardList className="w-5 h-5 text-[color:var(--color-mist)]" /></div>
                     <div>
-                      <h2 className="text-white font-black text-base tracking-tight">Log a Milestone</h2>
-                      <p className="text-white/50 text-[11px] mt-0.5">Every log is committed to the Stellar trade ledger and cannot be undone.</p>
+                      <h2 className="text-white font-display font-medium text-[26px] tracking-tight">Log a Milestone</h2>
+                      <p className="text-white/55 text-[11px] mt-0.5">Every log is committed to the Stellar trade ledger and cannot be undone.</p>
                     </div>
                   </div>
-                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${selectedShipmentLogId ? 'bg-[color:var(--color-teal-light)] border-[color:var(--color-teal)] text-[color:var(--color-teal)]' : 'bg-white/5 border-white/10 text-white/40'}`}>
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border relative z-10 ${selectedShipmentLogId ? 'bg-[color:var(--color-teal-light)] border-[color:var(--color-teal)] text-[color:var(--color-teal)]' : 'bg-white/5 border-white/10 text-white/40'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${selectedShipmentLogId ? 'bg-[color:var(--color-teal)] animate-pulse' : 'bg-white/20'}`} />
                     {selectedShipmentLogId ? 'Ready to Log' : 'Awaiting Cargo Select'}
                   </div>
@@ -639,7 +640,7 @@ export default function DashboardHome() {
                 <form onSubmit={handleQuickLogMilestone} className="p-6 space-y-0">
                   {logStatusError && <div className="mb-5 bg-[color:var(--color-wine-light)] border border-[color:var(--color-wine)] text-[color:var(--color-wine)] text-xs p-3.5 rounded-xl leading-normal flex items-start gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{logStatusError}</span></div>}
                   {logStatusSuccess && <div className="mb-5 bg-[color:var(--color-teal-light)] border border-[color:var(--color-teal)] text-[color:var(--color-teal)] text-xs p-3.5 rounded-xl font-bold flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /><span>{logStatusSuccess}</span></div>}
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-0 md:gap-px bg-[color:var(--color-mist)] rounded-2xl overflow-hidden border border-[color:var(--color-mist-dark)]">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-0 md:gap-px rounded-2xl overflow-hidden border border-[color:var(--color-mist-dark)]" style={{ background: 'linear-gradient(120deg, var(--color-mist) 0%, var(--color-steel) 160%)', boxShadow: 'inset 0 1px 0 rgba(207,226,230,0.6)' }}>
                     <MilestoneStep step={1} label="Cargo Reference" hint="Which shipment are you handling?" active={true} done={!!selectedShipmentLogId}>
                       <select className="w-full bg-white border border-mist rounded-lg px-3 py-2 text-xs text-ink outline-none focus:border-amber font-sans" value={selectedShipmentLogId} onChange={(e) => { setSelectedShipmentLogId(e.target.value); setLogStatusError(''); setLogStatusSuccess(''); }}>
                         <option value="">— Select assigned cargo —</option>
@@ -743,14 +744,14 @@ export default function DashboardHome() {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-extrabold text-sm text-[color:var(--color-ink)] tracking-tight flex items-center gap-2"><Ship className="w-4 h-4 text-[color:var(--color-teal)]" />Assigned Shipments</h3>
+                  <h3 className="font-display font-medium text-[20px] text-[color:var(--color-ink)] tracking-tight flex items-center gap-2"><Ship className="w-4 h-4 text-[color:var(--color-teal)]" />Assigned Shipments</h3>
                   <div className="relative"><Search className="w-3.5 h-3.5 text-ink-faint absolute left-2.5 top-2" /><input type="text" placeholder="Search ref…" className="bg-white border border-[color:var(--color-mist-dark)] pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none focus:border-[color:var(--color-teal)] w-36" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
                 </div>
-                <div className="bg-white border border-[color:var(--color-mist-dark)] rounded-2xl overflow-hidden shadow-sm">
+                <div className="border border-[color:var(--color-mist-dark)] rounded-2xl overflow-hidden shadow-sm" style={{ background: 'linear-gradient(170deg, #ffffff 0%, var(--color-mist-light) 40%, var(--color-mist) 100%)' }}>
                   <div className="divide-y divide-[color:var(--color-mist)] max-h-[420px] overflow-y-auto">
                     {filteredShipments.length === 0 ? <div className="py-12 text-center text-xs text-[color:var(--color-ink-faint)] font-mono">NO ASSIGNED SHIPMENTS FOUND</div>
                     : filteredShipments.map((ship) => (
-                      <div key={ship.id} className={`p-4 flex items-center gap-4 hover:bg-[color:var(--color-mist-light)] transition-colors cursor-pointer ${selectedShipmentLogId === ship.id ? 'bg-[color:var(--color-teal-light)] border-l-2 border-l-[color:var(--color-teal)]' : ''}`} onClick={() => { setSelectedShipmentLogId(ship.id); setLogStatusError(''); setLogStatusSuccess(''); }}>
+                      <div key={ship.id} className={`p-4 flex items-center gap-4 transition-colors cursor-pointer ${selectedShipmentLogId === ship.id ? 'border-l-2 border-l-[color:var(--color-teal)]' : 'hover:border-l-2 hover:border-l-[color:var(--color-mist-dark)]'}`} style={selectedShipmentLogId === ship.id ? { background: 'linear-gradient(100deg, var(--color-teal-light) 0%, var(--color-mist) 100%)' } : undefined} onClick={() => { setSelectedShipmentLogId(ship.id); setLogStatusError(''); setLogStatusSuccess(''); }}>
                         <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5 ${ship.status === 'DELIVERED' ? 'bg-teal' : ship.status === 'IN_TRANSIT' ? 'bg-[color:var(--color-teal)] animate-pulse' : ship.status === 'CUSTOMS_CLEARANCE' ? 'bg-amber' : 'bg-[color:var(--color-mist-dark)]'}`} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -850,7 +851,7 @@ function EscrowHoldingsCard({ totalEscrow }: { totalEscrow: number }) {
 
 function MilestoneStep({ step, label, hint, active, done, required, children }: { step: number; label: string; hint: string; active: boolean; done: boolean; required?: boolean; children: React.ReactNode; }) {
   return (
-    <div className={`bg-white p-5 space-y-3 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`}>
+    <div className={`p-5 space-y-3 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`} style={{ background: done ? 'linear-gradient(155deg, #ffffff 0%, var(--color-teal-light) 75%, rgba(11,175,176,0.12) 100%)' : 'linear-gradient(155deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%)' }}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 ${done ? 'bg-[color:var(--color-teal)] text-white' : 'bg-[color:var(--color-mist)] text-[color:var(--color-ink-faint)] border border-[color:var(--color-mist-dark)]'}`}>{done ? '✓' : step}</div>
@@ -885,12 +886,13 @@ function LogisticsScopeBanner({ jobRole, shipments, milestones }: { jobRole: Job
   ];
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-      <div className={`lg:col-span-1 rounded-2xl border-2 ${meta.accentBorder} ${meta.accentBg} p-5 flex flex-col justify-between gap-3`}>
-        <div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${meta.badgeBg} flex-shrink-0`}>{meta.icon}</div><div><p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--color-ink-faint)]">Active Role</p><p className={`text-sm font-extrabold leading-snug ${meta.accentText}`}>{meta.label}</p></div></div>
-        <p className="text-[11px] text-[color:var(--color-ink-faint)] leading-relaxed">{meta.description}</p>
-        <div className="flex items-center gap-1.5"><Lock className={`w-3 h-3 ${meta.accentText} opacity-60`} /><span className={`text-[9px] font-black uppercase tracking-widest ${meta.accentText} opacity-70`}>{roleMillestones.length} milestones in scope</span></div>
+      <div className={`lg:col-span-1 rounded-2xl border-2 ${meta.accentBorder} p-5 flex flex-col justify-between gap-3 text-white shadow-md relative overflow-hidden`} style={{ background: 'linear-gradient(140deg, var(--color-ink) 0%, var(--color-ink-soft) 40%, var(--color-steel) 115%)', boxShadow: '0 4px 16px rgba(20,32,52,0.25), 0 1px 3px rgba(129,151,198,0.2)' }}>
+        <div className="absolute inset-0 opacity-30 pointer-events-none" style={{ background: 'radial-gradient(circle at 85% 15%, var(--color-mist) 0%, transparent 55%), radial-gradient(circle at 15% 90%, rgba(207,226,230,0.4) 0%, transparent 50%)' }} />
+        <div className="flex items-center gap-3 relative z-10"><div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/15 backdrop-blur-sm flex-shrink-0`}>{meta.icon}</div><div><p className="text-[9px] font-black uppercase tracking-widest text-white/55">Active Role</p><p className="text-[22px] font-display font-medium leading-snug text-white">{meta.label}</p></div></div>
+        <p className="text-[11px] text-white/70 leading-relaxed relative z-10">{meta.description}</p>
+        <div className="flex items-center gap-1.5 relative z-10"><Lock className="w-3 h-3 text-[color:var(--color-mist)] opacity-80" /><span className="text-[9px] font-black uppercase tracking-widest text-[color:var(--color-mist)] opacity-90">{roleMillestones.length} milestones in scope</span></div>
       </div>
-      {stats.map((stat) => (<div key={stat.label} className="bg-white border border-[color:var(--color-mist-dark)] rounded-2xl p-5 flex flex-col justify-between"><span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--color-ink-faint)]">{stat.label}</span><div><strong className="text-[32px] font-black text-[color:var(--color-ink)] leading-none tracking-tight">{stat.value}</strong><p className="text-[11px] text-[color:var(--color-ink-faint)] mt-1">{stat.sub}</p></div></div>))}
+      {stats.map((stat) => (<div key={stat.label} className="border border-[color:var(--color-mist-dark)] rounded-2xl p-5 flex flex-col justify-between shadow-sm" style={{ background: 'linear-gradient(145deg, #ffffff 0%, var(--color-mist) 55%, var(--color-mist-dark) 100%)', boxShadow: '0 1px 3px rgba(129,151,198,0.12), 0 4px 12px rgba(129,151,198,0.08)' }}><span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--color-ink-faint)]">{stat.label}</span><div><strong className="text-[40px] font-display font-medium text-[color:var(--color-ink)] leading-none tracking-tight">{stat.value}</strong><p className="text-[11px] text-[color:var(--color-ink-faint)] mt-1">{stat.sub}</p></div></div>))}
     </div>
   );
 }
