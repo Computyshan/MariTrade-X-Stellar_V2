@@ -31,17 +31,17 @@ interface DecoratedFolder extends VaultFolder {
 // ── STATUS BADGE CONFIG ──────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<ShipmentStatus, { label: string; className: string }> = {
-  PENDING_EXPORTER:  { label: 'Pending Exporter', className: 'bg-gray-100 text-gray-600' },
-  COUNTER_OFFER:     { label: 'Counter Offer',    className: 'bg-amber-100 text-amber-700' },
-  CONFIRMED:         { label: 'Confirmed',         className: 'bg-maritime-100 text-maritime-700' },
-  ESCROW_FUNDED:     { label: 'Escrow Funded',     className: 'bg-maritime-100 text-maritime-400' },
-  IN_TRANSIT:        { label: 'In Transit',         className: 'bg-ocean-100 text-ocean-600' },
-  AT_PORT:           { label: 'At Port',            className: 'bg-sky-100 text-sky-700' },
-  CUSTOMS_CLEARANCE: { label: 'Customs Clearance', className: 'bg-maritime-50 text-maritime-700' },
-  OUT_FOR_DELIVERY:  { label: 'Out for Delivery',  className: 'bg-amber-100 text-amber-700' },
-  DELIVERED:         { label: 'Delivered',          className: 'bg-green-100 text-green-700' },
-  DISPUTED:          { label: 'Disputed',           className: 'bg-red-50 text-red-500' },
-  CANCELLED:         { label: 'Cancelled',          className: 'bg-gray-100 text-gray-500' },
+  PENDING_EXPORTER:  { label: 'Pending Exporter', className: 'bg-mist text-ink-faint' },
+  COUNTER_OFFER:     { label: 'Counter Offer',    className: 'bg-amber-light text-amber' },
+  CONFIRMED:         { label: 'Confirmed',         className: 'bg-teal-light text-teal' },
+  ESCROW_FUNDED:     { label: 'Escrow Funded',     className: 'bg-steel-light text-steel' },
+  IN_TRANSIT:        { label: 'In Transit',         className: 'bg-steel-light text-steel' },
+  AT_PORT:           { label: 'At Port',            className: 'bg-mist text-ink-faint' },
+  CUSTOMS_CLEARANCE: { label: 'Customs Clearance', className: 'bg-teal-light text-teal' },
+  OUT_FOR_DELIVERY:  { label: 'Out for Delivery',  className: 'bg-amber-light text-amber' },
+  DELIVERED:         { label: 'Delivered',          className: 'bg-teal-light text-teal' },
+  DISPUTED:          { label: 'Disputed',           className: 'bg-wine-light text-wine' },
+  CANCELLED:         { label: 'Cancelled',          className: 'bg-mist text-ink-faint' },
 };
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ export default function DocumentVaultPage() {
   if (!currentUser) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center py-24 text-gray-400 text-xs gap-2">
+        <div className="flex items-center justify-center py-24 text-ink-faint text-xs gap-2">
           <RefreshCw className="w-4 h-4 animate-spin" />
           Loading your session…
         </div>
@@ -126,28 +126,28 @@ export default function DocumentVaultPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <FolderLock className="w-6 h-6 text-maritime-400" />
-            <h1 className="text-3xl font-black text-maritime-900 tracking-tight">BOC Document Vault</h1>
+            <FolderLock className="w-6 h-6" style={{ color: 'var(--theme-accent)' }} />
+            <h1 className="text-3xl font-display font-medium text-ink tracking-tight">BOC Document Vault</h1>
           </div>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-ink-faint">
             Shipment folders are visible to all authorized users. Each folder requires its vault password to access documents inside.
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-xs shrink-0">
-          <div className="flex items-center gap-1.5 bg-white border border-sand-200 px-3 py-1.5 rounded-lg">
-            <div className={`w-2 h-2 rounded-full ${hasAccess ? 'bg-ocean-400' : 'bg-red-400'}`} />
-            <span className="font-semibold text-gray-700">
+          <div className="flex items-center gap-1.5 bg-white border border-mist px-3 py-1.5 rounded-lg">
+            <div className={`w-2 h-2 rounded-full ${hasAccess ? 'bg-teal' : 'bg-wine'}`} />
+            <span className="font-semibold text-ink-faint">
               {hasAccess ? 'Vault Access: Authorized' : 'Vault Access: Restricted'}
             </span>
           </div>
-          <div className="bg-maritime-50 border border-maritime-100 text-maritime-700 font-bold px-3 py-1.5 rounded-lg">
+          <div className="bg-mist-light border border-mist text-ink-faint font-bold px-3 py-1.5 rounded-lg">
             {folders.length} folder{folders.length !== 1 ? 's' : ''}
           </div>
           <button
             onClick={fetchFolders}
             disabled={loading}
-            className="p-2 rounded-lg border border-sand-200 text-gray-400 hover:text-maritime-400 hover:border-maritime-200 transition-colors disabled:opacity-40"
+            className="p-2 rounded-lg border border-mist text-ink-faint hover:text-steel hover:border-steel/30 transition-colors disabled:opacity-40"
             title="Refresh folders"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -170,25 +170,25 @@ export default function DocumentVaultPage() {
         <div className="space-y-4">
 
           {/* SEARCH */}
-          <div className="bg-white border border-sand-200 rounded-xl p-3 flex items-center gap-3">
-            <Search className="w-4 h-4 text-gray-400 shrink-0" />
+          <div className="bg-white border border-mist rounded-xl p-3 flex items-center gap-3">
+            <Search className="w-4 h-4 text-ink-faint shrink-0" />
             <input
               type="text"
               placeholder="Search by folder name, reference code, cargo description, port…"
-              className="flex-1 bg-transparent text-xs outline-none placeholder:text-gray-400"
+              className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink-faint"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
             {searchTerm && (
-              <button onClick={() => setSearchTerm('')} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setSearchTerm('')} className="text-ink-faint hover:text-ink">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
           {/* SECURITY BANNER */}
-          <div className="bg-maritime-50 border border-maritime-100 rounded-xl p-3 flex items-start gap-3 text-xs text-maritime-700">
-            <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-maritime-400" />
+          <div className="bg-mist-light border border-mist rounded-xl p-3 flex items-start gap-3 text-xs text-ink-faint">
+            <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--theme-accent)' }} />
             <div>
               <strong className="font-bold">Folder Vault Security</strong> — All shipment folders below are visible to authorized users.
               Click any folder to enter its vault password and access the documents inside.
@@ -198,8 +198,8 @@ export default function DocumentVaultPage() {
 
           {/* LOADING */}
           {loading && (
-            <div className="flex items-center justify-center py-20 gap-3 text-gray-400 text-xs">
-              <RefreshCw className="w-4 h-4 animate-spin text-maritime-400" />
+            <div className="flex items-center justify-center py-20 gap-3 text-ink-faint text-xs">
+              <RefreshCw className="w-4 h-4 animate-spin" style={{ color: 'var(--theme-accent)' }} />
               Loading vault folders…
             </div>
           )}
@@ -215,7 +215,7 @@ export default function DocumentVaultPage() {
 
           {/* EMPTY */}
           {!loading && !fetchErr && filteredFolders.length === 0 && (
-            <div className="text-center py-16 bg-white border border-sand-200 rounded-xl text-gray-400 text-xs">
+            <div className="text-center py-16 bg-white border border-mist rounded-xl text-ink-faint text-xs">
               {searchTerm ? 'No folders match your search.' : 'No vault folders yet. Create a shipment to generate one.'}
             </div>
           )}
@@ -234,17 +234,17 @@ export default function DocumentVaultPage() {
                     role="button"
                     tabIndex={0}
                     onKeyDown={e => e.key === 'Enter' && router.push(`/documents/${folder.id}`)}
-                    className="group flex flex-col rounded-2xl border border-sand-200 bg-white p-3 text-left transition-all hover:border-maritime-200 hover:bg-maritime-50/30 hover:shadow-md active:scale-[0.97] cursor-pointer"
+                    className="group flex flex-col rounded-2xl border border-mist bg-white p-3 text-left transition-all hover:shadow-md active:scale-[0.97] cursor-pointer"
                   >
                     {/* Square icon area */}
-                    <div className="w-full aspect-square rounded-xl bg-sand-100 group-hover:bg-maritime-100/60 transition-colors flex items-center justify-center mb-3">
-                      <FolderLock className="w-10 h-10 text-gray-400 group-hover:text-maritime-400 transition-colors" />
+                    <div className="w-full aspect-square rounded-xl bg-mist-light group-hover:bg-mist transition-colors flex items-center justify-center mb-3">
+                      <FolderLock className="w-10 h-10 text-ink-faint/40 group-hover:text-ink-faint transition-colors" />
                     </div>
 
-                    <p className="text-[11px] font-black text-maritime-900 font-mono truncate w-full">
+                    <p className="text-[11px] font-bold text-ink truncate w-full">
                       {folder.folderName}
                     </p>
-                    <p className="text-[9px] font-mono text-gray-400 truncate w-full mt-0.5">
+                    <p className="text-[9px] text-ink-faint truncate w-full mt-0.5">
                       {folder.referenceCode}
                     </p>
 
@@ -254,7 +254,7 @@ export default function DocumentVaultPage() {
                           {statusCfg.label}
                         </span>
                       )}
-                      <span className="text-[9px] text-gray-400 flex items-center gap-0.5 ml-auto">
+                      <span className="text-[9px] text-ink-faint flex items-center gap-0.5 ml-auto">
                         <FileText className="w-2.5 h-2.5" />
                         {folder.documents.length}
                       </span>

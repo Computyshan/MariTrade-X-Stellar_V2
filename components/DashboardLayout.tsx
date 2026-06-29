@@ -27,9 +27,11 @@ import { useNotifications } from '@/hooks/use-notifications';
 interface DashboardLayoutProps {
   children: React.ReactNode;
   flush?: boolean;
+  /** Set to true for Trade Party users to apply the wine-toned page background */
+  tradeParty?: boolean;
 }
 
-export default function DashboardLayout({ children, flush = false }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, flush = false, tradeParty = false }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { currentUser, allUsers, setCurrentUser, signOut } = useUserSession();
@@ -103,15 +105,23 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
     <div data-theme={themeAttr} className="min-h-screen bg-mist-light text-ink font-sans flex">
 
       {/* ── SIDEBAR ── */}
-      <aside className="hidden md:flex flex-col w-[220px] text-white flex-shrink-0 select-none h-screen sticky top-0 relative" style={{ background: 'linear-gradient(175deg, var(--color-ink) 0%, var(--color-ink-soft) 45%, var(--color-steel) 160%)' }}>
-
-        {/* Subtle mist shimmer overlay on the sidebar */}
-        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 110% 5%, rgba(207,226,230,0.18) 0%, transparent 45%), radial-gradient(ellipse at -10% 95%, rgba(207,226,230,0.12) 0%, transparent 50%)' }} />
+      <aside
+        className="hidden md:flex flex-col w-[220px] text-white flex-shrink-0 select-none h-screen sticky top-0 relative"
+        style={isTradeParty
+          ? { background: 'linear-gradient(175deg, #5C0A2E 0%, #8B1646 45%, #6E1138 160%)' }
+          : { background: 'linear-gradient(175deg, var(--color-ink) 0%, var(--color-ink-soft) 45%, var(--color-steel) 160%)' }
+        }
+      >
+        {/* Shimmer overlay — amber warmth for Trade Party, cool mist for Logistics */}
+        <div className="absolute inset-0 pointer-events-none" style={isTradeParty
+          ? { background: 'radial-gradient(ellipse at 110% 5%, rgba(254,153,0,0.22) 0%, transparent 45%), radial-gradient(ellipse at -10% 95%, rgba(254,153,0,0.10) 0%, transparent 50%)' }
+          : { background: 'radial-gradient(ellipse at 110% 5%, rgba(207,226,230,0.18) 0%, transparent 45%), radial-gradient(ellipse at -10% 95%, rgba(207,226,230,0.12) 0%, transparent 50%)' }
+        } />
 
         {/* Main MariTrade logo — always shown, always the master brand */}
-        <div className="px-4 py-4 border-b border-white/5 relative z-10">
+        <div className="px-4 py-4 border-b border-white/10 relative z-10">
           <Image
-            src="/MariTrade logo.png"
+            src="/Logo-No-Text.png"
             alt="MariTrade"
             width={140}
             height={52}
@@ -121,7 +131,13 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         </div>
 
         {/* Portal badge — shows which branch this user belongs to */}
-        <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2.5 relative z-10" style={{ background: 'linear-gradient(90deg, rgba(207,226,230,0.08) 0%, rgba(129,151,198,0.13) 100%)' }}>
+        <div
+          className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2.5 relative z-10"
+          style={isTradeParty
+            ? { background: 'linear-gradient(90deg, rgba(254,153,0,0.12) 0%, rgba(254,153,0,0.06) 100%)' }
+            : { background: 'linear-gradient(90deg, rgba(207,226,230,0.08) 0%, rgba(129,151,198,0.13) 100%)' }
+          }
+        >
           <Image
             src={isTradeParty ? '/MariTrade-Trade-Party-Logo.png' : '/MariTrade-Logistic-Chain-Logo.png'}
             alt={isTradeParty ? 'Trade Party Portal' : 'Logistics Chain Portal'}
@@ -138,13 +154,16 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         </div>
 
         {/* User block */}
-        <Link href="/profile" className="px-4 py-4 flex items-center gap-3 border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer group relative z-10">
-          <div className="w-9 h-9 rounded-lg bg-ink-soft flex items-center justify-center font-bold text-xs text-white shrink-0 tracking-wide">
+        <Link href="/profile" className="px-4 py-4 flex items-center gap-3 border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer group relative z-10">
+          <div
+            className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 tracking-wide"
+            style={isTradeParty ? { background: 'rgba(254,153,0,0.25)' } : { background: 'var(--color-ink-soft)' }}
+          >
             {userInitials}
           </div>
           <div className="overflow-hidden flex-1">
             <h4 className="text-[11px] font-bold truncate text-white leading-tight">{currentUser.fullName}</h4>
-            <p className="text-[10px] text-white/40 font-medium tracking-wider uppercase truncate mt-0.5">{currentUser.companyName}</p>
+            <p className="text-[10px] font-medium tracking-wider uppercase truncate mt-0.5" style={{ color: isTradeParty ? 'rgba(254,153,0,0.55)' : 'rgba(255,255,255,0.4)' }}>{currentUser.companyName}</p>
           </div>
         </Link>
 
@@ -153,21 +172,22 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
           {navItems.map((item) => {
             const IconComp = item.icon;
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href + '/'));
+            const hoverBg = isTradeParty
+              ? 'linear-gradient(90deg, rgba(254,153,0,0.10) 0%, rgba(254,153,0,0.05) 100%)'
+              : 'linear-gradient(90deg, rgba(207,226,230,0.07) 0%, rgba(129,151,198,0.10) 100%)';
             return (
               <Link
                 key={item.name}
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[12px] font-semibold transition-all duration-150 ${
-                  isActive
-                    ? ''
-                    : 'text-white/55 hover:text-white/90'
+                  isActive ? '' : 'text-white/55 hover:text-white/90'
                 }`}
                 style={isActive ? {
                   background: 'linear-gradient(90deg, var(--theme-sidebar-active-bg) 0%, rgba(207,226,230,0.10) 100%)',
                   color: 'var(--theme-sidebar-active-text)',
                   borderLeft: '2px solid var(--theme-sidebar-active-text)',
                 } : { transition: 'background 0.15s' }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(90deg, rgba(207,226,230,0.07) 0%, rgba(129,151,198,0.10) 100%)'; }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = hoverBg; }}
                 onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = ''; }}
               >
                 <IconComp className="w-[15px] h-[15px] shrink-0" />
@@ -178,11 +198,20 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         </nav>
 
         {/* NEW SHIPMENT */}
-        <div className="px-4 py-4 border-t border-white/5 relative z-10" style={{ background: 'linear-gradient(90deg, rgba(207,226,230,0.05) 0%, rgba(129,151,198,0.10) 100%)' }}>
+        <div
+          className="px-4 py-4 border-t border-white/10 relative z-10"
+          style={isTradeParty
+            ? { background: 'linear-gradient(90deg, rgba(254,153,0,0.08) 0%, rgba(254,153,0,0.04) 100%)' }
+            : { background: 'linear-gradient(90deg, rgba(207,226,230,0.05) 0%, rgba(129,151,198,0.10) 100%)' }
+          }
+        >
           <Link
             href="/shipments/new"
-            className="w-full text-white/80 hover:bg-white/10 hover:text-white font-bold py-2.5 rounded-lg text-[11px] tracking-wider transition-all flex items-center justify-center gap-1.5 uppercase border"
-            style={{ borderColor: 'var(--theme-accent-border)' }}
+            className="w-full font-bold py-2.5 rounded-lg text-[11px] tracking-wider transition-all flex items-center justify-center gap-1.5 uppercase border hover:bg-white/10"
+            style={isTradeParty
+              ? { borderColor: 'rgba(254,153,0,0.45)', color: 'rgba(254,153,0,0.85)' }
+              : { borderColor: 'var(--theme-accent-border)', color: 'rgba(255,255,255,0.8)' }
+            }
           >
             + NEW SHIPMENT
           </Link>
@@ -193,20 +222,31 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
 
         {/* TOP BAR */}
-        <header className="border-b border-mist px-6 py-3 flex items-center justify-between flex-shrink-0" style={{ background: 'linear-gradient(90deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%)' }}>
-          {/* CLEANUP FIX: removed non-functional "DEMO WORKSPACE" pill */}
+        <header
+          className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0"
+          style={isTradeParty
+            ? { background: 'linear-gradient(90deg, #6E1138 0%, #8B1646 50%, #5C0A2E 100%)', borderBottomColor: 'rgba(255,255,255,0.1)' }
+            : { background: 'linear-gradient(90deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%)', borderBottomColor: 'var(--color-mist)' }
+          }
+        >
           <div className="flex items-center gap-3">
             <button
-              className="md:hidden p-1.5 rounded-lg text-ink-faint hover:bg-mist-light"
+              className={`md:hidden p-1.5 rounded-lg transition-colors ${isTradeParty ? 'text-white/70 hover:bg-white/10' : 'text-ink-faint hover:bg-mist-light'}`}
               onClick={() => setMobileMenuOpen(true)}
             >
               <Menu className="w-5 h-5" />
             </button>
+            {/* Trade Party topbar identity tag */}
+            {isTradeParty && (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: 'rgba(254,153,0,0.15)', border: '1px solid rgba(254,153,0,0.3)' }}>
+                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--color-amber)' }}>Trade Party Portal</span>
+              </div>
+            )}
           </div>
 
           {/* Right: user info + sign out */}
           <div className="flex items-center gap-3">
-            <span className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
+            <span className={`hidden sm:flex items-center gap-1.5 text-[11px] font-semibold ${isTradeParty ? 'text-white/50' : 'text-ink-faint'}`}>
               {currentUser?.jobRole.replace(/_/g, ' ')}
             </span>
 
@@ -214,12 +254,12 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
             <div className="relative">
               <button
                 onClick={() => setShowNotifPanel(v => !v)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-ink-faint hover:bg-mist-light transition-colors relative"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors relative ${isTradeParty ? 'text-white/70 hover:bg-white/10' : 'text-ink-faint hover:bg-mist-light'}`}
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
                 {notif.unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center bg-wine text-white text-[9px] font-bold rounded-full px-1">
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center bg-amber text-white text-[9px] font-bold rounded-full px-1">
                     {notif.unreadCount > 9 ? '9+' : notif.unreadCount}
                   </span>
                 )}
@@ -300,12 +340,19 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
               </AnimatePresence>
             </div>
 
-            <Link href="/profile" className="w-8 h-8 rounded-full flex items-center justify-center text-ink-faint hover:bg-mist-light transition-colors">
+            <Link
+              href="/profile"
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isTradeParty ? 'text-white/70 hover:bg-white/10' : 'text-ink-faint hover:bg-mist-light'}`}
+            >
               <UserCircle className="w-5 h-5" />
             </Link>
             <button
               onClick={handleSignOut}
-              className="text-[11px] font-bold text-ink-faint hover:text-wine transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-wine-light"
+              className={`text-[11px] font-bold transition-colors cursor-pointer px-2 py-1 rounded-lg ${
+                isTradeParty
+                  ? 'text-white/60 hover:text-white hover:bg-white/10'
+                  : 'text-ink-faint hover:text-wine hover:bg-wine-light'
+              }`}
             >
               Sign Out
             </button>
@@ -322,14 +369,19 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
                 animate={{ x: 0 }}
                 exit={{ x: '-100%' }}
                 transition={{ duration: 0.2 }}
-                className="fixed top-0 left-0 bottom-0 w-72 bg-ink text-white z-50 flex flex-col shadow-2xl md:hidden"
+                className="fixed top-0 left-0 bottom-0 w-72 text-white z-50 flex flex-col shadow-2xl md:hidden"
+                style={isTradeParty
+                  ? { background: 'linear-gradient(175deg, #5C0A2E 0%, #8B1646 50%, #6E1138 100%)' }
+                  : { background: 'var(--color-ink)' }
+                }
               >
-                <div className="px-5 py-5 border-b border-white/5 flex items-center justify-between">
+                <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 bg-white/10 rounded-lg flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={isTradeParty ? { background: 'rgba(254,153,0,0.2)' } : { background: 'rgba(255,255,255,0.1)' }}>
                       <Ship className="w-3.5 h-3.5 text-white" />
                     </div>
                     <span className="text-sm font-bold tracking-widest text-white">MARITRADE</span>
+                    {isTradeParty && <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded" style={{ background: 'rgba(254,153,0,0.2)', color: 'var(--color-amber)' }}>Trade Party</span>}
                   </div>
                   <button onClick={() => setMobileMenuOpen(false)} className="p-1 hover:bg-white/10 rounded">
                     <X className="w-5 h-5 text-white/60" />
@@ -345,8 +397,16 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
                         href={item.href}
                         onClick={() => setMobileMenuOpen(false)}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[12px] font-semibold transition-colors ${
-                          isActive ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80'
+                          isActive
+                            ? 'text-white'
+                            : 'text-white/50 hover:bg-white/5 hover:text-white/80'
                         }`}
+                        style={isActive ? {
+                          background: isTradeParty
+                            ? 'linear-gradient(90deg, rgba(254,153,0,0.18) 0%, rgba(254,153,0,0.08) 100%)'
+                            : 'rgba(255,255,255,0.1)',
+                          borderLeft: isTradeParty ? '2px solid var(--color-amber)' : 'none',
+                        } : {}}
                       >
                         <IconComp className="w-4 h-4" />
                         <span>{item.name}</span>
@@ -360,7 +420,10 @@ export default function DashboardLayout({ children, flush = false }: DashboardLa
         </AnimatePresence>
 
         {/* MAIN CONTENT */}
-        <main className="flex-1 overflow-y-auto bg-mist-light">
+        <main
+          className={`flex-1 overflow-y-auto${tradeParty ? '' : ' bg-mist-light'}`}
+          style={tradeParty ? { background: 'linear-gradient(160deg, #fff0f5 0%, #fdf6f9 40%, var(--color-mist-light) 100%)' } : undefined}
+        >
           {flush ? (
             <div className="h-full w-full flex flex-col">{children}</div>
           ) : (

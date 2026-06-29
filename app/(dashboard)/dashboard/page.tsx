@@ -649,10 +649,6 @@ export default function DashboardHome() {
                       <p className="text-white/55 text-[13px] mt-0">Every log is committed to the Stellar trade ledger and cannot be undone.</p>
                     </div>
                   </div>
-                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border relative z-10 ${selectedShipmentLogId ? 'bg-[color:var(--color-teal-light)] border-[color:var(--color-teal)] text-[color:var(--color-teal)]' : 'bg-white/5 border-white/10 text-white/40'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${selectedShipmentLogId ? 'bg-[color:var(--color-teal)] animate-pulse' : 'bg-white/20'}`} />
-                    {selectedShipmentLogId ? 'Ready to Log' : 'Awaiting Cargo Select'}
-                  </div>
                 </div>
                 <form onSubmit={handleQuickLogMilestone} className="p-6 space-y-0">
                   {logStatusError && <div className="mb-5 bg-[color:var(--color-wine-light)] border border-[color:var(--color-wine)] text-[color:var(--color-wine)] text-xs p-3.5 rounded-xl leading-normal flex items-start gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{logStatusError}</span></div>}
@@ -761,7 +757,7 @@ export default function DashboardHome() {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display font-medium text-[20px] text-[color:var(--color-ink)] tracking-tight flex items-center gap-2"><Ship className="w-4 h-4 text-[color:var(--color-teal)]" />Assigned Shipments</h3>
+                  <h3 className="font-display font-medium text-[30px] text-[color:var(--color-ink)] tracking-tight flex items-center gap-2"><Ship className="w-7 h-7 text-[color:var(--color-teal)]" />Assigned Shipments</h3>
                   <div className="relative"><Search className="w-3.5 h-3.5 text-ink-faint absolute left-2.5 top-2" /><input type="text" placeholder="Search ref…" className="bg-white border border-[color:var(--color-mist-dark)] pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none focus:border-[color:var(--color-teal)] w-36" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
                 </div>
                 <div className="border border-[color:var(--color-mist-dark)] rounded-2xl overflow-hidden shadow-sm" style={{ background: 'linear-gradient(170deg, #ffffff 0%, var(--color-mist-light) 40%, var(--color-mist) 100%)' }}>

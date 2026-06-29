@@ -97,11 +97,11 @@ const JOB_ROLE_LABELS: Record<string, string> = {
 };
 
 const JOB_ROLE_COLOR: Record<string, string> = {
-  IMPORTER:           'bg-cyan-50 text-cyan-700 border-cyan-200',
-  EXPORTER:           'bg-amber-50 text-amber-700 border-amber-200',
-  CUSTOMS_BROKER:     'bg-violet-50 text-violet-700 border-violet-200',
-  FREIGHT_FORWARDER:  'bg-blue-50 text-blue-700 border-blue-200',
-  WAREHOUSE_OPERATOR: 'bg-purple-50 text-purple-700 border-purple-200',
+  IMPORTER:           'bg-wine-light text-wine border-wine/20',
+  EXPORTER:           'bg-amber-light text-amber border-amber/20',
+  CUSTOMS_BROKER:     'bg-steel-light text-steel border-steel/20',
+  FREIGHT_FORWARDER:  'bg-teal-light text-teal border-teal/20',
+  WAREHOUSE_OPERATOR: 'bg-mist text-ink-faint border-mist-dark',
 };
 
 const JOB_ROLE_ICON: Record<string, React.ReactNode> = {
@@ -119,7 +119,7 @@ function getInitials(name: string): string {
 }
 
 function getRoleColor(role: string): string {
-  return JOB_ROLE_COLOR[role] || 'bg-gray-100 text-gray-700 border-gray-200';
+  return JOB_ROLE_COLOR[role] || 'bg-mist text-ink-faint border-mist-dark';
 }
 
 // Currency-aware money formatter — falls back to USD if the thread has no currency set yet
@@ -202,8 +202,8 @@ export default function ChatNegotiationCenter() {
       <DashboardLayout flush={true}>
         <div className="flex h-screen w-full items-center justify-center">
           <div className="text-center space-y-3">
-            <div className="w-6 h-6 border-2 border-[#0058be] border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-[11px] text-gray-400 font-mono">Loading session...</p>
+            <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--theme-accent)', borderTopColor: 'transparent' }} />
+            <p className="text-[11px] text-ink-faint">Loading session...</p>
           </div>
         </div>
       </DashboardLayout>
@@ -215,8 +215,8 @@ export default function ChatNegotiationCenter() {
       <DashboardLayout flush={true}>
         <div className="flex h-screen w-full items-center justify-center">
           <div className="text-center space-y-3">
-            <p className="text-sm font-bold text-gray-700">Session expired</p>
-            <p className="text-[11px] text-gray-400">Please sign in again to continue.</p>
+            <p className="text-sm font-bold text-ink">Session expired</p>
+            <p className="text-[11px] text-ink-faint">Please sign in again to continue.</p>
           </div>
         </div>
       </DashboardLayout>
@@ -644,14 +644,14 @@ export default function ChatNegotiationCenter() {
 
   return (
     <DashboardLayout flush={true}>
-      <div className="flex flex-col h-screen w-full bg-white text-slate-800 overflow-hidden">
+      <div className="flex flex-col h-screen w-full bg-white text-ink overflow-hidden">
 
         {/* Toast */}
         {toast && (
           <div className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-xs font-bold border
             ${toast.type === 'error'
-              ? 'bg-red-50 border-red-200 text-red-700'
-              : 'bg-blue-50 border-blue-200 text-blue-700'}`}>
+              ? 'bg-wine-light border-wine/20 text-wine'
+              : 'bg-steel-light border-steel/20 text-steel'}`}>
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{toast.msg}</span>
             {toast.type === 'error' && (
@@ -666,15 +666,15 @@ export default function ChatNegotiationCenter() {
         )}
 
         {/* Top Header */}
-        <header className="h-14 bg-white border-b border-gray-200 px-4 md:px-5 flex items-center justify-between select-none shrink-0">
+        <header className="h-14 bg-white border-b border-mist px-4 md:px-5 flex items-center justify-between select-none shrink-0">
           <div className="flex items-center gap-3">
-            <MessageSquare className="w-5 h-5 text-[#0058be]" style={{ strokeWidth: 2.2 }} />
-            <span className="font-extrabold text-[13px] tracking-tight text-gray-900">
+            <MessageSquare className="w-5 h-5" style={{ color: 'var(--theme-accent)', strokeWidth: 2.2 }} />
+            <span className="font-bold text-[13px] tracking-tight text-ink">
               Messages &amp; Chat
             </span>
-            <div className="h-4 w-px bg-gray-200" />
+            <div className="h-4 w-px bg-mist" />
             {/* Network size pill */}
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-ocean-600 bg-ocean-50 border border-ocean-100 px-2.5 py-1 rounded-full">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal bg-teal-light border border-teal/20 px-2.5 py-1 rounded-full">
               <Network className="w-3 h-3" />
               {trustedMembers.length} trusted vendor{trustedMembers.length !== 1 ? 's' : ''}
             </div>
@@ -703,12 +703,12 @@ export default function ChatNegotiationCenter() {
               const step = (done: boolean, label: string, sub: string) => (
                 <div className="flex gap-2.5 items-start">
                   <div className={`shrink-0 mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center text-[9px] font-extrabold transition-all
-                    ${done ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-300 text-transparent'}`}>
+                    ${done ? 'border-teal bg-teal-light text-teal' : 'border-mist text-transparent'}`}>
                     {done ? '✓' : ''}
                   </div>
                   <div>
-                    <p className={`font-bold text-[11px] ${done ? 'text-gray-900' : 'text-gray-400'}`}>{label}</p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">{sub}</p>
+                    <p className={`font-bold text-[11px] ${done ? 'text-ink' : 'text-ink-faint'}`}>{label}</p>
+                    <p className="text-[10px] text-ink-faint mt-0.5">{sub}</p>
                   </div>
                 </div>
               );
@@ -718,36 +718,36 @@ export default function ChatNegotiationCenter() {
                   <button
                     type="button"
                     onClick={() => setShowChecklistPopover(p => !p)}
-                    className="relative bg-white border border-gray-200 hover:border-gray-300 p-1.5 rounded-lg flex items-center justify-center text-gray-600 cursor-pointer active:scale-95 transition-all"
+                    className="relative bg-white border border-mist hover:border-mist-dark p-1.5 rounded-lg flex items-center justify-center text-ink-faint cursor-pointer active:scale-95 transition-all"
                     title="View Receipt Checklist"
                   >
-                    <ClipboardList className="w-4 h-4 text-gray-500" />
+                    <ClipboardList className="w-4 h-4 text-ink-faint" />
                     {pendingCount > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#ba1a1a] text-[9px] text-white flex items-center justify-center rounded-full font-bold">
+                      <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-wine text-[9px] text-white flex items-center justify-center rounded-full font-bold">
                         {pendingCount}
                       </span>
                     )}
                   </button>
 
                   {showChecklistPopover && (
-                    <div className="absolute right-0 mt-2.5 w-80 bg-white shadow-2xl rounded-xl border border-gray-200 z-50 overflow-hidden">
-                      <div className="p-3 bg-[#111c30] flex items-center justify-between text-white">
-                        <h5 className="font-extrabold flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-mono">
+                    <div className="absolute right-0 mt-2.5 w-80 bg-white shadow-2xl rounded-xl border border-mist z-50 overflow-hidden">
+                      <div className="p-3 bg-ink flex items-center justify-between text-white">
+                        <h5 className="font-bold flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
                           <ClipboardList className="w-3.5 h-3.5" /> Receipt Checklist
                         </h5>
-                        <button onClick={() => setShowChecklistPopover(false)} className="text-white hover:text-red-400 cursor-pointer">
+                        <button onClick={() => setShowChecklistPopover(false)} className="text-white/60 hover:text-white cursor-pointer">
                           <X className="w-4 h-4" />
                         </button>
                       </div>
 
                       {/* Cargo summary if available */}
                       {(hasValue || hasCargo) && (
-                        <div className="px-4 pt-3 pb-2 bg-slate-50 border-b border-gray-100">
+                        <div className="px-4 pt-3 pb-2 bg-mist-light border-b border-mist">
                           {hasCargo && (
-                            <p className="text-[10px] text-gray-600 font-semibold truncate">📦 {receipt?.cargoDescription}</p>
+                            <p className="text-[10px] text-ink-faint font-semibold truncate">📦 {receipt?.cargoDescription}</p>
                           )}
                           {hasValue && (
-                            <p className="text-[11px] font-black text-[#0058be] font-mono mt-0.5">
+                            <p className="text-[11px] font-bold text-steel mt-0.5">
                               {formatMoney(receipt?.invoiceValue, receipt?.invoiceCurrency)}
                             </p>
                           )}
@@ -776,19 +776,19 @@ export default function ChatNegotiationCenter() {
                             ? 'Ready to prefill a new shipment record'
                             : 'Finalize the receipt to unlock it on Create Shipment')}
 
-                        <div className="pt-2 border-t border-gray-100">
+                        <div className="pt-2 border-t border-mist">
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-[9px] font-bold text-gray-400 uppercase font-mono">Progress</span>
-                            <span className="text-[9px] font-black text-[#0058be] font-mono">{pct}%</span>
+                            <span className="text-[9px] font-bold text-ink-faint uppercase">Progress</span>
+                            <span className="text-[9px] font-bold text-steel">{pct}%</span>
                           </div>
-                          <div className="bg-gray-100 h-1.5 w-full rounded-full overflow-hidden">
+                          <div className="bg-mist h-1.5 w-full rounded-full overflow-hidden">
                             <div
-                              className="bg-[#0058be] h-full rounded-full transition-all duration-500"
-                              style={{ width: `${pct}%` }}
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%`, background: 'var(--theme-accent)' }}
                             />
                           </div>
                           {isFinalized && (
-                            <p className="text-center text-[9px] font-extrabold mt-2 text-green-600 uppercase font-mono tracking-wider">
+                            <p className="text-center text-[9px] font-bold mt-2 text-teal uppercase tracking-wider">
                               ✓ Receipt Finalized — Ready for Shipment
                             </p>
                           )}
@@ -805,21 +805,21 @@ export default function ChatNegotiationCenter() {
               <button
                 type="button"
                 onClick={() => { setShowProfilePopover(p => !p); setShowChecklistPopover(false); }}
-                className="p-1.5 border border-gray-200 hover:border-[#0058be] rounded-lg text-gray-500 hover:text-[#0058be] bg-white transition-all cursor-pointer active:scale-95"
+                className="p-1.5 border border-mist hover:border-steel rounded-lg text-ink-faint hover:text-steel bg-white transition-all cursor-pointer active:scale-95"
                 title="My Profile"
               >
                 <User className="w-4 h-4" />
               </button>
 
               {showProfilePopover && currentUser && (
-                <div className="absolute right-0 mt-2.5 w-72 bg-white shadow-2xl rounded-xl border border-gray-200 z-50 overflow-hidden">
-                  <div className="p-4 bg-[#111c30] flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-black text-sm text-white shrink-0">
+                <div className="absolute right-0 mt-2.5 w-72 bg-white shadow-2xl rounded-xl border border-mist z-50 overflow-hidden">
+                  <div className="p-4 bg-ink flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-bold text-sm text-white shrink-0">
                       {getInitials(currentUser.fullName)}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-extrabold text-white text-xs truncate">{currentUser.fullName}</p>
-                      <p className="text-[10px] text-[#818ea1] truncate">{currentUser.email}</p>
+                      <p className="font-bold text-white text-xs truncate">{currentUser.fullName}</p>
+                      <p className="text-[10px] text-white/50 truncate">{currentUser.email}</p>
                     </div>
                     <button onClick={() => setShowProfilePopover(false)} className="ml-auto text-white/40 hover:text-white cursor-pointer shrink-0">
                       <X className="w-3.5 h-3.5" />
@@ -833,7 +833,7 @@ export default function ChatNegotiationCenter() {
                         {JOB_ROLE_LABELS[currentUser.jobRole] ?? currentUser.jobRole.replace(/_/g, ' ')}
                       </span>
                       {currentUser.kycStatus === 'VERIFIED' && (
-                        <span className="flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded">
+                        <span className="flex items-center gap-1 text-[9px] font-bold text-teal bg-teal-light border border-teal/20 px-2 py-0.5 rounded">
                           <ShieldCheck className="w-2.5 h-2.5" /> KYC Verified
                         </span>
                       )}
@@ -842,30 +842,31 @@ export default function ChatNegotiationCenter() {
                     {/* Details */}
                     <div className="space-y-1.5 px-1">
                       {currentUser.companyName && (
-                        <div className="flex items-center gap-2 text-[10px] text-gray-600">
-                          <Building2 className="w-3 h-3 text-gray-400 shrink-0" />
+                        <div className="flex items-center gap-2 text-[10px] text-ink-faint">
+                          <Building2 className="w-3 h-3 text-ink-faint/60 shrink-0" />
                           <span className="truncate">{currentUser.companyName}</span>
                         </div>
                       )}
                       {currentUser.contactNumber && (
-                        <div className="flex items-center gap-2 text-[10px] text-gray-600">
-                          <Phone className="w-3 h-3 text-gray-400 shrink-0" />
+                        <div className="flex items-center gap-2 text-[10px] text-ink-faint">
+                          <Phone className="w-3 h-3 text-ink-faint/60 shrink-0" />
                           <span>{currentUser.contactNumber}</span>
                         </div>
                       )}
                       {currentUser.fullAddress && (
-                        <div className="flex items-center gap-2 text-[10px] text-gray-600">
-                          <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
+                        <div className="flex items-center gap-2 text-[10px] text-ink-faint">
+                          <MapPin className="w-3 h-3 text-ink-faint/60 shrink-0" />
                           <span className="truncate">{currentUser.fullAddress}</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="border-t border-gray-100 pt-2">
+                    <div className="border-t border-mist pt-2">
                       <Link
                         href="/profile"
                         onClick={() => setShowProfilePopover(false)}
-                        className="flex items-center justify-center gap-1.5 w-full bg-[#0058be] hover:bg-[#004395] text-white font-bold py-2 rounded-lg text-[11px] transition-all"
+                        className="flex items-center justify-center gap-1.5 w-full text-white font-bold py-2 rounded-lg text-[11px] transition-all"
+                        style={{ background: 'var(--theme-feature)' }}
                       >
                         <ExternalLink className="w-3 h-3" /> View Full Profile
                       </Link>
@@ -881,16 +882,16 @@ export default function ChatNegotiationCenter() {
         <div className="flex-1 flex overflow-hidden w-full">
 
           {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
-          <div className="w-80 flex-shrink-0 border-r border-gray-200 flex flex-col h-full bg-slate-50/20 overflow-hidden">
+          <div className="w-80 flex-shrink-0 border-r border-mist flex flex-col h-full bg-mist-light/30 overflow-hidden">
 
             {/* Tab switcher */}
-            <div className="p-3 pb-2 border-b border-gray-200 bg-white">
-              <div className="flex bg-[#eceef0] p-0.5 rounded-lg w-full shadow-inner">
+            <div className="p-3 pb-2 border-b border-mist bg-white">
+              <div className="flex bg-mist-light p-0.5 rounded-lg w-full">
                 <button
                   type="button"
                   onClick={() => setSidebarTab('chats')}
                   className={`flex-1 text-center py-1.5 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer
-                    ${sidebarTab === 'chats' ? 'bg-white text-gray-950 shadow-sm' : 'text-gray-500 hover:text-gray-950'}`}
+                    ${sidebarTab === 'chats' ? 'bg-white text-ink shadow-sm' : 'text-ink-faint hover:text-ink'}`}
                 >
                   Chats ({threads.length})
                 </button>
@@ -898,13 +899,14 @@ export default function ChatNegotiationCenter() {
                   type="button"
                   onClick={() => { setSidebarTab('network'); fetchNetwork(); }}
                   className={`flex-1 text-center py-1.5 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer flex items-center justify-center gap-1
-                    ${sidebarTab === 'network' ? 'bg-white text-gray-950 shadow-sm' : 'text-gray-500 hover:text-gray-950'}`}
+                    ${sidebarTab === 'network' ? 'bg-white text-ink shadow-sm' : 'text-ink-faint hover:text-ink'}`}
                 >
                   <Network className="w-3 h-3" />
                   Network
                   {trustedMembers.length > 0 && (
                     <span className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-black
-                      ${sidebarTab === 'network' ? 'bg-ocean-400 text-white' : 'bg-gray-300 text-gray-600'}`}>
+                      ${sidebarTab === 'network' ? 'text-white' : 'bg-mist text-ink-faint'}`}
+                      style={sidebarTab === 'network' ? { background: 'var(--theme-accent)' } : {}}>
                       {trustedMembers.length}
                     </span>
                   )}
@@ -913,11 +915,11 @@ export default function ChatNegotiationCenter() {
             </div>
 
             {/* Search */}
-            <div className="p-3 bg-white border-b border-gray-100 shrink-0">
+            <div className="p-3 bg-white border-b border-mist shrink-0">
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-ink-faint absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
-                  className="w-full bg-white border border-gray-200 rounded-lg py-1.5 pl-8 pr-3 text-[11px] font-medium outline-none focus:border-[#0058be] transition-all"
+                  className="w-full bg-mist-light border border-mist rounded-lg py-1.5 pl-8 pr-3 text-[11px] font-medium outline-none focus:border-ink-faint transition-all"
                   placeholder={sidebarTab === 'chats' ? 'Filter chats...' : 'Search trusted vendors...'}
                   type="text"
                   value={sidebarTab === 'chats' ? channelSearch : networkSearch}
@@ -927,36 +929,37 @@ export default function ChatNegotiationCenter() {
             </div>
 
             {/* Scroll area */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50/30">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-mist-light/30">
 
               {/* ── CHATS TAB ──────────────────────────────────────────────── */}
               {sidebarTab === 'chats' && (
                 <>
                   <div className="flex items-center justify-between px-1 mb-1">
-                    <p className="text-[9px] font-extrabold text-[#76777d] uppercase tracking-wider font-mono">
+                    <p className="text-[9px] font-extrabold text-ink-faint uppercase tracking-wider font-mono">
                       Secure Channels
                     </p>
                     <button
                       type="button"
                       onClick={() => { setShowGroupModal(true); setGroupName(''); setGroupMemberIds([]); }}
-                      className="flex items-center gap-1 text-[9px] font-bold text-[#0058be] hover:text-[#004395] transition-colors cursor-pointer"
+                      className="flex items-center gap-1 text-[9px] font-bold hover:opacity-70 transition-opacity cursor-pointer"
+                      style={{ color: 'var(--theme-accent)' }}
                     >
                       <Plus className="w-3 h-3" /> Group
                     </button>
                   </div>
                   {loading ? (
                     <div className="text-center py-12">
-                      <div className="w-4 h-4 border-2 border-[#0058be] border-t-transparent rounded-full animate-spin mx-auto" />
-                      <span className="text-[11px] text-gray-400 block mt-2 font-mono">Syncing...</span>
+                      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--theme-accent)', borderTopColor: 'transparent' }} />
+                      <span className="text-[11px] text-ink-faint block mt-2 font-mono">Syncing...</span>
                     </div>
                   ) : filteredThreads.length === 0 ? (
                     <div className="text-center py-8 bg-white border border-gray-100 rounded-xl p-4 space-y-2">
-                      <MessageSquare className="w-7 h-7 text-gray-200 mx-auto" />
-                      <p className="text-[11px] font-bold text-gray-500">
+                      <MessageSquare className="w-7 h-7 text-mist-dark mx-auto" />
+                      <p className="text-[11px] font-bold text-ink-faint">
                         {threads.length === 0 ? 'No conversations yet' : 'No matching chats'}
                       </p>
                       {threads.length === 0 && (
-                        <p className="text-[10px] text-gray-400 leading-relaxed">
+                        <p className="text-[10px] text-ink-faint/60 leading-relaxed">
                           Switch to the <strong>Network</strong> tab to message a trusted vendor.
                         </p>
                       )}
@@ -973,16 +976,16 @@ export default function ChatNegotiationCenter() {
 
                       if (isSelected) {
                         return (
-                          <div key={t.id} onClick={() => setSelectedThreadId(t.id)}
-                            className="p-3 bg-[#111c30] text-white rounded-xl border border-[#111c30] shadow-md cursor-pointer">
-                            <div className="flex gap-2.5">
-                              <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-bold text-[11px] shrink-0 text-white">
+                        <div key={t.id} onClick={() => setSelectedThreadId(t.id)}
+                        className="p-3 bg-ink text-white rounded-xl border border-ink shadow-md cursor-pointer">
+                        <div className="flex gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-bold text-[11px] shrink-0 text-white">
                                 {initials}
                               </div>
                               <div className="flex-1 overflow-hidden min-w-0">
                                 <div className="flex justify-between items-start">
                                   <h4 className="font-bold text-white truncate text-xs">{displayName}</h4>
-                                  <span className="text-[9px] text-[#818ea1]">{getThreadTimestamp(t as ThreadWithMeta)}</span>
+                                  <span className="text-[9px] text-white/50">{getThreadTimestamp(t as ThreadWithMeta)}</span>
                                 </div>
                                 <p className="text-[10px] text-gray-400 mt-0.5 truncate">{subtitle}</p>
                                 {t.isGroup && (
@@ -991,15 +994,15 @@ export default function ChatNegotiationCenter() {
                                   </span>
                                 )}
                                 {!t.isGroup && partnerTrusted && (
-                                  <span className="inline-flex items-center gap-1 mt-1 text-[8px] font-bold text-ocean-400">
+                                  <span className="inline-flex items-center gap-1 mt-1 text-[8px] font-bold text-teal">
                                     <CheckCircle2 className="w-2.5 h-2.5" /> Trusted Network
                                   </span>
                                 )}
                                 {isTradeOnly && t.status === 'RECEIPT_DRAFT' && receipt?.invoiceValue != null && t.id === selectedThreadId && (
-                                  <div className="mt-2 bg-[#0d1524] rounded-lg p-2 border border-[#1f2d47]">
-                                    <div className="flex justify-between items-center text-[8px] font-extrabold text-[#818ea1] uppercase">
+                                  <div className="mt-2 bg-ink-soft rounded-lg p-2 border border-white/10">
+                                    <div className="flex justify-between items-center text-[8px] font-extrabold text-white/50 uppercase">
                                       <span>Receipt Draft</span>
-                                      <span className="text-[#a4ccff]">
+                                      <span className="text-steel-light">
                                         {formatMoney(receipt?.invoiceValue, receipt?.invoiceCurrency)}
                                       </span>
                                     </div>
@@ -1016,17 +1019,17 @@ export default function ChatNegotiationCenter() {
 
                       return (
                         <div key={t.id} onClick={() => setSelectedThreadId(t.id)}
-                          className="p-3 bg-white border border-gray-200 hover:border-gray-300 rounded-xl transition-all cursor-pointer">
+                          className="p-3 bg-white border border-mist hover:border-mist-dark rounded-xl transition-all cursor-pointer">
                           <div className="flex gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-[11px] shrink-0 text-slate-700">
+                            <div className="w-8 h-8 rounded-full bg-mist-light border border-mist flex items-center justify-center font-bold text-[11px] shrink-0 text-ink-faint">
                               {initials}
                             </div>
                             <div className="flex-1 overflow-hidden min-w-0">
-                              <div className="flex justify-between items-start">
-                                <h4 className="font-bold text-gray-900 truncate text-xs">{displayName}</h4>
-                                <span className="text-[9px] text-gray-400 shrink-0">{getThreadTimestamp(t as ThreadWithMeta)}</span>
-                              </div>
-                              <p className="text-[10px] text-gray-500 mt-0.5 truncate">{subtitle}</p>
+                            <div className="flex justify-between items-start">
+                            <h4 className="font-bold text-ink truncate text-xs">{displayName}</h4>
+                            <span className="text-[9px] text-ink-faint shrink-0">{getThreadTimestamp(t as ThreadWithMeta)}</span>
+                            </div>
+                            <p className="text-[10px] text-ink-faint mt-0.5 truncate">{subtitle}</p>
                               <div className="mt-1.5 flex items-center gap-2">
                                 {t.isGroup && (
                                   <span className="inline-flex items-center gap-1 text-[8px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-full">
@@ -1034,7 +1037,7 @@ export default function ChatNegotiationCenter() {
                                   </span>
                                 )}
                                 {!t.isGroup && partnerTrusted && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] font-bold text-ocean-600 bg-ocean-50 border border-ocean-100 px-1.5 py-0.5 rounded-full">
+                                  <span className="inline-flex items-center gap-1 text-[8px] font-bold text-teal bg-teal-light border border-teal/20 px-1.5 py-0.5 rounded-full">
                                     <CheckCircle2 className="w-2 h-2" /> Trusted
                                   </span>
                                 )}
@@ -1047,7 +1050,7 @@ export default function ChatNegotiationCenter() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[10px] text-gray-400 mt-1 truncate font-medium">
+                              <p className="text-[10px] text-ink-faint mt-1 truncate font-medium">
                                 {getLastMessagePreview(t as ThreadWithMeta)}
                               </p>
                             </div>
@@ -1064,15 +1067,15 @@ export default function ChatNegotiationCenter() {
                 <div className="space-y-3">
                   {networkLoading ? (
                     <div className="text-center py-10">
-                      <div className="w-4 h-4 border-2 border-[#0058be] border-t-transparent rounded-full animate-spin mx-auto" />
-                      <p className="text-[11px] text-gray-400 mt-2 font-mono">Loading network...</p>
+                      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--theme-accent)', borderTopColor: 'transparent' }} />
+                      <p className="text-[11px] text-ink-faint mt-2 font-mono">Loading network...</p>
                     </div>
                   ) : (
                     <>
                       {/* Trusted vendors — can message */}
                       {filteredTrusted.length > 0 && (
                         <div>
-                          <p className="px-1 text-[9px] font-extrabold text-ocean-600 uppercase tracking-wider font-mono mb-2 flex items-center gap-1">
+                          <p className="px-1 text-[9px] font-extrabold text-teal uppercase tracking-wider font-mono mb-2 flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" /> Trusted Vendors ({filteredTrusted.length})
                           </p>
                           <div className="space-y-2">
@@ -1082,7 +1085,7 @@ export default function ChatNegotiationCenter() {
                               const hasThread = threads.some(t => (t as any).otherParticipant?.id === member.id);
                               return (
                                 <div key={member.id}
-                                  className="bg-white border border-ocean-100 rounded-xl p-3 space-y-2.5">
+                                  className="bg-white border border-teal/20 rounded-xl p-3 space-y-2.5">
                                   <div className="flex items-start gap-2">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[11px] border shrink-0 ${color}`}>
                                       {initials}
@@ -1090,7 +1093,7 @@ export default function ChatNegotiationCenter() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-1.5 flex-wrap">
                                         <h4 className="font-bold text-xs text-slate-900 leading-tight truncate">{member.fullName}</h4>
-                                        <BadgeCheck className="w-3 h-3 text-ocean-400 flex-shrink-0" aria-label="KYC Verified" />
+                                        <BadgeCheck className="w-3 h-3 text-teal flex-shrink-0" aria-label="KYC Verified" />
                                       </div>
                                       <p className="text-[10px] text-gray-400 mt-0.5 truncate">{member.companyName}</p>
                                       <span className={`inline-block mt-1 text-[8px] px-1.5 py-0.5 font-bold rounded border uppercase tracking-wide ${color}`}>
@@ -1101,7 +1104,8 @@ export default function ChatNegotiationCenter() {
                                   <button
                                     type="button"
                                     onClick={() => handleStartChat(member.id)}
-                                    className="w-full bg-[#0058be] hover:bg-[#004395] text-white font-bold py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                                    className="w-full text-white font-bold py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                                    style={{ background: 'var(--theme-accent)' }}
                                   >
                                     <MessageSquare className="w-3 h-3" />
                                     {hasThread ? 'Open Chat' : `Message ${member.fullName.split(' ')[0]}`}
@@ -1142,14 +1146,15 @@ export default function ChatNegotiationCenter() {
                       {/* Empty state */}
                       {trustedMembers.length === 0 && pendingMembers.length === 0 && (
                         <div className="text-center py-10 space-y-3">
-                          <Network className="w-9 h-9 text-gray-200 mx-auto" />
-                          <p className="text-xs font-bold text-gray-500">No vendors connected yet</p>
-                          <p className="text-[10px] text-gray-400 leading-relaxed max-w-[200px] mx-auto">
+                          <Network className="w-9 h-9 text-mist-dark mx-auto" />
+                          <p className="text-xs font-bold text-ink-faint">No vendors connected yet</p>
+                          <p className="text-[10px] text-ink-faint/70 leading-relaxed max-w-[200px] mx-auto">
                             Connect with verified vendors on the Network page to start messaging them.
                           </p>
                           <Link
                             href="/network"
-                            className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#0058be] hover:underline"
+                            className="inline-flex items-center gap-1.5 text-[11px] font-black hover:opacity-80 transition-opacity"
+                            style={{ color: 'var(--theme-accent)' }}
                           >
                             <UserPlus className="w-3.5 h-3.5" /> Go to Vendor Network
                           </Link>
@@ -1160,7 +1165,7 @@ export default function ChatNegotiationCenter() {
                       {(trustedMembers.length > 0 || pendingMembers.length > 0) && (
                         <Link
                           href="/network"
-                          className="flex items-center justify-center gap-1.5 text-[10px] font-bold text-gray-400 hover:text-[#0058be] py-2 transition-colors"
+                          className="flex items-center justify-center gap-1.5 text-[10px] font-bold text-ink-faint hover:text-ink py-2 transition-colors"
                         >
                           Manage full network <ChevronRight className="w-3 h-3" />
                         </Link>
@@ -1238,26 +1243,26 @@ export default function ChatNegotiationCenter() {
                   </div>
 
                   {/* Messages */}
-                  <div className="flex-1 p-4 md:p-5 overflow-y-auto space-y-4 flex flex-col bg-slate-50/20">
+                  <div className="flex-1 p-4 md:p-5 overflow-y-auto space-y-4 flex flex-col bg-mist-light/10">
                     {loadingMessages && messages.length === 0 ? (
                       <div className="flex-1 flex items-center justify-center">
                         <div className="text-center">
-                          <div className="w-4 h-4 border-2 border-[#0058be] border-t-transparent rounded-full animate-spin mx-auto" />
-                          <span className="text-[11px] text-gray-400 block mt-2 font-mono">Loading messages...</span>
+                          <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--theme-accent)', borderTopColor: 'transparent' }} />
+                          <span className="text-[11px] text-ink-faint block mt-2 font-mono">Loading messages...</span>
                         </div>
                       </div>
                     ) : messages.length === 0 ? (
                       <div className="flex-1 flex items-center justify-center">
                         <div className="text-center max-w-xs space-y-2">
-                          <MessageSquare className="w-8 h-8 text-gray-300 mx-auto" />
-                          <p className="text-sm font-bold text-gray-700">Start the conversation</p>
+                          <MessageSquare className="w-8 h-8 text-mist-dark mx-auto" />
+                          <p className="text-sm font-bold text-ink">Start the conversation</p>
                           {activePartnerIsTrusted && (
-                            <div className="flex items-center justify-center gap-1.5 text-[10px] text-ocean-600 font-bold">
+                            <div className="flex items-center justify-center gap-1.5 text-[10px] text-teal font-bold">
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               Trusted Network member — secure channel active
                             </div>
                           )}
-                          <p className="text-[11px] text-gray-400 leading-relaxed">
+                          <p className="text-[11px] text-ink-faint leading-relaxed">
                             Send a message below. Both parties will see it here in real time.
                           </p>
                         </div>
@@ -1273,20 +1278,21 @@ export default function ChatNegotiationCenter() {
                         const sInits  = getInitials(sender?.fullName || 'Contact');
                         return (
                           <div key={msg.id} className={`flex gap-2.5 max-w-xl ${isMe ? 'self-end justify-end' : 'self-start'}`}>
-                            {!isMe && (
+                              {!isMe && (
                               <div className="flex flex-col items-center shrink-0 select-none">
-                                <span className="text-[8px] font-bold uppercase text-gray-400 mb-0.5 font-mono">{sName}</span>
-                                <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-[9px] text-slate-700">{sInits}</div>
+                                <span className="text-[8px] font-bold uppercase text-ink-faint mb-0.5 font-mono">{sName}</span>
+                                <div className="w-7 h-7 rounded-full bg-mist-light border border-mist flex items-center justify-center font-bold text-[9px] text-ink-faint">{sInits}</div>
                               </div>
                             )}
                             <div className="text-left">
                               <div className={`p-3 rounded-2xl shadow-sm ${
                                 msg.isUnsent
-                                  ? 'bg-gray-50 text-gray-400 border border-gray-100 italic text-[11px]'
+                                  ? 'bg-mist-light text-ink-faint border border-mist italic text-[11px]'
                                   : isMe
-                                    ? 'bg-[#0058be] text-white rounded-tr-none'
-                                    : 'bg-white text-slate-900 border border-gray-150 rounded-tl-none'
-                              }`}>
+                                    ? 'text-white rounded-tr-none'
+                                    : 'bg-white text-ink border border-mist rounded-tl-none'
+                              }`}
+                              style={isMe && !msg.isUnsent ? { background: 'var(--theme-accent)' } : {}}>
                                 {isMe && !msg.isUnsent && (
                                   <button
                                     type="button"
@@ -1317,7 +1323,7 @@ export default function ChatNegotiationCenter() {
                                   </>
                                 )}
                                 <div className="flex justify-end items-center gap-1 mt-1 select-none">
-                                  <span className={`text-[8px] font-mono ${isMe ? 'text-white/60' : 'text-gray-400'}`}>
+                                  <span className={`text-[8px] font-mono ${isMe ? 'text-white/60' : 'text-ink-faint'}`}>
                                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                   {isMe && !msg.isUnsent && <span className="text-[10px] text-sky-200 font-bold opacity-40">✓✓</span>}
@@ -1326,8 +1332,8 @@ export default function ChatNegotiationCenter() {
                             </div>
                             {isMe && (
                               <div className="flex flex-col items-center shrink-0 select-none">
-                                <span className="text-[8px] font-bold uppercase text-[#0058be] mb-0.5 font-mono">You</span>
-                                <div className="w-7 h-7 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center font-bold text-[9px] text-[#0058be]">ME</div>
+                                <span className="text-[8px] font-bold uppercase mb-0.5 font-mono" style={{ color: 'var(--theme-accent)' }}>You</span>
+                                <div className="w-7 h-7 rounded-full border flex items-center justify-center font-bold text-[9px]" style={{ background: 'color-mix(in srgb, var(--theme-accent) 15%, white)', borderColor: 'var(--theme-accent-border)', color: 'var(--theme-accent)' }}>ME</div>
                               </div>
                             )}
                           </div>
@@ -1338,10 +1344,10 @@ export default function ChatNegotiationCenter() {
                   </div>
 
                   {/* Input area */}
-                  <div className="p-3 border-t border-gray-200 bg-white shrink-0 space-y-3">
+                  <div className="p-3 border-t border-mist bg-white shrink-0 space-y-3">
                     {/* Quick replies */}
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 select-none">
-                      <span className="text-[8.5px] text-[#76777d] font-bold uppercase font-mono tracking-wider shrink-0 mr-1">⚡ QUICK:</span>
+                      <span className="text-[8.5px] text-ink-faint font-bold uppercase font-mono tracking-wider shrink-0 mr-1">⚡ QUICK:</span>
                       {[
                         ['🚢 Ready Load',   'Vessel space booked. Port load slot secured, cargo ready to dispatch.'],
                         ['📑 SAD Filed',    'BOC single administrative document (SAD) successfully filed for clearing.'],
@@ -1349,19 +1355,19 @@ export default function ChatNegotiationCenter() {
                         ['📝 Verify Docs',  'Uploaded the latest required trade credentials. Please verify and sign.'],
                       ].map(([label, text]) => (
                         <button key={label} type="button" onClick={() => setReplyText(prev => prev ? prev : text)}
-                          className="px-3 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-full text-[10px] font-bold text-slate-700 whitespace-nowrap cursor-pointer transition-all">
+                          className="px-3 py-1 bg-mist-light hover:bg-mist border border-mist rounded-full text-[10px] font-bold text-ink-faint whitespace-nowrap cursor-pointer transition-all">
                           {label}
                         </button>
                       ))}
                     </div>
 
                     {selectedImage && (
-                      <div className="flex items-center justify-between gap-3 bg-gray-50 border border-dashed border-gray-200 rounded-lg px-3 py-2 max-w-xs">
+                      <div className="flex items-center justify-between gap-3 bg-mist-light border border-dashed border-mist rounded-lg px-3 py-2 max-w-xs">
                         <div className="flex items-center gap-2 min-w-0">
-                          <img src={selectedImage} alt="Preview" className="w-8 h-8 object-cover rounded border border-gray-200 shrink-0" referrerPolicy="no-referrer" />
-                          <span className="text-[10px] text-green-700 font-bold">Ready to send</span>
+                          <img src={selectedImage} alt="Preview" className="w-8 h-8 object-cover rounded border border-mist shrink-0" referrerPolicy="no-referrer" />
+                          <span className="text-[10px] text-teal font-bold">Ready to send</span>
                         </div>
-                        <button type="button" onClick={() => setSelectedImage(null)} className="text-gray-400 hover:text-red-500 cursor-pointer">
+                        <button type="button" onClick={() => setSelectedImage(null)} className="text-ink-faint hover:text-wine cursor-pointer">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -1372,14 +1378,14 @@ export default function ChatNegotiationCenter() {
                         type="button"
                         onClick={() => setShowImagePicker(p => !p)}
                         className={`p-2 rounded-lg transition-all shrink-0 cursor-pointer
-                          ${showImagePicker ? 'bg-blue-50 text-[#0058be]' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          ${showImagePicker ? 'bg-mist-light text-ink' : 'bg-mist-light text-ink-faint hover:bg-mist'}`}
                       >
                         <Paperclip className="w-4 h-4" />
                       </button>
-                      <div className="flex-1 bg-slate-50 border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#0058be] transition-all">
+                      <div className="flex-1 bg-mist-light border border-mist rounded-lg overflow-hidden focus-within:border-ink-faint transition-all">
                         <textarea
                           rows={1}
-                          className="w-full bg-transparent px-3 py-2 text-xs text-slate-900 placeholder-slate-400 resize-none outline-none"
+                          className="w-full bg-transparent px-3 py-2 text-xs text-ink placeholder-ink-faint resize-none outline-none"
                           placeholder="Type your message..."
                           value={replyText}
                           onChange={e => setReplyText(e.target.value)}
@@ -1396,7 +1402,8 @@ export default function ChatNegotiationCenter() {
                       <button
                         type="submit"
                         disabled={submittingMsg}
-                        className="px-4 py-2 bg-[#0058be] hover:bg-[#004395] text-white font-black rounded-lg flex items-center gap-1 transition-all uppercase tracking-wider text-[10px] cursor-pointer disabled:opacity-60"
+                        className="px-4 py-2 text-white font-black rounded-lg flex items-center gap-1 transition-all uppercase tracking-wider text-[10px] cursor-pointer disabled:opacity-60"
+                        style={{ background: 'var(--theme-accent)' }}
                       >
                         {submittingMsg ? 'Sending...' : 'SEND'}
                         <Send className="w-3 h-3" />
@@ -1405,19 +1412,19 @@ export default function ChatNegotiationCenter() {
 
                     {showImagePicker && (
                       <div className="relative">
-                        <div className="absolute bottom-12 left-0 bg-white border border-gray-200 shadow-xl rounded-xl p-3 z-40 w-64 space-y-2">
-                          <div className="flex justify-between items-center border-b border-gray-100 pb-1.5">
-                            <span className="font-bold text-[9px] text-[#76777d] uppercase tracking-wider font-mono">Attach Image</span>
-                            <button onClick={() => setShowImagePicker(false)} className="text-gray-400 hover:text-gray-900 cursor-pointer">
+                        <div className="absolute bottom-12 left-0 bg-white border border-mist shadow-xl rounded-xl p-3 z-40 w-64 space-y-2">
+                          <div className="flex justify-between items-center border-b border-mist pb-1.5">
+                            <span className="font-bold text-[9px] text-ink-faint uppercase tracking-wider font-mono">Attach Image</span>
+                            <button onClick={() => setShowImagePicker(false)} className="text-ink-faint hover:text-ink cursor-pointer">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                           <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-lg py-2 text-[9.5px] font-bold text-slate-600 flex items-center justify-center gap-1 cursor-pointer"
+                            className="w-full bg-mist-light hover:bg-mist border border-dashed border-mist-dark rounded-lg py-2 text-[9.5px] font-bold text-ink-faint flex items-center justify-center gap-1 cursor-pointer"
                           >
-                            <FileUp className="w-3.5 h-3.5 text-slate-400" /> Select from device
+                            <FileUp className="w-3.5 h-3.5 text-ink-faint/60" /> Select from device
                           </button>
                           <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleCustomImageUpload} />
                         </div>
@@ -1428,12 +1435,12 @@ export default function ChatNegotiationCenter() {
 
                 {/* Shipment Receipt panel — Trade Party only */}
                 {showReceiptPanel && isTradePartyThread && (
-                  <div className="w-80 border-l border-gray-200 bg-white flex flex-col h-full shrink-0 overflow-y-auto">
-                    <div className="p-4 border-b border-gray-150 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
-                      <h4 className="font-extrabold text-gray-900 flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-mono">
-                        <Receipt className="w-4 h-4 text-[#0058be]" /> Shipment Receipt
+                  <div className="w-80 border-l border-mist bg-white flex flex-col h-full shrink-0 overflow-y-auto">
+                    <div className="p-4 border-b border-mist bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
+                      <h4 className="font-extrabold text-ink flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-mono">
+                        <Receipt className="w-4 h-4" style={{ color: 'var(--theme-accent)' }} /> Shipment Receipt
                       </h4>
-                      <button onClick={() => setShowReceiptPanel(false)} className="text-gray-400 hover:text-gray-900 cursor-pointer">
+                      <button onClick={() => setShowReceiptPanel(false)} className="text-ink-faint hover:text-ink cursor-pointer">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -1443,11 +1450,11 @@ export default function ChatNegotiationCenter() {
                       const r = receipt;
                       const field = (key: keyof ShipmentReceipt, value: any) => updateReceiptField(key, value);
                       const inputCls = `w-full border rounded-lg px-2.5 py-1.5 text-[11px] outline-none transition-colors
-                        ${isFinalized ? 'bg-slate-50 text-slate-500 border-slate-200 cursor-not-allowed' : 'bg-white border-gray-200 focus:border-[#0058be]'}`;
+                        ${isFinalized ? 'bg-mist-light text-ink-faint border-mist cursor-not-allowed' : 'bg-white border-mist focus:border-ink-faint'}`;
 
                       return (
                         <form onSubmit={handleUpdateReceipt} className="p-4 space-y-4">
-                          <p className="text-[10px] text-gray-400 leading-relaxed">
+                          <p className="text-[10px] text-ink-faint leading-relaxed">
                             A shared planner both of you can fill in while you chat. Once finalized, it
                             shows up on the <strong>Create Shipment</strong> page and can prefill a new record.
                           </p>
@@ -1471,18 +1478,18 @@ export default function ChatNegotiationCenter() {
 
                           {/* Cargo */}
                           <div className="space-y-2.5">
-                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                            <h5 className="text-[9.5px] text-ink-faint font-bold uppercase tracking-widest font-mono flex items-center gap-1">
                               <Package className="w-3 h-3" /> Cargo
                             </h5>
                             <div>
-                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Cargo Description</label>
+                              <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Cargo Description</label>
                               <textarea rows={2} disabled={isFinalized} className={inputCls + ' resize-none'}
                                 placeholder="e.g. 40ft container of high-precision automobile spares"
                                 value={r?.cargoDescription || ''} onChange={e => field('cargoDescription', e.target.value)} />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Scope</label>
+                                <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Scope</label>
                                 <select disabled={isFinalized} className={inputCls} value={r?.shipmentScope || ''}
                                   onChange={e => {
                                     const scope = e.target.value as ShipmentScope;
@@ -1500,7 +1507,7 @@ export default function ChatNegotiationCenter() {
                                 </select>
                               </div>
                               <div>
-                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">ETA</label>
+                                <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">ETA</label>
                                 <input type="date" disabled={isFinalized} className={inputCls}
                                   value={r?.estimatedArrival ? r.estimatedArrival.substring(0, 10) : ''}
                                   onChange={e => field('estimatedArrival', e.target.value)} />
@@ -1510,16 +1517,16 @@ export default function ChatNegotiationCenter() {
 
                           {/* Parties */}
                           <div className="space-y-2.5">
-                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                            <h5 className="text-[9.5px] text-ink-faint font-bold uppercase tracking-widest font-mono flex items-center gap-1">
                               <Building2 className="w-3 h-3" /> Parties
                             </h5>
                             <div>
-                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Importer Contact</label>
+                              <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Importer Contact</label>
                               <input type="text" disabled={isFinalized} className={inputCls} placeholder="e.g. Binondo Metals Importing Inc."
                                 value={r?.importerContact || ''} onChange={e => field('importerContact', e.target.value)} />
                             </div>
                             <div>
-                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Exporter Contact</label>
+                              <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Exporter Contact</label>
                               <input type="text" disabled={isFinalized} className={inputCls} placeholder="e.g. Osaka Trading Ltd."
                                 value={r?.exporterContact || ''} onChange={e => field('exporterContact', e.target.value)} />
                             </div>
@@ -1527,12 +1534,12 @@ export default function ChatNegotiationCenter() {
 
                           {/* Route */}
                           <div className="space-y-2.5">
-                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                            <h5 className="text-[9.5px] text-ink-faint font-bold uppercase tracking-widest font-mono flex items-center gap-1">
                               <Globe className="w-3 h-3" /> Route
                             </h5>
                             <div className="flex items-center gap-1.5 mb-1">
-                              <div className="w-1.5 h-1.5 rounded-full bg-maritime-400 shrink-0" />
-                              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Origin</span>
+                              <div className="w-1.5 h-1.5 rounded-full bg-steel shrink-0" />
+                              <span className="text-[8px] font-black text-ink-faint uppercase tracking-widest">Origin</span>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <input type="text" disabled={isFinalized} className={inputCls} placeholder="Country"
@@ -1544,8 +1551,8 @@ export default function ChatNegotiationCenter() {
                               value={r?.originAddress || ''} onChange={e => field('originAddress', e.target.value)} />
 
                             <div className="flex items-center gap-1.5 mb-1 mt-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-ocean-400 shrink-0" />
-                              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Destination</span>
+                              <div className="w-1.5 h-1.5 rounded-full bg-teal shrink-0" />
+                              <span className="text-[8px] font-black text-ink-faint uppercase tracking-widest">Destination</span>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <input type="text" disabled={isFinalized} className={inputCls} placeholder="Country"
@@ -1559,11 +1566,11 @@ export default function ChatNegotiationCenter() {
 
                           {/* Commercial value */}
                           <div className="space-y-2.5">
-                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                            <h5 className="text-[9.5px] text-ink-faint font-bold uppercase tracking-widest font-mono flex items-center gap-1">
                               <Coins className="w-3 h-3" /> Commercial Value
                             </h5>
                             <div>
-                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Invoice Value</label>
+                              <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Invoice Value</label>
                               <div className="flex gap-1.5">
                                 <select disabled={isFinalized} className={inputCls + ' shrink-0 w-20'} value={r?.invoiceCurrency || 'USD'}
                                   onChange={e => field('invoiceCurrency', e.target.value as Currency)}>
@@ -1574,7 +1581,7 @@ export default function ChatNegotiationCenter() {
                               </div>
                             </div>
                             <div>
-                              <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">HS Code</label>
+                              <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">HS Code</label>
                               <input type="text" disabled={isFinalized} className={inputCls} placeholder="e.g. 8517.12"
                                 value={r?.hsCode || ''} onChange={e => field('hsCode', e.target.value)} />
                             </div>
@@ -1582,39 +1589,39 @@ export default function ChatNegotiationCenter() {
 
                           {/* Physical specifications */}
                           <div className="space-y-2.5">
-                            <h5 className="text-[9.5px] text-[#76777d] font-bold uppercase tracking-widest font-mono flex items-center gap-1">
+                            <h5 className="text-[9.5px] text-ink-faint font-bold uppercase tracking-widest font-mono flex items-center gap-1">
                               <Weight className="w-3 h-3" /> Physical Specs
                             </h5>
                             <button type="button" disabled={isFinalized}
                               onClick={() => field('isDangerousGoods', !r?.isDangerousGoods)}
                               className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all
-                                ${isFinalized ? 'cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'}
-                                ${r?.isDangerousGoods ? 'border-coral-400 bg-coral-50' : 'border-gray-200'}`}>
-                              <span className="text-[10px] font-bold text-gray-700 flex items-center gap-1.5">
-                                <AlertTriangle className={`w-3.5 h-3.5 ${r?.isDangerousGoods ? 'text-coral-400' : 'text-gray-300'}`} /> Dangerous Goods
+                                ${isFinalized ? 'cursor-not-allowed bg-mist-light border-mist' : 'cursor-pointer'}
+                                ${r?.isDangerousGoods ? 'border-wine/30 bg-wine-light' : 'border-mist'}`}>
+                              <span className="text-[10px] font-bold text-ink-faint flex items-center gap-1.5">
+                                <AlertTriangle className={`w-3.5 h-3.5 ${r?.isDangerousGoods ? 'text-wine' : 'text-mist-dark'}`} /> Dangerous Goods
                               </span>
-                              {r?.isDangerousGoods ? <ToggleRight className="w-4 h-4 text-coral-400" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
+                              {r?.isDangerousGoods ? <ToggleRight className="w-4 h-4 text-wine" /> : <ToggleLeft className="w-4 h-4 text-mist-dark" />}
                             </button>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Packages</label>
+                                <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Packages</label>
                                 <input type="text" inputMode="numeric" disabled={isFinalized} className={inputCls} placeholder="0"
                                   value={r?.packageCount ?? ''} onChange={e => field('packageCount', e.target.value.replace(/\D/g, ''))} />
                               </div>
                               <div>
-                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Type</label>
+                                <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Type</label>
                                 <input type="text" disabled={isFinalized} className={inputCls} placeholder="Cartons"
                                   value={r?.packagingType || ''} onChange={e => field('packagingType', e.target.value)} />
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Gross Weight</label>
+                                <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Gross Weight</label>
                                 <input type="text" inputMode="decimal" disabled={isFinalized} className={inputCls} placeholder="0"
                                   value={r?.grossWeight ?? ''} onChange={e => field('grossWeight', sanitizePriceInput(e.target.value))} />
                               </div>
                               <div>
-                                <label className="text-[9px] font-bold text-gray-500 uppercase block mb-1">Unit</label>
+                                <label className="text-[9px] font-bold text-ink-faint uppercase block mb-1">Unit</label>
                                 <select disabled={isFinalized} className={inputCls} value={r?.weightUnit || 'KG'}
                                   onChange={e => field('weightUnit', e.target.value as 'KG' | 'LBS')}>
                                   <option value="KG">KG</option>
@@ -1629,7 +1636,7 @@ export default function ChatNegotiationCenter() {
                               <button
                                 type="submit"
                                 disabled={savingReceipt}
-                                className="w-full bg-[#111c30] hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg text-[10px] transition-all cursor-pointer flex items-center justify-center gap-1 uppercase tracking-wider disabled:opacity-60"
+                                className="w-full bg-ink hover:bg-ink-soft text-white font-bold py-2.5 rounded-lg text-[10px] transition-all cursor-pointer flex items-center justify-center gap-1 uppercase tracking-wider disabled:opacity-60"
                               >
                                 {savingReceipt ? 'Saving...' : 'SAVE RECEIPT'}
                                 <RefreshCw className={`w-3 h-3 ${savingReceipt ? 'animate-spin' : ''}`} />
@@ -1638,7 +1645,7 @@ export default function ChatNegotiationCenter() {
                                 type="button"
                                 onClick={handleFinalizeReceipt}
                                 disabled={finalizingReceipt || !receipt}
-                                className="w-full bg-[#00A651] hover:bg-green-700 text-white font-extrabold py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                                className="w-full bg-teal hover:bg-teal-hover text-white font-extrabold py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
                               >
                                 <CheckCircle className="w-3.5 h-3.5" />
                                 <span className="text-[11px] font-black">{finalizingReceipt ? 'FINALIZING...' : 'FINALIZE RECEIPT'}</span>
@@ -1654,22 +1661,22 @@ export default function ChatNegotiationCenter() {
             ) : (
               /* No thread selected */
               <div className="flex-1 flex flex-col items-center justify-center text-center p-12 bg-white select-none space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-maritime-50 border border-maritime-100 flex items-center justify-center mx-auto">
-                  <MessageSquare className="w-7 h-7 text-[#0058be]" />
+                <div className="w-16 h-16 rounded-2xl bg-mist-light border border-mist flex items-center justify-center mx-auto">
+                  <MessageSquare className="w-7 h-7" style={{ color: 'var(--theme-accent)' }} />
                 </div>
                 <div>
-                  <p className="font-bold text-gray-700 text-sm">No conversation selected</p>
-                  <p className="text-gray-400 text-[11px] mt-1 max-w-xs leading-relaxed">
+                  <p className="font-bold text-ink text-sm">No conversation selected</p>
+                  <p className="text-ink-faint text-[11px] mt-1 max-w-xs leading-relaxed">
                     Select a chat from the left, or switch to the{' '}
-                    <button onClick={() => setSidebarTab('network')} className="text-[#0058be] font-bold hover:underline cursor-pointer">
+                    <button onClick={() => setSidebarTab('network')} className="font-bold hover:underline cursor-pointer" style={{ color: 'var(--theme-accent)' }}>
                       Network tab
                     </button>{' '}
                     to message a trusted vendor.
                   </p>
                 </div>
                 {trustedMembers.length > 0 && (
-                  <div className="mt-2 bg-ocean-50 border border-ocean-100 rounded-xl p-4 max-w-xs space-y-2">
-                    <p className="text-[10px] font-black text-ocean-700 uppercase tracking-wider">
+                  <div className="mt-2 bg-teal-light border border-teal/20 rounded-xl p-4 max-w-xs space-y-2">
+                    <p className="text-[10px] font-black text-teal uppercase tracking-wider">
                       Trusted Network · {trustedMembers.length} vendor{trustedMembers.length !== 1 ? 's' : ''}
                     </p>
                     <div className="flex -space-x-2">
@@ -1683,7 +1690,7 @@ export default function ChatNegotiationCenter() {
                     </div>
                     <button
                       onClick={() => setSidebarTab('network')}
-                      className="w-full text-[10px] font-bold text-ocean-600 hover:text-ocean-800 transition-colors cursor-pointer"
+                      className="w-full text-[10px] font-bold text-teal hover:opacity-80 transition-opacity cursor-pointer"
                     >
                       View network →
                     </button>
@@ -1692,7 +1699,8 @@ export default function ChatNegotiationCenter() {
                 {trustedMembers.length === 0 && (
                   <Link
                     href="/network"
-                    className="inline-flex items-center gap-1.5 text-xs font-black text-[#0058be] hover:underline"
+                    className="inline-flex items-center gap-1.5 text-xs font-black hover:underline"
+                    style={{ color: 'var(--theme-accent)' }}
                   >
                     <Network className="w-4 h-4" /> Build your Vendor Network
                   </Link>
@@ -1707,7 +1715,7 @@ export default function ChatNegotiationCenter() {
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowGroupModal(false)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
               {/* Header */}
-              <div className="bg-[#111c30] px-5 py-4 flex items-center justify-between">
+              <div className="bg-ink px-5 py-4 flex items-center justify-between">
                 <h3 className="font-extrabold text-white flex items-center gap-2 text-sm">
                   <Users className="w-4 h-4" /> Create Group Chat
                 </h3>
@@ -1719,11 +1727,11 @@ export default function ChatNegotiationCenter() {
               <div className="p-5 space-y-5">
                 {/* Group name */}
                 <div>
-                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider block mb-1.5">Group Name</label>
+                  <label className="text-[10px] font-extrabold text-ink-faint uppercase tracking-wider block mb-1.5">Group Name</label>
                   <input
                     type="text"
                     placeholder="e.g. Manila Shipment Team"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-[#0058be] transition-all"
+                    className="w-full border border-mist rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-ink-faint transition-all"
                     value={groupName}
                     onChange={e => setGroupName(e.target.value)}
                     maxLength={60}
@@ -1733,15 +1741,15 @@ export default function ChatNegotiationCenter() {
 
                 {/* Member picker */}
                 <div>
-                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  <label className="text-[10px] font-extrabold text-ink-faint uppercase tracking-wider block mb-1.5">
                     Add Members
                     {groupMemberIds.length > 0 && (
-                      <span className="ml-1.5 text-[#0058be]">({groupMemberIds.length} selected)</span>
+                      <span className="ml-1.5" style={{ color: 'var(--theme-accent)' }}>({groupMemberIds.length} selected)</span>
                     )}
                   </label>
-                  <div className="border border-gray-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                  <div className="border border-mist rounded-xl overflow-hidden max-h-60 overflow-y-auto">
                     {networkMembers.length === 0 && allUsers.filter(u => u.id !== currentUser?.id && (u.kycStatus === 'VERIFIED' || u.kycStatus === 'SUBMITTED')).length === 0 ? (
-                      <p className="text-[11px] text-gray-400 text-center py-6">No verified members found.</p>
+                      <p className="text-[11px] text-ink-faint text-center py-6">No verified members found.</p>
                     ) : (
                       allUsers
                         .filter(u => u.id !== currentUser?.id && (u.kycStatus === 'VERIFIED' || u.kycStatus === 'SUBMITTED'))
@@ -1758,22 +1766,23 @@ export default function ChatNegotiationCenter() {
                                   : [...prev, member.id]
                               )}
                               className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer
-                                ${ checked ? 'bg-blue-50' : 'hover:bg-gray-50' }
-                                border-b border-gray-100 last:border-b-0`}
+                                ${ checked ? 'bg-mist-light' : 'hover:bg-mist-light' }
+                                border-b border-mist last:border-b-0`}
                             >
                               <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all
-                                ${ checked ? 'bg-[#0058be] border-[#0058be]' : 'border-gray-300' }`}>
+                                ${ checked ? 'border-transparent' : 'border-mist-dark' }`}
+                                style={checked ? { background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' } : {}}>
                                 {checked && <span className="text-white text-[9px] font-black">✓</span>}
                               </div>
-                              <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-[10px] text-slate-700 shrink-0">
+                              <div className="w-7 h-7 rounded-full bg-mist-light border border-mist flex items-center justify-center font-bold text-[10px] text-ink-faint shrink-0">
                                 {getInitials(member.fullName)}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-gray-900 truncate">{member.fullName}</p>
-                                <p className="text-[10px] text-gray-400 truncate">{member.companyName || member.jobRole.replace(/_/g, ' ')}</p>
+                                <p className="text-xs font-bold text-ink truncate">{member.fullName}</p>
+                                <p className="text-[10px] text-ink-faint truncate">{member.companyName || member.jobRole.replace(/_/g, ' ')}</p>
                               </div>
                               {isTrusted && (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-ocean-400 shrink-0" />
+                                <CheckCircle2 className="w-3.5 h-3.5 text-teal shrink-0" />
                               )}
                             </button>
                           );
@@ -1790,9 +1799,9 @@ export default function ChatNegotiationCenter() {
                         ?? allUsers.find(u => u.id === id);
                       if (!m) return null;
                       return (
-                        <span key={id} className="flex items-center gap-1 bg-blue-50 border border-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded-full">
+                        <span key={id} className="flex items-center gap-1 bg-mist-light border border-mist text-ink-faint text-[10px] font-bold px-2 py-1 rounded-full">
                           {m.fullName.split(' ')[0]}
-                          <button type="button" onClick={() => setGroupMemberIds(prev => prev.filter(i => i !== id))} className="text-blue-400 hover:text-blue-700 cursor-pointer">
+                          <button type="button" onClick={() => setGroupMemberIds(prev => prev.filter(i => i !== id))} className="text-ink-faint/60 hover:text-ink cursor-pointer">
                             <X className="w-2.5 h-2.5" />
                           </button>
                         </span>
@@ -1806,7 +1815,7 @@ export default function ChatNegotiationCenter() {
                   <button
                     type="button"
                     onClick={() => setShowGroupModal(false)}
-                    className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-600 font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                    className="flex-1 border border-mist hover:bg-mist-light text-ink-faint font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -1814,7 +1823,8 @@ export default function ChatNegotiationCenter() {
                     type="button"
                     onClick={handleCreateGroup}
                     disabled={creatingGroup || !groupName.trim() || groupMemberIds.length === 0}
-                    className="flex-1 bg-[#0058be] hover:bg-[#004395] disabled:opacity-50 text-white font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    className="flex-1 disabled:opacity-50 text-white font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    style={{ background: 'var(--theme-accent)' }}
                   >
                     {creatingGroup ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
                     {creatingGroup ? 'Creating...' : 'Create Group'}
@@ -1831,7 +1841,7 @@ export default function ChatNegotiationCenter() {
             className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 cursor-zoom-out"
             onClick={() => setLightboxImage(null)}
           >
-            <div className="relative max-w-3xl max-h-[85vh] overflow-hidden rounded-xl border border-white/10 shadow-2xl bg-[#131b2e] flex flex-col items-center">
+            <div className="relative max-w-3xl max-h-[85vh] overflow-hidden rounded-xl border border-white/10 shadow-2xl bg-ink flex flex-col items-center">
               <button
                 type="button"
                 className="absolute top-4 right-4 bg-black/60 hover:bg-black text-white p-1.5 rounded-full cursor-pointer transition-all border border-white/15 z-10"

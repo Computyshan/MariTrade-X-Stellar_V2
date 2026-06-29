@@ -195,12 +195,12 @@ export default function EscrowLedger() {
 
   const statusPill = (status: string) => {
     const base = 'px-2 py-0.5 rounded text-[9px] font-bold uppercase';
-    if (status === 'RELEASED')   return `${base} bg-green-100 text-green-700`;
-    if (status === 'FUNDED')     return `${base} bg-blue-100 text-blue-700`;
-    if (status === 'CANCELLED')  return `${base} bg-red-100 text-red-600`;
-    if (status === 'DISPUTED')   return `${base} bg-amber-100 text-amber-700`;
-    if (status === 'RESOLVED')   return `${base} bg-purple-100 text-purple-700`;
-    return `${base} bg-sand-100 text-gray-500`;
+    if (status === 'RELEASED')   return `${base} bg-teal-light text-teal`;
+    if (status === 'FUNDED')     return `${base} bg-steel-light text-steel`;
+    if (status === 'CANCELLED')  return `${base} bg-wine-light text-wine`;
+    if (status === 'DISPUTED')   return `${base} bg-amber-light text-amber`;
+    if (status === 'RESOLVED')   return `${base} bg-mist text-ink-faint`;
+    return `${base} bg-mist text-ink-faint`;
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -210,8 +210,8 @@ export default function EscrowLedger() {
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-black text-maritime-900 tracking-tight">Escrow Ledger</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-3xl font-display font-medium text-ink tracking-tight">Escrow Ledger</h1>
+          <p className="text-sm text-ink-faint mt-1">
             Live on-chain escrow status pulled from the Stellar {STELLAR_NETWORK} via Soroban RPC.
           </p>
         </div>
@@ -220,7 +220,7 @@ export default function EscrowLedger() {
         <button
           onClick={() => refreshChainData(shipments)}
           disabled={chainLoading || loading}
-          className="flex items-center gap-1.5 border border-maritime-200 bg-maritime-50 hover:bg-maritime-100 text-maritime-900 font-bold text-xs px-3 py-2 rounded-lg transition-all disabled:opacity-50"
+          className="flex items-center gap-1.5 border border-mist bg-mist-light hover:bg-mist text-ink font-bold text-xs px-3 py-2 rounded-lg transition-all disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${chainLoading ? 'animate-spin' : ''}`} />
           {chainLoading ? 'Querying Stellar…' : 'Refresh from Chain'}
@@ -229,8 +229,8 @@ export default function EscrowLedger() {
 
       {/* Last refresh timestamp */}
       {lastRefresh && (
-        <p className="text-[10px] text-gray-400 flex items-center gap-1 -mt-1">
-          <Zap className="w-3 h-3 text-ocean-400" />
+        <p className="text-[10px] text-ink-faint flex items-center gap-1 -mt-1">
+          <Zap className="w-3 h-3" style={{ color: 'var(--theme-accent)' }} />
           Last on-chain sync: {lastRefresh.toLocaleTimeString()}
         </p>
       )}
@@ -249,45 +249,45 @@ export default function EscrowLedger() {
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
 
-        <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm space-y-2">
-          <Coins className="w-8 h-8 text-maritime-400 block mb-1" />
-          <span className="text-[10px] text-gray-400 font-mono tracking-wider font-bold uppercase block">
+        <div className="bg-white border border-mist p-6 rounded-2xl shadow-sm space-y-2">
+          <Coins className="w-8 h-8 block mb-1" style={{ color: 'var(--theme-accent)' }} />
+          <span className="text-[10px] text-ink-faint tracking-wider font-bold uppercase block">
             Active Contracts Locked
           </span>
-          <strong className="text-3xl text-maritime-900 font-extrabold font-mono block">
+          <strong className="text-3xl text-ink font-display font-medium block">
             {formatAsset(totalLocked, 'USDC')}
           </strong>
-          <span className="text-[9px] text-ocean-600 block italic">
+          <span className="text-[9px] text-teal block italic">
             {formatAsset(totalLocked / SUPPORTED_ASSETS.PPHP.rateToUsd, 'PPHP')} PHP indicative
           </span>
           {chainLoading && (
-            <span className="text-[9px] text-gray-400 flex items-center gap-1">
+            <span className="text-[9px] text-ink-faint flex items-center gap-1">
               <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Updating from chain…
             </span>
           )}
         </div>
 
-        <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm space-y-2">
-          <CheckCircle2 className="w-8 h-8 text-green-400 block mb-1" />
-          <span className="text-[10px] text-gray-400 font-mono tracking-wider font-bold uppercase block">
+        <div className="bg-white border border-mist p-6 rounded-2xl shadow-sm space-y-2">
+          <CheckCircle2 className="w-8 h-8 text-teal block mb-1" />
+          <span className="text-[10px] text-ink-faint tracking-wider font-bold uppercase block">
             Cumulative Settled Payouts
           </span>
-          <strong className="text-3xl text-maritime-900 font-extrabold font-mono block">
+          <strong className="text-3xl text-ink font-display font-medium block">
             {formatAsset(totalReleased, 'USDC')}
           </strong>
-          <span className="text-[9px] text-ocean-600 block italic">
+          <span className="text-[9px] text-teal block italic">
             {formatAsset(totalReleased / SUPPORTED_ASSETS.PPHP.rateToUsd, 'PPHP')} PHP indicative
           </span>
         </div>
 
-        <div className="bg-maritime-900 text-white p-6 rounded-2xl shadow-sm space-y-2 relative overflow-hidden">
-          <div className="absolute inset-0 bg-maritime-800 opacity-50" />
+        <div className="bg-ink text-white p-6 rounded-2xl shadow-sm space-y-2 relative overflow-hidden">
+          <div className="absolute inset-0 bg-ink-soft opacity-50" />
           <div className="relative space-y-3">
-            <Lock className="w-7 h-7 text-ocean-400 block" />
-            <h4 className="text-xs font-bold uppercase tracking-wider font-mono text-ocean-400">
+            <Lock className="w-7 h-7 text-teal block" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-teal">
               Security Architecture
             </h4>
-            <p className="text-[11px] text-maritime-100 leading-normal">
+            <p className="text-[11px] text-white/70 leading-normal">
               MariTrade custody uses Soroban smart contracts on the Stellar network.
               Funds never disperse without multi-party milestone confirmations verified on-chain.
             </p>
@@ -299,13 +299,13 @@ export default function EscrowLedger() {
       <PphpWalletPanel publicKey={freighter.publicKey} onConnect={freighter.connect} />
 
       {/* Escrow table */}
-      <div className="bg-white border border-sand-200 p-6 rounded-2xl shadow-sm space-y-4">
+      <div className="bg-white border border-mist p-6 rounded-2xl shadow-sm space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-extrabold text-sm text-maritime-900">
+          <h3 className="font-bold text-sm text-ink">
             Escrow Audit — All Shipments
           </h3>
           {PLATFORM_ADDRESS && (
-            <span className="text-[9px] bg-ocean-50 text-ocean-600 border border-ocean-100 px-2 py-1 rounded font-bold flex items-center gap-1">
+            <span className="text-[9px] bg-teal-light text-teal border border-teal/20 px-2 py-1 rounded font-bold flex items-center gap-1">
               <Zap className="w-2.5 h-2.5" /> Live Stellar data
             </span>
           )}
@@ -313,16 +313,16 @@ export default function EscrowLedger() {
 
         {loading ? (
           <div className="text-center py-6">
-            <div className="w-6 h-6 border-2 border-maritime-400 border-t-transparent rounded-full animate-spin mx-auto" />
+            <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--theme-accent)', borderTopColor: 'transparent' }} />
           </div>
         ) : shipments.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 text-xs font-mono">
+          <div className="text-center py-8 text-ink-faint text-xs">
             NO SHIPMENT RECORDS LODGED FOR PAYOUT AUDITING.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
-              <thead className="bg-sand-50 text-gray-500 font-bold uppercase font-mono text-[10px] border-b border-sand-200">
+              <thead className="bg-mist-light text-ink-faint font-bold uppercase text-[10px] border-b border-mist">
                 <tr>
                   <th className="px-4 py-3">Shipment Ref</th>
                   <th className="px-4 py-3">Scope</th>
@@ -333,22 +333,22 @@ export default function EscrowLedger() {
                   <th className="px-4 py-3 text-right">Stellar Tx</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-sand-200">
+              <tbody className="divide-y divide-mist">
                 {shipments.map(s => {
                   const chain   = chainRecord(s);
                   const status  = getDisplayStatus(s);
                   const loading = isChainLoading(s);
 
                   return (
-                    <tr key={s.id} className="hover:bg-sand-50/50 transition-colors">
+                    <tr key={s.id} className="hover:bg-mist-light/50 transition-colors">
 
                       {/* Reference */}
-                      <td className="px-4 py-3.5 font-bold font-mono text-maritime-900">
+                      <td className="px-4 py-3.5 font-bold text-ink">
                         {s.referenceCode}
                       </td>
 
                       {/* Scope */}
-                      <td className="px-4 py-3.5 text-gray-500 uppercase font-bold text-[10px]">
+                      <td className="px-4 py-3.5 text-ink-faint uppercase font-bold text-[10px]">
                         {s.shipmentScope?.replace(/_/g, ' ')}
                       </td>
 
@@ -364,7 +364,7 @@ export default function EscrowLedger() {
                       </td>
 
                       {/* Amount */}
-                      <td className="px-4 py-3.5 font-bold font-mono text-maritime-900">
+                      <td className="px-4 py-3.5 font-bold text-ink">
                         {chain
                           ? formatAsset(chain.amountUsdc, 'USDC')
                           : (s.totalValueUSD != null ? formatAsset(s.totalValueUSD, 'USDC') : '—')}
@@ -373,22 +373,22 @@ export default function EscrowLedger() {
                       {/* Status pill — live chain or DB fallback */}
                       <td className="px-4 py-3.5">
                         {loading ? (
-                          <span className="flex items-center gap-1 text-[9px] text-gray-400">
-                            <RefreshCw className="w-3 h-3 animate-spin" /> querying…
-                          </span>
+                        <span className="flex items-center gap-1 text-[9px] text-ink-faint">
+                        <RefreshCw className="w-3 h-3 animate-spin" /> querying…
+                        </span>
                         ) : (
                           <div className="flex flex-col gap-1">
                             <span className={statusPill(status)}>{status}</span>
                             {!s.stellarEscrowId && (
-                              <span className="text-[8px] text-gray-400 font-mono">DB only</span>
+                              <span className="text-[8px] text-ink-faint">DB only</span>
                             )}
                             {s.stellarEscrowId && !loading && chain && (
-                              <span className="text-[8px] text-ocean-500 font-mono flex items-center gap-0.5">
+                              <span className="text-[8px] text-teal flex items-center gap-0.5">
                                 <Zap className="w-2 h-2" /> on-chain
                               </span>
                             )}
                             {chainMap[s.referenceCode] === 'error' && (
-                              <span className="text-[8px] text-amber-500 font-mono">
+                              <span className="text-[8px] text-amber">
                                 ⚠ chain read failed
                               </span>
                             )}
@@ -399,32 +399,33 @@ export default function EscrowLedger() {
                       {/* Milestone progress */}
                       <td className="px-4 py-3.5">
                         {loading ? (
-                          <span className="text-[10px] text-gray-400">…</span>
+                          <span className="text-[10px] text-ink-faint">…</span>
                         ) : chain ? (
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5">
-                              <div className="flex-1 bg-sand-200 rounded-full h-1.5 max-w-[80px]">
+                              <div className="flex-1 bg-mist rounded-full h-1.5 max-w-[80px]">
                                 <div
-                                  className="bg-ocean-400 h-1.5 rounded-full transition-all"
+                                  className="h-1.5 rounded-full transition-all"
                                   style={{
+                                    background: 'var(--theme-accent)',
                                     width: chain.requiredCount > 0
                                       ? `${Math.min(100, (chain.confirmedCount / chain.requiredCount) * 100)}%`
                                       : '0%',
                                   }}
                                 />
                               </div>
-                              <span className="text-[10px] font-mono text-gray-500">
+                              <span className="text-[10px] text-ink-faint">
                                 {chain.confirmedCount}/{chain.requiredCount}
                               </span>
                             </div>
                             {chain.canRelease && (
-                              <span className="text-[8px] text-ocean-600 font-bold flex items-center gap-0.5">
+                              <span className="text-[8px] text-teal font-bold flex items-center gap-0.5">
                                 <CheckCircle2 className="w-2.5 h-2.5" /> Eligible for release
                               </span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-[10px] text-gray-400 font-mono">—</span>
+                          <span className="text-[10px] text-ink-faint">—</span>
                         )}
                       </td>
 
@@ -435,13 +436,13 @@ export default function EscrowLedger() {
                             href={`https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${s.stellarEscrowId}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center justify-end gap-1 font-semibold text-ocean-600 hover:text-ocean-400 transition-colors"
+                            className="inline-flex items-center justify-end gap-1 font-semibold text-steel hover:text-ink transition-colors"
                           >
                             <span>{s.stellarEscrowId.substring(0, 8)}…</span>
-                            <ExternalLink className="w-3 h-3 text-ocean-400" />
+                            <ExternalLink className="w-3 h-3 text-steel" />
                           </a>
                         ) : (
-                          <span className="text-gray-400">Not yet funded</span>
+                          <span className="text-ink-faint">Not yet funded</span>
                         )}
                       </td>
                     </tr>
