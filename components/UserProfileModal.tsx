@@ -106,9 +106,12 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
-  // Fetch whenever userId changes
+  // Fetch whenever userId changes. When userId becomes null (drawer closing),
+  // there's nothing to fetch — skip the effect body entirely rather than
+  // synchronously resetting state in the effect (avoids the cascading-render
+  // lint warning, and AnimatePresence keeps prior content mounted during exit).
   useEffect(() => {
-    if (!userId) { setProfile(null); setError(''); return; }
+    if (!userId) return;
 
     let cancelled = false;
     setLoading(true);
