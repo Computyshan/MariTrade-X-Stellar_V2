@@ -80,6 +80,18 @@
 body {
   background-color: var(--color-mist-light);
   color: var(--color-ink);
+
+  /* Default landing-page theme vars (no role selected yet) — mirrors the
+     app-wide Amber/Steel theme. Overridden by [data-theme] below once a
+     visitor picks a role in the Role Guide. */
+  --theme-accent:        var(--color-amber);
+  --theme-accent-hover:  var(--color-amber-hover);
+  --theme-accent-light:  var(--color-amber-light);
+  --theme-accent-muted:  rgba(254, 153, 0, 0.13);
+  --theme-accent-border: rgba(254, 153, 0, 0.35);
+  --theme-feature:       var(--color-steel);
+  --theme-feature-hover: var(--color-steel-hover);
+  --theme-feature-light: var(--color-steel-light);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -95,6 +107,8 @@ body {
    Palette : Wine #8B1646 · Amber #FE9900 · Mist #CFE2E6 · Ink #142034  */
 [data-theme="trade-party"] {
   --theme-accent:              var(--color-amber);
+  --theme-accent-hover:        var(--color-amber-hover);
+  --theme-accent-light:        var(--color-amber-light);
   --theme-accent-muted:        rgba(254, 153, 0, 0.13);
   --theme-accent-border:       rgba(254, 153, 0, 0.35);
   --theme-feature:             var(--color-wine);
@@ -110,6 +124,8 @@ body {
    Palette : Teal #0BAFB0 · Steel #8197C6 · Mist #CFE2E6 · Ink #142034  */
 [data-theme="logistics-chain"] {
   --theme-accent:              var(--color-teal);
+  --theme-accent-hover:        var(--color-teal-hover);
+  --theme-accent-light:        var(--color-teal-light);
   --theme-accent-muted:        rgba(11, 175, 176, 0.12);
   --theme-accent-border:       rgba(11, 175, 176, 0.35);
   --theme-feature:             var(--color-steel);
