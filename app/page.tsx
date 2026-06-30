@@ -80,8 +80,9 @@ export default function LandingPage() {
             />
           </Link>
           <div className="hidden md:flex items-center gap-1">
-            <span className="text-[13px] font-semibold text-amber border-b-2 border-amber px-3 py-[18px] cursor-pointer">Platform</span>
-            <span className="text-[13px] font-semibold text-ink-faint hover:text-ink px-3 py-[18px] cursor-pointer transition-colors">How it works</span>
+            <a href="#flow" className="text-[13px] font-semibold text-ink-faint hover:text-ink px-3 py-[18px] cursor-pointer transition-colors">How it Works</a>
+            <a href="#role-guide" className="text-[13px] font-semibold text-ink-faint hover:text-ink px-3 py-[18px] cursor-pointer transition-colors">Role Guide</a>
+            <a href="#capabilities" className="text-[13px] font-semibold text-ink-faint hover:text-ink px-3 py-[18px] cursor-pointer transition-colors">Features</a>
           </div>
         </div>
 
@@ -218,7 +219,7 @@ export default function LandingPage() {
         </section>
 
         {/* How it works*/}
-        <section className="py-20 px-6 sm:px-8 max-w-6xl mx-auto">
+        <section id="flow" className="py-20 px-6 sm:px-8 max-w-6xl mx-auto scroll-mt-16">
           <div className="text-center max-w-xl mx-auto mb-14">
             <span className="text-[26px] font-sans uppercase tracking-widest text-amber font-bold">The MariTrade Flow</span>
             <h2 className="text-2xl sm:text-[55px] font-display font-medium text-ink tracking-tight mt-2 leading-tight">
@@ -231,24 +232,24 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 relative">
             {/* Connector line */}
-            <div className="hidden sm:block absolute top-[52px] left-[calc(16.66%+20px)] right-[calc(16.66%+20px)] h-px bg-mist z-0" />
+            <div className="hidden sm:block absolute top-[70px] left-[calc(16.66%+20px)] right-[calc(16.66%+20px)] h-px bg-mist z-0" />
             {[
               {
-                icon: <FileLock2 className="w-5 h-5 text-amber" />,
+                icon: <FileLock2 className="w-8 h-8 text-amber" />,
                 iconBg: 'bg-amber-light',
                 dot: 'bg-amber',
                 title: 'Create & Fund',
                 desc: 'Importer creates a shipment record, assigns the logistics team, uploads documents, and locks USDC payment into multi-signature escrow.',
               },
               {
-                icon: <Truck className="w-5 h-5 text-steel" />,
+                icon: <Truck className="w-8 h-8 text-steel" />,
                 iconBg: 'bg-steel-light',
                 dot: 'bg-steel',
                 title: 'Milestone Logging',
                 desc: 'Each logistics role — freight forwarder, customs broker, warehouse — logs verified checkpoints with timestamped photo proof as cargo moves.',
               },
               {
-                icon: <CheckCircle className="w-5 h-5 text-teal" />,
+                icon: <CheckCircle className="w-8 h-8 text-teal" />,
                 iconBg: 'bg-teal-light',
                 dot: 'bg-teal',
                 title: 'Verify & Release',
@@ -263,7 +264,7 @@ export default function LandingPage() {
                 transition={{ duration: 0.45, delay: i * 0.12, ease: 'easeOut' }}
                 className="relative z-10 flex flex-col items-center text-center px-6 py-8"
               >
-                <div className={`w-[52px] h-[52px] rounded-full ${item.iconBg} border-4 border-mist-light flex items-center justify-center mb-5 shadow-sm`}>
+                <div className={`w-[76px] h-[76px] rounded-full ${item.iconBg} border-4 border-mist-light flex items-center justify-center mb-5 shadow-sm`}>
                   {item.icon}
                 </div>
                 <h3 className="font-display font-medium text-[15px] text-ink mb-2">{item.title}</h3>
@@ -274,7 +275,7 @@ export default function LandingPage() {
         </section>
 
         {/* How to Use MariTrade — Role Guide */}
-        <section className="py-20 px-6 sm:px-8 bg-white border-t border-mist">
+        <section id="role-guide" className="py-20 px-6 sm:px-8 bg-white border-t border-mist scroll-mt-16">
           <div className="max-w-6xl mx-auto">
             <div className="text-center max-w-xl mx-auto mb-10">
               <span className="text-[10px] font-sans uppercase tracking-widest text-amber font-bold">Role-Based Guide</span>
@@ -519,7 +520,7 @@ export default function LandingPage() {
         </section>
 
         {/* Capabilities strip */}
-        <section className="bg-white border-t border-b border-mist py-14 px-6">
+        <section id="capabilities" className="bg-white border-t border-b border-mist py-14 px-6 scroll-mt-16">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-10">
               <span className="text-[15px] font-sans uppercase tracking-widest text-amber font-bold">Built for the Whole Chain</span>
@@ -527,12 +528,12 @@ export default function LandingPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {[
-                { icon: <Lock className="w-5 h-5 text-amber" />, title: 'Multi-Sig Escrow', desc: 'USDC held in Stellar 3-of-3 multi-signature accounts. No single party can unilaterally move funds.' },
-                { icon: <BarChart3 className="w-5 h-5 text-amber" />, title: 'Real-Time Milestone Feed', desc: 'Live updates from every logistics role — freight, customs, warehouse — consolidated in one view.' },
-                { icon: <Globe className="w-5 h-5 text-amber" />, title: 'Built-In Messaging', desc: 'Communicate with your logistics network inside MariTrade. No more scattered emails or messaging apps.' },
-                { icon: <FileText className="w-5 h-5 text-amber" />, title: 'BOC Document Center', desc: 'Shipping and customs documents stored in an authorized folder per shipment — customs brokers get dedicated read access.' },
-                { icon: <Zap className="w-5 h-5 text-amber" />, title: 'Instant Settlement', desc: 'All milestones confirmed? Escrow releases to the exporter in seconds. No bank forms, no delays.' },
-                { icon: <ShieldCheck className="w-5 h-5 text-amber" />, title: 'Dispute-Proof Trail', desc: 'Every milestone is timestamped and photo-verified on-chain — a full audit trail that speaks for itself.' },
+                { icon: <Lock className="w-6 h-6 text-amber" />, title: 'Multi-Sig Escrow', desc: 'USDC held in Stellar 3-of-3 multi-signature accounts. No single party can unilaterally move funds.' },
+                { icon: <BarChart3 className="w-6 h-6 text-amber" />, title: 'Real-Time Milestone Feed', desc: 'Live updates from every logistics role — freight, customs, warehouse — consolidated in one view.' },
+                { icon: <Globe className="w-6 h-6 text-amber" />, title: 'Built-In Messaging', desc: 'Communicate with your logistics network inside MariTrade. No more scattered emails or messaging apps.' },
+                { icon: <FileText className="w-6 h-6 text-amber" />, title: 'BOC Document Center', desc: 'Shipping and customs documents stored in an authorized folder per shipment — customs brokers get dedicated read access.' },
+                { icon: <Zap className="w-6 h-6 text-amber" />, title: 'Instant Settlement', desc: 'All milestones confirmed? Escrow releases to the exporter in seconds. No bank forms, no delays.' },
+                { icon: <ShieldCheck className="w-6 h-6 text-amber" />, title: 'Dispute-Proof Trail', desc: 'Every milestone is timestamped and photo-verified on-chain — a full audit trail that speaks for itself.' },
               ].map((cap, i) => (
                 <motion.div
                   key={i}
@@ -542,7 +543,7 @@ export default function LandingPage() {
                   transition={{ duration: 0.4, delay: i * 0.07, ease: 'easeOut' }}
                   className="p-5 rounded-xl border border-mist hover:border-amber/30 hover:shadow-sm transition-all bg-mist-light"
                 >
-                  <div className="w-9 h-9 bg-amber-light rounded-lg flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 bg-amber-light rounded-lg flex items-center justify-center mb-4">
                     {cap.icon}
                   </div>
                   <h3 className="font-display font-medium text-[14px] text-ink mb-1.5">{cap.title}</h3>
