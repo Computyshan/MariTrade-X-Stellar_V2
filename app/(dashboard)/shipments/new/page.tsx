@@ -85,17 +85,78 @@ const STEPS = [
   { label: 'Fund Escrow',   icon: Wallet },
 ];
 
-const HS_CODE_SUGGESTIONS = [
-  { code: '8471.30', description: 'Portable automatic data-processing machines (laptops)' },
-  { code: '8517.12', description: 'Telephones for cellular networks (smartphones)' },
-  { code: '8704.21', description: 'Motor vehicles for goods transport, diesel' },
-  { code: '6109.10', description: 'T-shirts and singlets, knitted, cotton' },
-  { code: '0303.89', description: 'Frozen fish, excluding fillets' },
-  { code: '2709.00', description: 'Petroleum oils and oils from bituminous minerals, crude' },
-  { code: '8544.42', description: 'Electric conductors, fitted with connectors' },
-  { code: '9403.20', description: 'Metal furniture of a kind used in offices' },
-  { code: '8501.10', description: 'Electric motors of an output not exceeding 37.5W' },
-  { code: '3926.90', description: 'Other articles of plastics' },
+const HS_CATEGORY_ORDER = [
+  'Electronics & Electrical',
+  'Vehicles & Transport',
+  'Textiles & Apparel',
+  'Food & Agriculture',
+  'Chemicals, Plastics & Materials',
+  'Machinery & Industrial',
+  'Furniture & Household',
+  'Metals & Raw Materials',
+] as const;
+
+const HS_CATEGORY_ICONS: Record<typeof HS_CATEGORY_ORDER[number], string> = {
+  'Electronics & Electrical':         '🔌',
+  'Vehicles & Transport':             '🚗',
+  'Textiles & Apparel':               '👕',
+  'Food & Agriculture':               '🌾',
+  'Chemicals, Plastics & Materials':  '🧪',
+  'Machinery & Industrial':           '⚙️',
+  'Furniture & Household':            '🛋️',
+  'Metals & Raw Materials':           '⛏️',
+};
+
+const HS_CODE_SUGGESTIONS: { code: string; description: string; category: typeof HS_CATEGORY_ORDER[number] }[] = [
+  // Electronics & Electrical
+  { code: '8471.30', description: 'Portable automatic data-processing machines (laptops)', category: 'Electronics & Electrical' },
+  { code: '8471.41', description: 'Automatic data-processing machines, desktop units', category: 'Electronics & Electrical' },
+  { code: '8517.12', description: 'Telephones for cellular networks (smartphones)', category: 'Electronics & Electrical' },
+  { code: '8517.62', description: 'Machines for reception/transmission of data (routers, modems)', category: 'Electronics & Electrical' },
+  { code: '8528.72', description: 'Television receivers, colour', category: 'Electronics & Electrical' },
+  { code: '8544.42', description: 'Electric conductors, fitted with connectors', category: 'Electronics & Electrical' },
+  { code: '8501.10', description: 'Electric motors of an output not exceeding 37.5W', category: 'Electronics & Electrical' },
+  { code: '8507.60', description: 'Lithium-ion batteries', category: 'Electronics & Electrical' },
+  { code: '8536.69', description: 'Plugs, sockets and other connectors, voltage ≤1000V', category: 'Electronics & Electrical' },
+  { code: '8418.10', description: 'Combined refrigerator-freezers, fitted with separate doors', category: 'Electronics & Electrical' },
+  // Vehicles & Transport
+  { code: '8704.21', description: 'Motor vehicles for goods transport, diesel', category: 'Vehicles & Transport' },
+  { code: '8703.23', description: 'Motor cars, spark-ignition engine, 1500–3000cc', category: 'Vehicles & Transport' },
+  { code: '8711.20', description: 'Motorcycles, 50cc–250cc', category: 'Vehicles & Transport' },
+  { code: '8708.29', description: 'Other parts and accessories of motor vehicle bodies', category: 'Vehicles & Transport' },
+  { code: '4011.10', description: 'New pneumatic tyres, of rubber, for motor cars', category: 'Vehicles & Transport' },
+  // Textiles & Apparel
+  { code: '6109.10', description: 'T-shirts and singlets, knitted, cotton', category: 'Textiles & Apparel' },
+  { code: '6203.42', description: "Men's trousers, of cotton", category: 'Textiles & Apparel' },
+  { code: '6204.62', description: "Women's trousers, of cotton", category: 'Textiles & Apparel' },
+  { code: '6402.99', description: 'Footwear with outer soles of rubber/plastics', category: 'Textiles & Apparel' },
+  { code: '5208.52', description: 'Woven fabrics of cotton, printed, ≥85% cotton', category: 'Textiles & Apparel' },
+  // Food & Agriculture
+  { code: '0303.89', description: 'Frozen fish, excluding fillets', category: 'Food & Agriculture' },
+  { code: '0306.17', description: 'Frozen shrimps and prawns', category: 'Food & Agriculture' },
+  { code: '1006.30', description: 'Semi-milled or wholly milled rice', category: 'Food & Agriculture' },
+  { code: '0901.21', description: 'Coffee, roasted, not decaffeinated', category: 'Food & Agriculture' },
+  { code: '1801.00', description: 'Cocoa beans, whole or broken, raw or roasted', category: 'Food & Agriculture' },
+  { code: '2009.89', description: 'Other fruit/vegetable juices, unfermented', category: 'Food & Agriculture' },
+  // Chemicals, Plastics & Materials
+  { code: '2709.00', description: 'Petroleum oils and oils from bituminous minerals, crude', category: 'Chemicals, Plastics & Materials' },
+  { code: '3004.90', description: 'Other medicaments, mixed, for retail sale', category: 'Chemicals, Plastics & Materials' },
+  { code: '3926.90', description: 'Other articles of plastics', category: 'Chemicals, Plastics & Materials' },
+  { code: '3923.21', description: 'Sacks and bags, of polymers of ethylene', category: 'Chemicals, Plastics & Materials' },
+  { code: '3208.90', description: 'Paints and varnishes based on synthetic polymers', category: 'Chemicals, Plastics & Materials' },
+  // Machinery & Industrial
+  { code: '8413.70', description: 'Other centrifugal pumps', category: 'Machinery & Industrial' },
+  { code: '8429.51', description: 'Front-end shovel loaders, self-propelled', category: 'Machinery & Industrial' },
+  { code: '8483.40', description: 'Gears and gearing; ball/roller screws; gear boxes', category: 'Machinery & Industrial' },
+  { code: '7308.90', description: 'Other structures and parts of structures, of iron/steel', category: 'Machinery & Industrial' },
+  // Furniture & Household
+  { code: '9403.20', description: 'Metal furniture of a kind used in offices', category: 'Furniture & Household' },
+  { code: '9403.60', description: 'Other wooden furniture', category: 'Furniture & Household' },
+  { code: '7013.49', description: 'Glassware for table/kitchen use', category: 'Furniture & Household' },
+  // Metals & Raw Materials
+  { code: '7210.49', description: 'Flat-rolled iron/steel, plated or coated with zinc', category: 'Metals & Raw Materials' },
+  { code: '7601.10', description: 'Unwrought aluminium, not alloyed', category: 'Metals & Raw Materials' },
+  { code: '7404.00', description: 'Copper waste and scrap', category: 'Metals & Raw Materials' },
 ];
 
 const PACKAGING_TYPES = ['Cartons', 'Pallets', 'Crates', 'Drums', 'Bags', 'Bales', 'Rolls', 'Bundles', 'Containers (20ft)', 'Containers (40ft)'];
@@ -203,12 +264,13 @@ export default function NewShipmentPage() {
   const [exporterContact,  setExporterContact]  = useState('');
 
   // ── Step 1 · COMMERCIAL VALUE ──────────────────────────────────────────────
-  const [invoiceCurrency,  setInvoiceCurrency]  = useState<'USD' | 'PHP' | 'EUR' | 'JPY'>('USD');
+  const [invoiceCurrency,  setInvoiceCurrency]  = useState<'USD' | 'PHP'>('USD');
   const [invoiceValue,     setInvoiceValue]     = useState('');
   const [totalValueUSD,    setTotalValueUSD]    = useState('');
   const [hsCode,           setHsCode]           = useState('');
   const [hsSearch,         setHsSearch]         = useState('');
   const [hsDropOpen,       setHsDropOpen]       = useState(false);
+  const [hsCategoryFilter, setHsCategoryFilter] = useState<typeof HS_CATEGORY_ORDER[number] | null>(null);
   const [oracleRate,       setOracleRate]       = useState<{ rate: number; label: string } | null>(null);
   const [oracleLoading,    setOracleLoading]    = useState(false);
   const hsRef = useRef<HTMLDivElement>(null);
@@ -405,8 +467,8 @@ export default function NewShipmentPage() {
     setDestCountry(r.destCountry || '');
     setDestAddress(r.destAddress || '');
     setDestinationPort(r.destinationPort || '');
-    if (r.invoiceCurrency && ['USD', 'PHP', 'EUR', 'JPY'].includes(r.invoiceCurrency)) {
-      setInvoiceCurrency(r.invoiceCurrency as 'USD' | 'PHP' | 'EUR' | 'JPY');
+    if (r.invoiceCurrency && ['USD', 'PHP'].includes(r.invoiceCurrency)) {
+      setInvoiceCurrency(r.invoiceCurrency as 'USD' | 'PHP');
     }
     if (r.invoiceValue != null) setInvoiceValue(String(r.invoiceValue));
     setHsCode(r.hsCode || '');
@@ -419,8 +481,12 @@ export default function NewShipmentPage() {
   };
 
   const filteredHs = HS_CODE_SUGGESTIONS.filter(h =>
-    h.code.includes(hsSearch) || h.description.toLowerCase().includes(hsSearch.toLowerCase())
+    (hsCategoryFilter === null || h.category === hsCategoryFilter) &&
+    (h.code.includes(hsSearch) || h.description.toLowerCase().includes(hsSearch.toLowerCase()))
   );
+  const filteredHsGrouped = HS_CATEGORY_ORDER
+    .map(cat => ({ category: cat, items: filteredHs.filter(h => h.category === cat) }))
+    .filter(g => g.items.length > 0);
 
   const handleDocAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -925,7 +991,7 @@ export default function NewShipmentPage() {
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-ink-faint">Invoice Currency <span className="text-wine">*</span></label>
                   <div className="flex gap-1.5 flex-wrap">
-                    {(['USD', 'PHP', 'EUR', 'JPY'] as const).map(cur => (
+                    {(['USD', 'PHP'] as const).map(cur => (
                       <button key={cur} type="button" onClick={() => setInvoiceCurrency(cur)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-black border-2 transition-all cursor-pointer ${invoiceCurrency === cur ? 'border-teal bg-teal-light text-steel' : 'border-mist text-ink-faint hover:border-amber/30'}`}>
                         {cur}
@@ -936,7 +1002,11 @@ export default function NewShipmentPage() {
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-ink-faint">Invoice Value <span className="text-wine">*</span></label>
                   <div className="relative">
-                    <DollarSign className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                    {invoiceCurrency === 'PHP' ? (
+                      <span className="w-4 h-4 text-ink-faint absolute left-2.5 top-2 text-xs font-black leading-none">₱</span>
+                    ) : (
+                      <DollarSign className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
+                    )}
                     <input type="number" min="0" placeholder="0.00" className="w-full border border-mist rounded-lg pl-8 pr-14 py-2 text-xs font-sans outline-none focus:border-amber" value={invoiceValue} onChange={e => setInvoiceValue(e.target.value)} />
                     <span className="absolute right-3 top-2 text-[10px] text-ink-faint font-bold">{invoiceCurrency}</span>
                   </div>
@@ -966,13 +1036,41 @@ export default function NewShipmentPage() {
                   />
                   {hsDropOpen && filteredHs.length > 0 && (
                     <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-mist rounded-xl shadow-lg overflow-hidden">
-                      {filteredHs.map(h => (
-                        <button key={h.code} type="button" onClick={() => { setHsCode(h.code); setHsSearch(h.code); setHsDropOpen(false); }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-amber-light text-left transition-all group">
-                          <span className="font-sans text-xs font-black text-amber flex-shrink-0 group-hover:text-ink">{h.code}</span>
-                          <span className="text-[11px] text-ink-faint truncate">{h.description}</span>
+                      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-mist-light overflow-x-auto">
+                        <button
+                          type="button"
+                          onClick={() => setHsCategoryFilter(null)}
+                          className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black border transition-all ${hsCategoryFilter === null ? 'border-amber bg-amber-light text-amber' : 'border-mist text-ink-faint hover:border-amber/30'}`}
+                        >
+                          All
                         </button>
-                      ))}
+                        {HS_CATEGORY_ORDER.map(cat => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setHsCategoryFilter(prev => prev === cat ? null : cat)}
+                            className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black border transition-all whitespace-nowrap ${hsCategoryFilter === cat ? 'border-amber bg-amber-light text-amber' : 'border-mist text-ink-faint hover:border-amber/30'}`}
+                          >
+                            {HS_CATEGORY_ICONS[cat]} {cat}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="max-h-72 overflow-y-auto">
+                        {filteredHsGrouped.map(group => (
+                          <div key={group.category}>
+                            <div className="sticky top-0 bg-mist-light px-4 py-1.5 text-[9px] font-black text-ink-faint uppercase tracking-widest border-b border-mist">
+                              {HS_CATEGORY_ICONS[group.category]} {group.category}
+                            </div>
+                            {group.items.map(h => (
+                              <button key={h.code} type="button" onClick={() => { setHsCode(h.code); setHsSearch(h.code); setHsDropOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-amber-light text-left transition-all group">
+                                <span className="font-sans text-xs font-black text-amber flex-shrink-0 group-hover:text-ink">{h.code}</span>
+                                <span className="text-[11px] text-ink-faint truncate">{h.description}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
