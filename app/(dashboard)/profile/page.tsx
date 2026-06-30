@@ -354,6 +354,7 @@ function ShipmentActivity({ userId, isTradeParty }: { userId: string; isTradePar
     finally { setLoading(false); }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch-on-mount, setState occurs after await
   useEffect(() => { fetchShipments(); }, [fetchShipments]);
 
   // ── Derived counts ──

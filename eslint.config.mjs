@@ -7,5 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig([{
+    ignores: ["**/_node_modules.bak/**", "**/escrow-bindings/dist/**"],
+}, {
     extends: [...next],
 }]);
