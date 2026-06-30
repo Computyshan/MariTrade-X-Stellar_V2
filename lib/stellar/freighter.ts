@@ -268,7 +268,6 @@ export async function signAndSubmitWithRetry(
   maxRetries = 4,
 ): Promise<string> {
   let attempt = 0;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const tx = await buildTx();
     try {

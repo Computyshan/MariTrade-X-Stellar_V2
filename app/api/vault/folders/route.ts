@@ -15,7 +15,6 @@ export async function GET(req: NextRequest) {
       if (!folder) {
         return NextResponse.json({ success: false, error: 'Vault folder not found for this shipment' }, { status: 404 });
       }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password: _pw, ...safeFolder } = folder;
       return NextResponse.json({ success: true, data: safeFolder });
     }
@@ -31,7 +30,6 @@ export async function GET(req: NextRequest) {
       const docs = documents.filter(d => d.shipmentId === folder.shipmentId);
 
       // CRITICAL FIX: never return plaintext password to the client
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password: _password, ...safeFolder } = folder;
 
       return { ...safeFolder, shipment, documents: docs };

@@ -19,11 +19,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const unsub = init();
     return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Populate allUsers once the session is resolved
   useEffect(() => {
     if (currentUser) refreshAllUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
 
   // Redirect logic after loading is resolved
@@ -49,7 +51,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         router.replace('/dashboard');
       }
     }
-  }, [currentUser, loading, pathname]);
+  }, [currentUser, loading, pathname, router]);
 
   // Show nothing while resolving session to avoid flash
   if (loading) {
