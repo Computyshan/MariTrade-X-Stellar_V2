@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -273,7 +273,7 @@ export default function NewShipmentPage() {
       const suggested = deriveFolderName(description, originCountry, destinationPort);
       setVaultFolderName(suggested);
     }
-  }, [step]);
+  }, [step, description, originCountry, destinationPort, vaultFolderName]);
 
   // ── Fetch Trusted Network when reaching Step 3 ────────────────────────
   useEffect(() => {
@@ -303,7 +303,7 @@ export default function NewShipmentPage() {
   }, [shipmentScope]);
 
   // ── Oracle rate fetcher ────────────────────────────────────────────────────
-  const fetchOracleRate = async (currency: string) => {
+  const fetchOracleRate = useCallback(async (currency: string) => {
     setOracleLoading(true);
     try {
       if (currency === 'USD') {
@@ -324,7 +324,7 @@ export default function NewShipmentPage() {
     } finally {
       setOracleLoading(false);
     }
-  };
+  }, [invoiceValue]);
 
   // ── PHP rate fetcher ─────────────────────────────────────────────────────────
   const fetchPhpRate = async () => {
@@ -351,7 +351,7 @@ export default function NewShipmentPage() {
     }
     const timeout = setTimeout(() => fetchOracleRate(invoiceCurrency), 600);
     return () => clearTimeout(timeout);
-  }, [invoiceCurrency, invoiceValue]);
+  }, [invoiceCurrency, invoiceValue, fetchOracleRate]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -363,7 +363,6 @@ export default function NewShipmentPage() {
 
   useEffect(() => {
     if (step === 4 && shipmentScope === 'NATIONWIDE') fetchPhpRate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, shipmentScope]);
 
   // ── Recalculate PPHP↔USDC preview ──────────────────────────────────────────

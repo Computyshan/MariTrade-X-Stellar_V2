@@ -146,7 +146,6 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const hasRealEscrowId = !!data?.shipment?.stellarEscrowId &&
     /^[0-9a-fA-F]{64}$/.test(data.shipment.stellarEscrowId);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!data?.shipment || data.shipment.escrowStatus !== 'FUNDED') return;
     if (!data.shipment.referenceCode) return;
@@ -166,6 +165,10 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       })
       .catch(() => setChainCanRelease(null))
       .finally(() => setCheckingRelease(false));
+    // Intentionally depend on the specific fields we read (not the whole
+    // `data.shipment` object) so this doesn't re-fire on every unrelated
+    // field update — only when escrow status, ref code, or wallet change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.shipment?.escrowStatus, data?.shipment?.referenceCode, hasRealEscrowId, freighter.publicKey]);
 
   // ── Fund escrow (mock) ───────────────────────────────────────────────────

@@ -255,7 +255,7 @@ export default function LandingPage() {
                 <p className="text-wine-light text-[11px] text-left mt-2 pl-1 font-sans">⚠ {errorSearch}</p>
               )}
               <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-steel">
-                <span>MariTrade offers visibility and transparency among it's users by providing real-time updates on shipment status.</span>
+                <span>MariTrade offers visibility and transparency among its users by providing real-time updates on shipment status.</span>
               </div>
             </div>
 
