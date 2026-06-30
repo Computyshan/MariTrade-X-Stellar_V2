@@ -1,5 +1,7 @@
 # MariTrade V2
 
+https://mari-trade-x-stellar.vercel.app/
+
 MariTrade is a digital shipment tracking and trade-finance platform built for Filipino SME importers, exporters, and logistics chains. It pairs a Next.js web app with a Stellar/Soroban smart-contract escrow system, so payment for a shipment is locked on-chain and only released as milestones in the shipping process are confirmed.
 
 ## Why it exists
