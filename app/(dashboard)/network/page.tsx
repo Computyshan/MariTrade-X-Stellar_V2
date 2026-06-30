@@ -26,8 +26,10 @@ import {
   AlertCircle,
   RefreshCw,
   X,
+  Eye,
 } from 'lucide-react';
 import { JobRole, User } from '@/types';
+import UserProfileModal from '@/components/UserProfileModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,6 +103,8 @@ export default function NetworkPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  // Profile drawer
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
 
   const showToast = (type: 'success' | 'error', msg: string) => {
     setToast({ type, msg });
@@ -269,6 +273,11 @@ export default function NetworkPage() {
 
   return (
     <DashboardLayout>
+      {/* ── Public Profile Drawer ── */}
+      <UserProfileModal
+        userId={viewProfileId}
+        onClose={() => setViewProfileId(null)}
+      />
       {/* Toast */}
       {toast && (
         <div className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-xs font-bold border
@@ -404,65 +413,76 @@ export default function NetworkPage() {
                       )}
                     </div>
 
-                    <div className="mt-auto pt-3 border-t border-mist flex items-center justify-between gap-3">
-                      {isSelf && (
-                        <span className="text-[10px] text-ink-faint font-bold">You</span>
-                      )}
-                      {!connStatus && !isSelf && (
+                    <div className="mt-auto pt-3 border-t border-mist space-y-2">
+                      {/* View profile — always shown except for yourself */}
+                      {!isSelf && (
                         <button
-                          onClick={() => sendRequest(member.id)}
-                          disabled={isLoadingThis}
-                          className="flex items-center gap-1.5 text-white text-[11px] font-black px-3 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
-                          style={{ background: 'var(--theme-accent)' }}
+                          onClick={() => setViewProfileId(member.id)}
+                          className="w-full flex items-center justify-center gap-1.5 border border-mist hover:bg-mist-light text-ink-faint hover:text-ink text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer"
                         >
-                          {isLoadingThis ? <RefreshCw className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
-                          Connect
+                          <Eye className="w-3 h-3" /> View Profile
                         </button>
                       )}
-                      {connStatus === 'REJECTED' && !isSelf && (
-                        <button
-                          onClick={() => sendRequest(member.id)}
-                          disabled={isLoadingThis}
-                          className="flex items-center gap-1.5 text-white text-[11px] font-black px-3 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
-                          style={{ background: 'var(--theme-accent)' }}
-                        >
-                          {isLoadingThis ? <RefreshCw className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
-                          Connect
-                        </button>
-                      )}
-                      {connStatus === 'ACCEPTED' && !isSelf && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-teal font-bold flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> In your MariNet
-                          </span>
+                      <div className="flex items-center justify-between gap-2">
+                        {isSelf && (
+                          <span className="text-[10px] text-ink-faint font-bold">You</span>
+                        )}
+                        {!connStatus && !isSelf && (
                           <button
-                            onClick={() => removeConnection(member.connectionId!, member.id, 'remove')}
-                            disabled={actionLoading === member.connectionId}
-                            className="flex items-center gap-1 border border-mist hover:bg-wine-light hover:border-wine/20 text-ink-faint hover:text-wine text-[10px] font-bold px-2 py-1 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                            onClick={() => sendRequest(member.id)}
+                            disabled={isLoadingThis}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-white text-[11px] font-black px-3 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                            style={{ background: 'var(--theme-accent)' }}
                           >
-                            <UserMinus className="w-3 h-3" /> Remove
+                            {isLoadingThis ? <RefreshCw className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                            Connect
                           </button>
-                        </div>
-                      )}
-                      {connStatus === 'PENDING' && member.isSender && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-amber font-bold flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> Awaiting response
-                          </span>
+                        )}
+                        {connStatus === 'REJECTED' && !isSelf && (
                           <button
-                            onClick={() => removeConnection(member.connectionId!, member.id, 'cancel')}
-                            disabled={actionLoading === member.connectionId}
-                            className="flex items-center gap-1 border border-mist hover:bg-wine-light hover:border-wine/20 text-ink-faint hover:text-wine text-[10px] font-bold px-2 py-1 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                            onClick={() => sendRequest(member.id)}
+                            disabled={isLoadingThis}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-white text-[11px] font-black px-3 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                            style={{ background: 'var(--theme-accent)' }}
                           >
-                            <X className="w-3 h-3" /> Cancel
+                            {isLoadingThis ? <RefreshCw className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                            Connect
                           </button>
-                        </div>
-                      )}
-                      {connStatus === 'PENDING' && !member.isSender && !isSelf && (
-                        <span className="text-[10px] text-ink-faint font-bold flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" /> Wants to connect
-                        </span>
-                      )}
+                        )}
+                        {connStatus === 'ACCEPTED' && !isSelf && (
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="text-[10px] text-teal font-bold flex items-center gap-1 flex-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> In your MariNet
+                            </span>
+                            <button
+                              onClick={() => removeConnection(member.connectionId!, member.id, 'remove')}
+                              disabled={actionLoading === member.connectionId}
+                              className="flex items-center gap-1 border border-mist hover:bg-wine-light hover:border-wine/20 text-ink-faint hover:text-wine text-[10px] font-bold px-2 py-1 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                            >
+                              <UserMinus className="w-3 h-3" /> Remove
+                            </button>
+                          </div>
+                        )}
+                        {connStatus === 'PENDING' && member.isSender && (
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="text-[10px] text-amber font-bold flex items-center gap-1 flex-1">
+                              <Clock className="w-3.5 h-3.5" /> Awaiting response
+                            </span>
+                            <button
+                              onClick={() => removeConnection(member.connectionId!, member.id, 'cancel')}
+                              disabled={actionLoading === member.connectionId}
+                              className="flex items-center gap-1 border border-mist hover:bg-wine-light hover:border-wine/20 text-ink-faint hover:text-wine text-[10px] font-bold px-2 py-1 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                            >
+                              <X className="w-3 h-3" /> Cancel
+                            </button>
+                          </div>
+                        )}
+                        {connStatus === 'PENDING' && !member.isSender && !isSelf && (
+                          <span className="text-[10px] text-ink-faint font-bold flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> Wants to connect
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -484,38 +504,46 @@ export default function NetworkPage() {
               </h3>
               <div className="space-y-3">
                 {pendingReceived.map(conn => (
-                  <div key={conn.id} className="bg-white border border-mist rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="flex items-center gap-3 flex-1">
-                      <div className="w-10 h-10 rounded-xl bg-ink text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
-                        {conn.otherParty?.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-ink">{conn.otherParty?.fullName}</p>
-                        <p className="text-[10px] text-ink-faint">{conn.otherParty?.companyName} · {JOB_ROLE_LABELS[conn.otherParty?.jobRole as JobRole] ?? ''}</p>
-                        <p className="text-[10px] text-ink-faint/60 mt-0.5">
-                          Requested {new Date(conn.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => respondToRequest(conn.id, 'ACCEPTED')}
-                        disabled={actionLoading === conn.id}
-                        className="flex items-center gap-1.5 text-white text-[11px] font-black px-4 py-2 rounded-lg transition-all cursor-pointer disabled:opacity-60"
-                          style={{ background: 'var(--theme-accent)' }}
-                      >
-                        <UserCheck className="w-3.5 h-3.5" /> Accept
-                      </button>
-                      <button
+                <div key={conn.id} className="bg-white border border-mist rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex items-center gap-3 flex-1">
+                <div className="w-10 h-10 rounded-xl bg-ink text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                {conn.otherParty?.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                <p className="text-xs font-bold text-ink">{conn.otherParty?.fullName}</p>
+                <p className="text-[10px] text-ink-faint">{conn.otherParty?.companyName} · {JOB_ROLE_LABELS[conn.otherParty?.jobRole as JobRole] ?? ''}</p>
+                <p className="text-[10px] text-ink-faint/60 mt-0.5">
+                Requested {new Date(conn.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                </p>
+                </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                {conn.otherParty && (
+                <button
+                  onClick={() => setViewProfileId(conn.otherParty!.id)}
+                  className="flex items-center gap-1.5 border border-mist hover:bg-mist-light text-ink-faint text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer"
+                >
+                    <Eye className="w-3.5 h-3.5" />
+                </button>
+                )}
+                <button
+                onClick={() => respondToRequest(conn.id, 'ACCEPTED')}
+                disabled={actionLoading === conn.id}
+                className="flex items-center gap-1.5 text-white text-[11px] font-black px-4 py-2 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                    style={{ background: 'var(--theme-accent)' }}
+                >
+                  <UserCheck className="w-3.5 h-3.5" /> Accept
+                  </button>
+                    <button
                         onClick={() => respondToRequest(conn.id, 'REJECTED')}
-                        disabled={actionLoading === conn.id}
-                        className="flex items-center gap-1.5 border border-mist hover:bg-wine-light hover:border-wine/20 text-ink-faint hover:text-wine text-[11px] font-bold px-4 py-2 rounded-lg transition-all cursor-pointer disabled:opacity-60"
-                      >
-                        <XCircle className="w-3.5 h-3.5" /> Decline
-                      </button>
+                          disabled={actionLoading === conn.id}
+                          className="flex items-center gap-1.5 border border-mist hover:bg-wine-light hover:border-wine/20 text-ink-faint hover:text-wine text-[11px] font-bold px-4 py-2 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Decline
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           )}
@@ -586,42 +614,50 @@ export default function NetworkPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {trustedNetwork.map(conn => {
-                const member = conn.otherParty;
-                if (!member) return null;
-                return (
-                  <div key={conn.id} className="bg-white border border-mist rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal uppercase tracking-wider">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> MariNet Member
-                      </div>
-                      <button
-                        onClick={() => removeConnection(conn.id, member.id, 'remove')}
-                        disabled={actionLoading === conn.id}
-                        className="flex items-center gap-1 border border-mist hover:bg-wine-light hover:border-wine/20 text-ink-faint hover:text-wine text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
-                      >
-                        {actionLoading === conn.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />}
-                        Remove
-                      </button>
+              const member = conn.otherParty;
+              if (!member) return null;
+              return (
+              <div key={conn.id} className="bg-white border border-mist rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal uppercase tracking-wider">
+              <CheckCircle2 className="w-3.5 h-3.5" /> MariNet Member
+              </div>
+              <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setViewProfileId(member.id)}
+                className="flex items-center gap-1 border border-mist hover:bg-mist-light text-ink-faint hover:text-ink text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
+                >
+                <Eye className="w-3 h-3" /> Profile
+              </button>
+                <button
+                    onClick={() => removeConnection(conn.id, member.id, 'remove')}
+                    disabled={actionLoading === conn.id}
+                  className="flex items-center gap-1 border border-mist hover:bg-wine-light hover:border-wine/20 text-ink-faint hover:text-wine text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
+              >
+                  {actionLoading === conn.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />}
+                  Remove
+              </button>
+              </div>
+              </div>
+              <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-ink text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  {member.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                <p className="text-xs font-bold text-ink">{member.fullName}</p>
+                <p className="text-[10px] text-ink-faint flex items-center gap-1 mt-0.5">
+                    <Building2 className="w-3 h-3" /> {member.companyName}
+                    </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-xl bg-ink text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
-                        {member.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-ink">{member.fullName}</p>
-                        <p className="text-[10px] text-ink-faint flex items-center gap-1 mt-0.5">
-                          <Building2 className="w-3 h-3" /> {member.companyName}
-                        </p>
-                      </div>
                     </div>
-                    <RoleBadge role={member.jobRole} />
-                    <div className="pt-2 border-t border-mist text-[10px] text-ink-faint flex items-center gap-1">
-                      <BadgeCheck className="w-3.5 h-3.5 text-teal" />
-                      KYC Verified · Connected {new Date(conn.updatedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                  </div>
-                );
-              })}
+                        <RoleBadge role={member.jobRole} />
+                        <div className="pt-2 border-t border-mist text-[10px] text-ink-faint flex items-center gap-1">
+                          <BadgeCheck className="w-3.5 h-3.5 text-teal" />
+                          KYC Verified · Connected {new Date(conn.updatedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </div>
+                      </div>
+                    );
+                  })}
             </div>
           )}
         </div>

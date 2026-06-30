@@ -47,6 +47,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Ship,
+  Eye,
 } from 'lucide-react';
 import {
   ChatThread,
@@ -59,6 +60,7 @@ import {
   ShipmentReceipt,
   ShipmentScope,
 } from '@/types';
+import UserProfileModal from '@/components/UserProfileModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -192,6 +194,8 @@ export default function ChatNegotiationCenter() {
 
   // Profile popover
   const [showProfilePopover, setShowProfilePopover] = useState(false);
+  // Profile drawer — for viewing other users' public profiles
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef   = useRef<HTMLInputElement>(null);
@@ -644,6 +648,11 @@ export default function ChatNegotiationCenter() {
 
   return (
     <DashboardLayout flush={true}>
+      {/* ── Public Profile Drawer ── */}
+      <UserProfileModal
+        userId={viewProfileId}
+        onClose={() => setViewProfileId(null)}
+      />
       <div className="flex flex-col h-screen w-full bg-white text-ink overflow-hidden">
 
         {/* Toast */}
@@ -860,6 +869,19 @@ export default function ChatNegotiationCenter() {
                         </div>
                       )}
                     </div>
+
+                    {/* View other party's profile — only in active DM threads */}
+                    {activeThread && !activeThread.isGroup && activePartnerId && (
+                      <div className="border-t border-mist pt-2">
+                        <button
+                          type="button"
+                          onClick={() => { setShowProfilePopover(false); setViewProfileId(activePartnerId); }}
+                          className="flex items-center justify-center gap-1.5 w-full border border-mist hover:bg-mist-light text-ink-faint hover:text-ink font-bold py-2 rounded-lg text-[11px] transition-all cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3" /> View {(activeThread as any).otherParticipant?.fullName?.split(' ')[0] || 'Contact'}'s Profile
+                        </button>
+                      </div>
+                    )}
 
                     <div className="border-t border-mist pt-2">
                       <Link
@@ -1101,15 +1123,24 @@ export default function ChatNegotiationCenter() {
                                       </span>
                                     </div>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartChat(member.id)}
-                                    className="w-full text-white font-bold py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                                    style={{ background: 'var(--theme-accent)' }}
-                                  >
-                                    <MessageSquare className="w-3 h-3" />
-                                    {hasThread ? 'Open Chat' : `Message ${member.fullName.split(' ')[0]}`}
-                                  </button>
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewProfileId(member.id)}
+                                      className="flex-shrink-0 border border-mist hover:bg-mist-light text-ink-faint hover:text-ink font-bold py-1.5 rounded-lg text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer px-2"
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartChat(member.id)}
+                                      className="flex-1 text-white font-bold py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                                      style={{ background: 'var(--theme-accent)' }}
+                                    >
+                                      <MessageSquare className="w-3 h-3" />
+                                      {hasThread ? 'Open Chat' : `Message ${member.fullName.split(' ')[0]}`}
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1200,7 +1231,17 @@ export default function ChatNegotiationCenter() {
 
                   {/* Chat header */}
                   <div className="h-14 border-b border-gray-150 px-5 flex items-center justify-between bg-white shrink-0 select-none">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!activeThread?.isGroup && activePartnerId) setViewProfileId(activePartnerId);
+                      }}
+                      disabled={!!activeThread?.isGroup || !activePartnerId}
+                      className={`flex items-center gap-2.5 min-w-0 text-left rounded-lg transition-colors ${
+                        !activeThread?.isGroup && activePartnerId ? 'cursor-pointer hover:bg-mist-light -ml-1.5 pl-1.5 pr-2 py-1' : ''
+                      }`}
+                      title={!activeThread?.isGroup && activePartnerId ? 'View profile' : undefined}
+                    >
                       <div className="w-8 h-8 rounded-full bg-[#0058be] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
                         {activeThread?.isGroup
                           ? <Users className="w-4 h-4" />
@@ -1238,7 +1279,7 @@ export default function ChatNegotiationCenter() {
                             : ((activeThread as any)?.otherParticipant?.companyName || 'Stellar Authorized counterparty')}
                         </p>
                       </div>
-                    </div>
+                    </button>
                     <p className="text-[9px] font-mono font-bold text-gray-400 shrink-0">ID: {activeThread?.id}</p>
                   </div>
 
