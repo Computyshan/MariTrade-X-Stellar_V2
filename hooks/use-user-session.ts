@@ -108,7 +108,7 @@ export const useUserSession = create<UserSessionState>((set, get) => ({
 
 async function fetchUserFromDb(authId: string): Promise<User | null> {
   try {
-    const res = await fetch(`/api/users/${authId}`);
+    const res = await authFetch(`/api/users/${authId}`);
     const json = await res.json();
     return json.success ? json.data : null;
   } catch {
