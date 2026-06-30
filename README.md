@@ -64,7 +64,7 @@ The Soroban escrow contract that backs shipment payments lives in `contracts/esc
 
 - Node.js and [pnpm](https://pnpm.io/)
 - A [Supabase](https://supabase.com/) project
-- A [Google Gemini API key](https://ai.google.dev/) (optional, only needed for AI autofill)
+- A [Google Gemini API key](https://ai.google.dev/) (optional, only needed for AI chatbot)
 - Rust + the `wasm32-unknown-unknown` target and the Stellar CLI, if you intend to build/deploy the escrow contract yourself
 
 ### Install

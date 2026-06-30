@@ -166,6 +166,10 @@ export default function ChatNegotiationCenter() {
 
   const [replyText, setReplyText]           = useState('');
   const [receipt, setReceipt]               = useState<ShipmentReceipt | null>(null);
+  // Full negotiation history for the active thread (newest first) — populated
+  // alongside `receipt` so the "New Receipt" flow can show prior finalized
+  // receipts even after a fresh negotiation round has started.
+  const [receiptHistory, setReceiptHistory] = useState<ShipmentReceipt[]>([]);
 
   // BUG FIX — background polling (fetchMessagesOfThread) used to overwrite the
   // receipt form fields every 4s from the server's last-saved values, wiping out
@@ -177,6 +181,7 @@ export default function ChatNegotiationCenter() {
   const [submittingMsg, setSubmittingMsg]   = useState(false);
   const [savingReceipt, setSavingReceipt]   = useState(false);
   const [finalizingReceipt, setFinalizingReceipt] = useState(false);
+  const [startingNewReceipt, setStartingNewReceipt] = useState(false);
   const [receiptError, setReceiptError]     = useState<string | null>(null);
   const [showChecklistPopover, setShowChecklistPopover] = useState(false);
   const [showImagePicker, setShowImagePicker]   = useState(false);
@@ -298,6 +303,7 @@ export default function ChatNegotiationCenter() {
         if (!receiptDirtyRef.current) {
           setReceipt(json.data.receipt || null);
         }
+        setReceiptHistory(json.data.receiptHistory || []);
 
         setThreads(prev => prev.map(t => t.id === id ? {
           ...t,
@@ -519,6 +525,33 @@ export default function ChatNegotiationCenter() {
       }
     } catch { setReceiptError('Network error — please try again.'); }
     finally { setFinalizingReceipt(false); }
+  };
+
+  // Starts a brand-new negotiation round on the same thread once the current
+  // receipt is finalized — lets the same importer/exporter pair agree to a
+  // fresh shipment without opening a whole new chat thread.
+  const handleStartNewReceipt = async () => {
+    if (!selectedThreadId || !isTradePartyThread) return;
+    if (!confirm('Start a new Shipment Receipt? The previous finalized receipt stays saved in this chat\'s history.')) return;
+    setStartingNewReceipt(true);
+    setReceiptError(null);
+    try {
+      const res  = await authFetch(`/api/messages/threads/${selectedThreadId}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'NEW_RECEIPT', senderId: currentUser.id }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        receiptDirtyRef.current = false;
+        setReceipt(json.data.receipt);
+        fetchThreads();
+        fetchMessagesOfThread(selectedThreadId);
+      } else {
+        setReceiptError(json.error || 'Failed to start a new receipt.');
+      }
+    } catch { setReceiptError('Network error — please try again.'); }
+    finally { setStartingNewReceipt(false); }
   };
 
   // Updates a single receipt field locally (marks the draft dirty so polling
@@ -1494,6 +1527,7 @@ export default function ChatNegotiationCenter() {
                         ${isFinalized ? 'bg-mist-light text-ink-faint border-mist cursor-not-allowed' : 'bg-white border-mist focus:border-ink-faint'}`;
 
                       return (
+                        <>
                         <form onSubmit={handleUpdateReceipt} className="p-4 space-y-4">
                           <p className="text-[10px] text-ink-faint leading-relaxed">
                             A shared planner both of you can fill in while you chat. Once finalized, it
@@ -1509,6 +1543,12 @@ export default function ChatNegotiationCenter() {
                                 Read-only — visible on the Create Shipment page for both parties.
                               </p>
                             </div>
+                          )}
+
+                          {isFinalized && receiptHistory.length > 1 && (
+                            <p className="text-[9.5px] text-ink-faint text-center -mt-2">
+                              {receiptHistory.length} receipts negotiated on this chat so far
+                            </p>
                           )}
 
                           {receiptError && (
@@ -1694,6 +1734,30 @@ export default function ChatNegotiationCenter() {
                             </div>
                           )}
                         </form>
+
+                        {/* Once finalized, either Trade Party can kick off a fresh
+                            negotiation round on this same chat — e.g. for a repeat
+                            order or a new shipment between the same importer/exporter. */}
+                        {isFinalized && (
+                          <div className="px-4 pb-4 -mt-2">
+                            <button
+                              type="button"
+                              onClick={handleStartNewReceipt}
+                              disabled={startingNewReceipt}
+                              title="Start a new negotiation/agreement on this chat"
+                              className="w-full border-2 border-dashed border-mist hover:border-ink-faint text-ink font-extrabold py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span className="text-[11px] font-black uppercase tracking-wider">
+                                {startingNewReceipt ? 'Starting...' : 'New Receipt'}
+                              </span>
+                            </button>
+                            <p className="text-[9px] text-ink-faint text-center mt-1.5 leading-normal">
+                              Start another negotiation with the same importer/exporter
+                            </p>
+                          </div>
+                        )}
+                        </>
                       );
                     })()}
                   </div>

@@ -41,11 +41,12 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Chat thread not found' }, { status: 404 });
     }
 
-    const [messages, participants, allUsers, receipt] = await Promise.all([
+    const [messages, participants, allUsers, receipt, receiptHistory] = await Promise.all([
       dbStore.getMessages(threadId),
       dbStore.getParticipantsForThread(threadId),
       dbStore.getUsers(),
       dbStore.getReceiptByThreadId(threadId),
+      dbStore.getReceiptsByThreadId(threadId),
     ]);
 
     const filledParticipants = participants.map(p => {
@@ -60,7 +61,15 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: { thread, messages, participants: filledParticipants, receipt: receipt ?? null },
+      data: {
+        thread,
+        messages,
+        participants: filledParticipants,
+        receipt: receipt ?? null,
+        // Full negotiation history for this thread, newest first — lets the UI
+        // show past finalized receipts even after a New Receipt round starts.
+        receiptHistory,
+      },
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -105,7 +114,7 @@ export async function POST(
       );
     }
 
-    if (action === 'FINALIZE_RECEIPT' || action === 'UPDATE_RECEIPT') {
+    if (action === 'FINALIZE_RECEIPT' || action === 'UPDATE_RECEIPT' || action === 'NEW_RECEIPT') {
       const tradePartyOnly = await isTradePartyOnlyThread(threadId);
       if (!tradePartyOnly) {
         return NextResponse.json(
@@ -152,6 +161,58 @@ export async function POST(
       });
 
       return NextResponse.json({ success: true, data: { thread: updatedThread, receipt: finalized } });
+    }
+
+    // ── Start a fresh negotiation round: only allowed once the current
+    //    receipt is FINALIZED. Creates a brand-new DRAFT receipt row (the
+    //    finalized one stays untouched and remains in the thread's history),
+    //    and flips the thread back to RECEIPT_DRAFT so the checklist re-opens.
+    if (action === 'NEW_RECEIPT') {
+      const existing = await dbStore.getReceiptByThreadId(threadId);
+      if (!existing || existing.status !== 'FINALIZED') {
+        return NextResponse.json(
+          { success: false, error: 'A new receipt can only be started once the current one is finalized.' },
+          { status: 400 }
+        );
+      }
+
+      const now = new Date().toISOString();
+      const fresh: ShipmentReceipt = {
+        id: 'rcpt_' + Math.random().toString(36).substring(2, 9),
+        threadId,
+        status: 'DRAFT',
+        // Carry over the parties' contact info and route as a convenience
+        // starting point for the next negotiation — everything else (cargo,
+        // value, weight, dangerous goods, etc.) starts blank.
+        importerContact: existing.importerContact,
+        exporterContact: existing.exporterContact,
+        originCountry: existing.originCountry,
+        destCountry: existing.destCountry,
+        invoiceCurrency: 'USD',
+        weightUnit: 'KG',
+        isDangerousGoods: false,
+        lastEditedById: senderId,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const saved = await dbStore.saveReceipt(fresh);
+
+      const updatedThread = { ...thread, status: 'RECEIPT_DRAFT' as const, updatedAt: now };
+      await dbStore.saveThread(updatedThread);
+
+      const allUsers = await dbStore.getUsers();
+      const sender = allUsers.find(u => u.id === senderId);
+      const senderRole = sender ? sender.jobRole.replace(/_/g, ' ') : 'PARTNER';
+
+      await dbStore.saveMessage({
+        id: 'msg_sys_' + Math.random().toString(36).substring(2, 9),
+        threadId: thread.id,
+        senderId,
+        content: `🆕 ${senderRole} started a new Shipment Receipt for another negotiation. The previous finalized receipt is still available in the receipt history.`,
+        createdAt: now,
+      });
+
+      return NextResponse.json({ success: true, data: { thread: updatedThread, receipt: saved } });
     }
 
     // ── Update (or create) the draft receipt. Either Trade Party participant

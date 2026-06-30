@@ -710,16 +710,37 @@ export const dbStore = {
   },
 
   // ── Shipment Receipts (Escrow & Offers planner) ────────────────────────────
+  // NOTE: a thread can now have MULTIPLE receipts over time — one per
+  // negotiation/agreement cycle between the same importer/exporter. Once a
+  // receipt is FINALIZED it stays read-only forever, and a fresh DRAFT receipt
+  // can be started for the next negotiation via the NEW_RECEIPT action.
 
+  /** The most recent receipt for a thread (current draft or most recently
+   *  finalized one) — used to render the active Shipment Receipt panel. */
   getReceiptByThreadId: async (threadId: string): Promise<ShipmentReceipt | undefined> => {
     const admin = getSupabaseAdmin();
     const { data, error } = await admin
       .from('shipment_receipts')
       .select('*')
       .eq('thread_id', threadId)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     assertNoError(error, 'getReceiptByThreadId');
     return data ? rowToReceipt(data) : undefined;
+  },
+
+  /** Full receipt history for a thread, newest first — every negotiation
+   *  round (draft or finalized) that has ever existed on this thread. */
+  getReceiptsByThreadId: async (threadId: string): Promise<ShipmentReceipt[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('shipment_receipts')
+      .select('*')
+      .eq('thread_id', threadId)
+      .order('created_at', { ascending: false });
+    assertNoError(error, 'getReceiptsByThreadId');
+    return (data ?? []).map(rowToReceipt);
   },
 
   saveReceipt: async (receipt: ShipmentReceipt): Promise<ShipmentReceipt> => {
