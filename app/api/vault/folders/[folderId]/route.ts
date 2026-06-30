@@ -27,7 +27,6 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     ]);
 
     // Strip the plaintext password — never expose it to the client
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _password, ...safeFolder } = folder;
 
     return NextResponse.json({

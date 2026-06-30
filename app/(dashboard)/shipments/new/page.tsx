@@ -265,20 +265,17 @@ export default function NewShipmentPage() {
       .then(json => { if (json.success) setReceipts(json.data || []); })
       .catch(() => {})
       .finally(() => setReceiptsLoading(false));
-  }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
 
   // ── Auto-suggest vault folder name when Step 2 becomes active ─────────────
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (step === 2 && !vaultFolderName) {
       const suggested = deriveFolderName(description, originCountry, destinationPort);
       setVaultFolderName(suggested);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   // ── Fetch Trusted Network when reaching Step 3 ────────────────────────
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (step !== 3) return;
     setNetworkLoading(true);
@@ -295,7 +292,7 @@ export default function NewShipmentPage() {
       })
       .catch(() => {})
       .finally(() => setNetworkLoading(false));
-  }, [step, currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, currentUser?.id]);
 
   // ── Auto-lock country fields when scope is NATIONWIDE ───────────────────
   useEffect(() => {
@@ -354,7 +351,6 @@ export default function NewShipmentPage() {
     }
     const timeout = setTimeout(() => fetchOracleRate(invoiceCurrency), 600);
     return () => clearTimeout(timeout);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceCurrency, invoiceValue]);
 
   useEffect(() => {
@@ -384,7 +380,6 @@ export default function NewShipmentPage() {
       setPphpPreview({ php: phpAmount, usdc: Number(totalValueUSD), rate: result.rate, isLive: result.isLive });
     }).catch(() => setPphpPreview(null))
       .finally(() => setPphpPreviewing(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, assetCode, totalValueUSD, phpRate]);
 
   if (loading || !currentUser) {
