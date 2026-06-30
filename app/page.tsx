@@ -28,8 +28,10 @@ import {
   Building2,
   Users,
   Stamp,
+  Bot,
+  X,
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import RotatingText from '@/components/RotatingText';
 
 export default function LandingPage() {
@@ -38,6 +40,50 @@ export default function LandingPage() {
   const [errorSearch, setErrorSearch] = useState('');
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [activeGroup, setActiveGroup] = useState<'trade' | 'logistics' | null>(null);
+  const [showBot, setShowBot] = useState(false);
+  const [botMessage, setBotMessage] = useState('');
+  const [botHistory, setBotHistory] = useState<{sender: 'user' | 'bot', text: string}[]>([
+    { sender: 'bot', text: "Hi! I'm MariBot — here to answer your questions about MariTrade. Ask me how escrow works, who it's for, or how to sign up!" },
+    { sender: 'bot', text: 'By the way, would you like to switch to Tagalog? Just tap below or type "switch to Tagalog" anytime.' },
+  ]);
+  const [botLoading, setBotLoading] = useState(false);
+
+  const FAQ_SUGGESTIONS = [
+    'How does escrow work?',
+    "Who's MariTrade for?",
+    'Switch to Tagalog',
+  ];
+
+  const sendBotMessage = async (text: string) => {
+    if (!text.trim()) return;
+    setBotHistory(prev => [...prev, { sender: 'user', text }]);
+    setBotLoading(true);
+    try {
+      const res = await fetch('/api/gemini/faq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBotHistory(prev => [...prev, { sender: 'bot', text: data.text }]);
+      } else {
+        setBotHistory(prev => [...prev, { sender: 'bot', text: data.error === 'Too many messages — please wait a moment.' ? data.error : 'Sorry, I ran into a small technical issue. Please try again in a moment.' }]);
+      }
+    } catch {
+      setBotHistory(prev => [...prev, { sender: 'bot', text: 'Error connecting to MariBot server.' }]);
+    } finally {
+      setBotLoading(false);
+    }
+  };
+
+  const handleBotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!botMessage.trim()) return;
+    const userText = botMessage;
+    setBotMessage('');
+    await sendBotMessage(userText);
+  };
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -176,7 +222,7 @@ export default function LandingPage() {
               </Link>
               <button
                 type="button"
-                onClick={() => window.open('mailto:hello@maritrade.ph?subject=Watch Demo Request', '_blank')}
+                onClick={() => window.open('', '_blank')}
                 className="px-7 py-3 border border-white/15 text-white text-[13px] font-semibold rounded-md hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
               >
                 Watch Demo
@@ -657,6 +703,81 @@ export default function LandingPage() {
           </span>
         </div>
       </footer>
+
+      {/* MARIBOT FLOAT BUTTON */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <button
+          type="button"
+          onClick={() => setShowBot(prev => !prev)}
+          className="text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105 hover:brightness-110"
+          style={{ background: 'var(--theme-feature, var(--theme-accent))' }}
+        >
+          {showBot ? <X className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
+        </button>
+        <AnimatePresence>
+          {showBot && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              className="absolute bottom-14 right-0 w-80 bg-white border border-mist rounded-xl shadow-2xl flex flex-col overflow-hidden max-h-[440px]"
+            >
+              <div className="text-white p-4 flex items-center gap-2" style={{ background: 'var(--theme-feature, var(--theme-accent))' }}>
+                <Bot className="w-4 h-4" />
+                <div>
+                  <h3 className="font-bold text-xs">MariBot</h3>
+                  <p className="text-[10px] text-white/50">Ask me anything about MariTrade</p>
+                </div>
+              </div>
+              <div className="flex-1 p-3 space-y-2 overflow-y-auto h-60 text-xs bg-mist-light">
+                {botHistory.map((item, index) => (
+                  <div key={index} className={`flex ${item.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`max-w-[85%] rounded-lg px-3 py-2 text-xs ${
+                        item.sender === 'user'
+                          ? 'text-white'
+                          : 'bg-white text-ink-faint border border-mist'
+                      }`}
+                      style={item.sender === 'user' ? { background: 'var(--theme-feature, var(--theme-accent))' } : {}}
+                    >{item.text}</div>
+                  </div>
+                ))}
+                {botLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-white border border-mist rounded-lg px-3 py-2 text-ink-faint text-xs italic animate-pulse">MariBot is typing...</div>
+                  </div>
+                )}
+              </div>
+              {botHistory.length <= 2 && (
+                <div className="px-3 pt-2 pb-1 bg-mist-light flex flex-wrap gap-1.5">
+                  {FAQ_SUGGESTIONS.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => sendBotMessage(q)}
+                      className="text-[10.5px] font-medium px-2.5 py-1.5 rounded-full border border-mist bg-white text-ink-faint hover:border-[var(--theme-accent-border)] hover:text-ink transition-colors"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <form onSubmit={handleBotSubmit} className="p-3 border-t border-mist bg-white flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Ask anything..."
+                  className="flex-1 border border-mist rounded-lg px-3 py-1.5 text-xs outline-none focus:border-ink-faint"
+                  value={botMessage}
+                  onChange={(e) => setBotMessage(e.target.value)}
+                />
+                <button type="submit" className="text-white px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--theme-feature, var(--theme-accent))' }}>
+                  Send
+                </button>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
     </div>
   );

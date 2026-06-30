@@ -16,7 +16,6 @@ import {
   LayoutDashboard,
   Bell,
   UserCircle,
-  Bot,
   Network,
   CheckCheck,
   ExternalLink,
@@ -43,12 +42,6 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
     router.replace('/');
   };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showBot, setShowBot] = useState(false);
-  const [botMessage, setBotMessage] = useState('');
-  const [botHistory, setBotHistory] = useState<{sender: 'user' | 'bot', text: string}[]>([
-    { sender: 'bot', text: 'Mabuhay! Siga po kayo sa MariTrade. Ako si MariBot, gusto niyo po ba malaman ang tungkol sa Stellar escrow release?' }
-  ]);
-  const [botLoading, setBotLoading] = useState(false);
 
   const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -59,32 +52,6 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
     { name: 'Escrow',    href: '/payments',  icon: CreditCard },
     { name: 'Settings',  href: '/settings',  icon: Settings },
   ];
-
-  const handleBotSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!botMessage.trim()) return;
-    const userText = botMessage;
-    setBotHistory(prev => [...prev, { sender: 'user', text: userText }]);
-    setBotMessage('');
-    setBotLoading(true);
-    try {
-      const res = await fetch('/api/gemini/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userText })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setBotHistory(prev => [...prev, { sender: 'bot', text: data.text }]);
-      } else {
-        setBotHistory(prev => [...prev, { sender: 'bot', text: 'Pasensya na, may kaunting technical issue. Subukan nating muli mamaya.' }]);
-      }
-    } catch {
-      setBotHistory(prev => [...prev, { sender: 'bot', text: 'Error connecting to MariBot server.' }]);
-    } finally {
-      setBotLoading(false);
-    }
-  };
 
   const userInitials = currentUser?.fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() ?? '??';
 
@@ -435,66 +402,6 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
             </div>
           )}
         </main>
-      </div>
-
-      {/* MARIBOT FLOAT BUTTON */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          onClick={() => setShowBot(prev => !prev)}
-          className="text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105 hover:brightness-110"
-          style={{ background: 'var(--theme-feature)' }}
-        >
-          {showBot ? <X className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
-        </button>
-        <AnimatePresence>
-          {showBot && (
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              className="absolute bottom-14 right-0 w-80 bg-white border border-mist rounded-xl shadow-2xl flex flex-col overflow-hidden max-h-[440px]"
-            >
-              <div className="text-white p-4 flex items-center gap-2" style={{ background: 'var(--theme-feature)' }}>
-                <Bot className="w-4 h-4" />
-                <div>
-                  <h3 className="font-bold text-xs">MariBot</h3>
-                  <p className="text-[10px] text-white/50">Tagalog Trade AI Expert</p>
-                </div>
-              </div>
-              <div className="flex-1 p-3 space-y-2 overflow-y-auto h-60 text-xs bg-mist-light">
-                {botHistory.map((item, index) => (
-                  <div key={index} className={`flex ${item.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className={`max-w-[85%] rounded-lg px-3 py-2 text-xs ${
-                        item.sender === 'user'
-                          ? 'text-white'
-                          : 'bg-white text-ink-faint border border-mist'
-                      }`}
-                      style={item.sender === 'user' ? { background: 'var(--theme-feature)' } : {}}
-                    >{item.text}</div>
-                  </div>
-                ))}
-                {botLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-white border border-mist rounded-lg px-3 py-2 text-ink-faint text-xs italic animate-pulse">MariBot is typing...</div>
-                  </div>
-                )}
-              </div>
-              <form onSubmit={handleBotSubmit} className="p-3 border-t border-mist bg-white flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Ask anything..."
-                  className="flex-1 border border-mist rounded-lg px-3 py-1.5 text-xs outline-none focus:border-ink-faint"
-                  value={botMessage}
-                  onChange={(e) => setBotMessage(e.target.value)}
-                />
-                <button type="submit" className="text-white px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--theme-feature)' }}>
-                  Send
-                </button>
-              </form>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </div>
   );

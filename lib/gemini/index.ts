@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 // ─── CRITICAL FIX: corrected model name (was "gemini-3.5-flash" which doesn't exist)
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-3.5-flash';
 
 function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -112,6 +112,65 @@ export async function estimateFreightCost(params: {
       confidence: 'LOW',
       breakdown: 'Standard general maritime flat-rate quote of $2,450 applied.'
     };
+  }
+}
+
+// Public landing-page FAQ assistant — no auth, no account/shipment data access.
+// Scoped strictly to general MariTrade product questions for visitors.
+function mockFaqResponse(userMessage: string): string {
+  const msgLower = userMessage.toLowerCase();
+  if (msgLower.includes('tagalog') || msgLower.includes('filipino') || msgLower === 'taglish') {
+    return 'Sure! Switching to Tagalog na po. Mabuhay! Ako si MariBot — ano pong gusto niyong malaman tungkol sa MariTrade? Maaari kong ipaliwanag ang escrow, kung sino pwedeng gumamit, o paano mag-sign up.';
+  }
+  if (msgLower.includes('escrow') || msgLower.includes('stellar') || msgLower.includes('soroban')) {
+    return 'Here\'s how it works: once you fund a shipment, your USDC is locked in Stellar multi-signature escrow. Once all milestones are verified (freight, customs, warehouse), the payment releases to the exporter instantly — no bank delays!';
+  }
+  if (msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('fee') || msgLower.includes('how much')) {
+    return 'We\'re currently in Early Access — no credit card required to sign up. You can try the platform for free while we\'re still in this early access stage!';
+  }
+  if (msgLower.includes('how') || msgLower.includes('work')) {
+    return 'It\'s simple: (1) the Importer creates a shipment record and funds escrow, (2) each logistics role (freight forwarder, customs broker, warehouse) logs verified milestones with photo proof, (3) once everything\'s confirmed, payment releases to the exporter — in seconds, not days!';
+  }
+  if (msgLower.includes('who') || msgLower.includes('use')) {
+    return 'MariTrade is built for Filipino importers, exporters, freight forwarders, customs brokers, and warehouse operators — whatever your role in the trade chain, there\'s a place for you on the platform!';
+  }
+  if (msgLower.includes('sign up') || msgLower.includes('register')) {
+    return 'Signing up is easy — just hit the "Register" button up top, choose whether you\'re an Importer/Exporter or part of the logistics chain, and set up your account. It\'s free while we\'re in Early Access!';
+  }
+  return 'Hi there! I\'m MariBot. Ask me anything about MariTrade — how escrow works, who it\'s for, or how to sign up. I\'m here to help!';
+}
+
+export async function landingFaqAssistant(userMessage: string): Promise<string> {
+  const ai = getGeminiClient();
+
+  const systemInstruction = `You are "MariBot", the friendly FAQ assistant on the MariTrade public landing page. Reply in English by default.
+  MariTrade is a blockchain-powered escrow and logistics platform for Filipino importers, exporters, freight forwarders, customs brokers, and warehouse operators. Payments are held in Stellar multi-signature escrow and released once shipment milestones are verified.
+  You ONLY answer general questions a visitor (not yet logged in) would ask: what MariTrade is, how the 3-step flow works (Create & Fund → Milestone Logging → Verify & Release), who it's for, how escrow and Stellar/Soroban work at a high level, what the BOC Document Center is, pricing/early-access status, and how to sign up.
+  You do NOT have access to any user account, shipment, or payment data — never claim to look up or know specific orders, balances, or personal details. If asked about account-specific info, politely tell them to sign in or register first.
+  If the user asks to switch to Tagalog (or writes in Tagalog/Taglish), switch your replies to casual Tagalog/Taglish from that point on and stay in Tagalog until asked to switch back to English.
+  Keep replies short (2-4 sentences) and warm. If a question is unrelated to MariTrade or shipping/trade in the Philippines, gently redirect back to what MariTrade offers.`;
+
+  if (!ai) {
+    return mockFaqResponse(userMessage);
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: userMessage,
+      config: {
+        systemInstruction,
+        temperature: 0.6
+      }
+    });
+
+    return response.text || mockFaqResponse(userMessage);
+  } catch (err) {
+    console.error('Landing FAQ assistant failed, using offline fallback:', err);
+    // Quota/network/API errors all fall back to the same keyword-based
+    // responder used when no API key is configured — keeps the FAQ widget
+    // useful even when the live model is unavailable.
+    return mockFaqResponse(userMessage);
   }
 }
 
