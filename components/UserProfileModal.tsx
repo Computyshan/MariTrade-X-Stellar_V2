@@ -102,31 +102,40 @@ interface UserProfileModalProps {
 }
 
 export default function UserProfileModal({ userId, onClose }: UserProfileModalProps) {
-  const [profile, setProfile] = useState<PublicProfile | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
+  // Single state object keeps every transition (idle → loading → success/error)
+  // inside the async callback chain instead of synchronous setState calls at
+  // the top of the effect body, which is what react-hooks/set-state-in-effect
+  // flags. The effect itself only kicks off the fetch; nothing is set on the
+  // same tick the effect runs.
+  type FetchState =
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'success'; profile: PublicProfile }
+    | { status: 'error'; message: string };
+
+  const [state, setState] = useState<FetchState>({ status: 'idle' });
 
   // Fetch whenever userId changes. When userId becomes null (drawer closing),
-  // there's nothing to fetch — skip the effect body entirely rather than
-  // synchronously resetting state in the effect (avoids the cascading-render
-  // lint warning, and AnimatePresence keeps prior content mounted during exit).
+  // there's nothing to fetch — skip the effect body entirely.
   useEffect(() => {
     if (!userId) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError('');
-    setProfile(null);
 
     authFetch(`/api/users/${userId}`)
       .then(r => r.json())
       .then(json => {
         if (cancelled) return;
-        if (json.success) setProfile(json.data);
-        else setError(json.error ?? 'Could not load profile.');
+        if (json.success) setState({ status: 'success', profile: json.data });
+        else setState({ status: 'error', message: json.error ?? 'Could not load profile.' });
       })
-      .catch(() => { if (!cancelled) setError('Network error — please try again.'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .catch(() => {
+        if (!cancelled) setState({ status: 'error', message: 'Network error — please try again.' });
+      });
+
+    // Mark this fetch as loading via a microtask so it never runs synchronously
+    // inside the effect body itself.
+    queueMicrotask(() => { if (!cancelled) setState({ status: 'loading' }); });
 
     return () => { cancelled = true; };
   }, [userId]);
@@ -140,6 +149,9 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
   }, [userId, onClose]);
 
   const isOpen    = !!userId;
+  const loading   = state.status === 'idle' || state.status === 'loading';
+  const error     = state.status === 'error' ? state.message : '';
+  const profile   = state.status === 'success' ? state.profile : null;
   const roleColor = profile ? (JOB_ROLE_COLOR[profile.jobRole] ?? 'bg-mist text-ink-faint border-mist-dark') : '';
   const roleIcon  = profile ? (JOB_ROLE_ICON[profile.jobRole]  ?? <User className="w-3.5 h-3.5" />)         : null;
   const roleLabel = profile ? (JOB_ROLE_LABELS[profile.jobRole] ?? profile.jobRole.replace(/_/g, ' '))       : '';
