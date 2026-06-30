@@ -10,8 +10,7 @@ Cross-border trade between small Philippine importers and overseas exporters is 
 
 - **Shipment tracking** — importers, exporters, and logistics partners share a single timeline for each shipment, with milestone evidence (documents/photos) attached at each stage.
 - **On-chain escrow** — a Soroban smart contract holds USDC for a shipment and releases it according to a configurable milestone and cancellation policy (see `contracts/escrow`).
-- **PPHP wallet** — a simulated Philippine Peso Stellar asset used for local-currency flows alongside USDC, with scripts to mint and set up trustlines.
-- **AI-assisted customs forms** — Gemini-powered auto-fill of Bureau of Customs (BOC) import forms from raw invoice text.
+- **PHP wallet** — a simulated Philippine Peso Stellar asset used for local-currency flows alongside USDC, with scripts to mint and set up trustlines.
 - **Role-based dashboards** — separate dashboard views for importers, logistics users, and platform admins, with a network/contacts module, messaging, document storage, and payment history.
 - **Public shipment tracking** — a public, no-login tracking page for sharing shipment status with parties outside the platform.
 
@@ -44,7 +43,7 @@ maritrade-v2/
 ├── lib/
 │   ├── escrow/               Client-side helpers for the escrow contract
 │   ├── stellar/              Stellar SDK integration, escrow bindings
-│   ├── gemini/                Gemini AI integration (BOC form autofill, etc.)
+│   ├── gemini/                Gemini AI integration
 │   ├── permissions/           Role/permission logic
 │   ├── auth-guard.ts, db.ts, notify.ts, supabase.ts, utils.ts
 ├── supabase/                Database migrations and seed data
