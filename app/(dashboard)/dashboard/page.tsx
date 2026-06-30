@@ -676,7 +676,7 @@ export default function DashboardHome() {
             <div className="space-y-6">
               <LogisticsScopeBanner jobRole={currentUser.jobRole} shipments={shipments} milestones={milestones} />
               <div className="bg-white border border-[color:var(--color-mist-dark)] rounded-3xl shadow-sm overflow-hidden">
-                <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-3 relative overflow-hidden" style={{ background: 'linear-gradient(110deg, var(--color-ink) 0%, var(--color-ink-soft) 55%, var(--color-steel) 145%)' }}>
+                <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-3 relative overflow-hidden" style={{ background: 'linear-gradient(110deg, var(--color-ink) 0%, var(--color-ink-soft) 55%, var(--color-teal-hover) 145%)' }}>
                   <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle at 90% 0%, var(--color-mist) 0%, transparent 55%)' }} />
                   <div className="flex items-center gap-3 flex-1 relative z-10">
                     <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center"><ClipboardList className="w-5 h-5 text-[color:var(--color-mist)]" /></div>
@@ -1051,7 +1051,7 @@ function LogisticsScopeBanner({ jobRole, shipments, milestones }: { jobRole: Job
   ];
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-      <div className={`lg:col-span-1 rounded-2xl border-2 ${meta.accentBorder} p-5 flex flex-col justify-between gap-3 text-white shadow-md relative overflow-hidden`} style={{ background: 'linear-gradient(140deg, var(--color-ink) 0%, var(--color-ink-soft) 40%, var(--color-steel) 115%)', boxShadow: '0 4px 16px rgba(20,32,52,0.25), 0 1px 3px rgba(129,151,198,0.2)' }}>
+      <div className={`lg:col-span-1 rounded-2xl border-2 ${meta.accentBorder} p-5 flex flex-col justify-between gap-3 text-white shadow-md relative overflow-hidden`} style={{ background: 'linear-gradient(140deg, var(--color-ink) 0%, var(--color-ink-soft) 40%, var(--color-teal-hover) 115%)', boxShadow: '0 4px 16px rgba(20,32,52,0.25), 0 1px 3px rgba(11,175,176,0.25)' }}>
         <div className="absolute inset-0 opacity-30 pointer-events-none" style={{ background: 'radial-gradient(circle at 85% 15%, var(--color-mist) 0%, transparent 55%), radial-gradient(circle at 15% 90%, rgba(207,226,230,0.4) 0%, transparent 50%)' }} />
         <div className="flex items-center gap-3 relative z-10"><div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/15 backdrop-blur-sm flex-shrink-0`}>{meta.icon}</div><div><p className="text-[9px] font-black uppercase tracking-widest text-white/55">Active Role</p><p className="text-[28px] font-display font-medium leading-snug text-white">{meta.label}</p></div></div>
         <p className="text-[11px] text-white/70 leading-relaxed relative z-10">{meta.description}</p>

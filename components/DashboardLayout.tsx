@@ -76,7 +76,7 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
         className="hidden md:flex flex-col w-[220px] text-white flex-shrink-0 select-none h-screen sticky top-0 relative"
         style={isTradeParty
           ? { background: 'linear-gradient(175deg, #5C0A2E 0%, #8B1646 45%, #6E1138 160%)' }
-          : { background: 'linear-gradient(175deg, var(--color-ink) 0%, var(--color-ink-soft) 45%, var(--color-steel) 160%)' }
+          : { background: 'linear-gradient(175deg, var(--color-ink) 0%, var(--color-ink-soft) 45%, var(--color-teal-hover) 160%)' }
         }
       >
         {/* Shimmer overlay — amber warmth for Trade Party, cool mist for Logistics */}
@@ -95,29 +95,6 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
             className="h-10 w-auto object-contain brightness-0 invert"
             priority
           />
-        </div>
-
-        {/* Portal badge — shows which branch this user belongs to */}
-        <div
-          className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2.5 relative z-10"
-          style={isTradeParty
-            ? { background: 'linear-gradient(90deg, rgba(254,153,0,0.12) 0%, rgba(254,153,0,0.06) 100%)' }
-            : { background: 'linear-gradient(90deg, rgba(207,226,230,0.08) 0%, rgba(129,151,198,0.13) 100%)' }
-          }
-        >
-          <Image
-            src={isTradeParty ? '/MariTrade-Trade-Party-Logo.png' : '/MariTrade-Logistic-Chain-Logo.png'}
-            alt={isTradeParty ? 'Trade Party Portal' : 'Logistics Chain Portal'}
-            width={20}
-            height={20}
-            className="h-5 w-auto object-contain flex-shrink-0"
-          />
-          <span
-            className="text-[9px] font-bold tracking-widest uppercase leading-none"
-            style={{ color: 'var(--theme-sidebar-active-text)' }}
-          >
-            {isTradeParty ? 'Trade Party' : 'Logistics Chain'}
-          </span>
         </div>
 
         {/* User block */}
@@ -203,11 +180,15 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
             >
               <Menu className="w-5 h-5" />
             </button>
-            {/* Trade Party topbar identity tag */}
-            {isTradeParty && (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: 'rgba(254,153,0,0.15)', border: '1px solid rgba(254,153,0,0.3)' }}>
-                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--color-amber)' }}>Trade Party Portal</span>
-              </div>
+            {/* Portal identity tag — Tungsten display type, themed per user type */}
+            {isTradeParty ? (
+              <span className="hidden sm:block font-display uppercase tracking-wide" style={{ fontSize: '24px', color: 'var(--color-amber)' }}>
+                Trade Party Portal
+              </span>
+            ) : (
+              <span className="hidden sm:block font-display uppercase tracking-wide" style={{ fontSize: '24px', color: 'var(--color-teal)' }}>
+                Logistics Chain Portal
+              </span>
             )}
           </div>
 

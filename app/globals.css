@@ -133,6 +133,6 @@ body {
   --theme-feature-light:       var(--color-steel-light);
   --theme-feature-muted:       rgba(129, 151, 198, 0.12);
   --theme-sidebar-active-bg:   rgba(11, 175, 176, 0.12);
-  --theme-sidebar-active-text: var(--color-teal);
+  --theme-sidebar-active-text: var(--color-mist);
   --theme-portal-name:         "Logistics Chain";
 }

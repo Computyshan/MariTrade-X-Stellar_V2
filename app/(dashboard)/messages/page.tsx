@@ -1008,7 +1008,7 @@ export default function ChatNegotiationCenter() {
                       <span className="text-[11px] text-ink-faint block mt-2 font-mono">Syncing...</span>
                     </div>
                   ) : filteredThreads.length === 0 ? (
-                    <div className="text-center py-8 bg-white border border-gray-100 rounded-xl p-4 space-y-2">
+                    <div className="text-center py-8 bg-white border border-mist rounded-xl p-4 space-y-2">
                       <MessageSquare className="w-7 h-7 text-mist-dark mx-auto" />
                       <p className="text-[11px] font-bold text-ink-faint">
                         {threads.length === 0 ? 'No conversations yet' : 'No matching chats'}
@@ -1030,9 +1030,11 @@ export default function ChatNegotiationCenter() {
                       const initials        = getThreadInitials(t as ThreadWithMeta);
 
                       if (isSelected) {
+                        const isTradePartyUser = currentUser?.userType === 'TRADE_PARTY';
                         return (
                         <div key={t.id} onClick={() => setSelectedThreadId(t.id)}
-                        className="p-3 bg-ink text-white rounded-xl border border-ink shadow-md cursor-pointer">
+                        className={`p-3 text-white rounded-xl border shadow-md cursor-pointer ${isTradePartyUser ? '' : 'bg-ink border-ink'}`}
+                        style={isTradePartyUser ? { background: 'var(--theme-feature)', borderColor: 'var(--theme-feature)' } : undefined}>
                         <div className="flex gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-bold text-[11px] shrink-0 text-white">
                                 {initials}
@@ -1042,9 +1044,9 @@ export default function ChatNegotiationCenter() {
                                   <h4 className="font-bold text-white truncate text-xs">{displayName}</h4>
                                   <span className="text-[9px] text-white/50">{getThreadTimestamp(t as ThreadWithMeta)}</span>
                                 </div>
-                                <p className="text-[10px] text-gray-400 mt-0.5 truncate">{subtitle}</p>
+                                <p className="text-[10px] text-white/60 mt-0.5 truncate">{subtitle}</p>
                                 {t.isGroup && (
-                                  <span className="inline-flex items-center gap-1 mt-1 text-[8px] font-bold text-blue-400">
+                                  <span className="inline-flex items-center gap-1 mt-1 text-[8px] font-bold" style={{ color: 'var(--theme-accent)' }}>
                                     <Users className="w-2.5 h-2.5" /> Group Chat
                                   </span>
                                 )}
@@ -1063,7 +1065,7 @@ export default function ChatNegotiationCenter() {
                                     </div>
                                   </div>
                                 )}
-                                <p className="text-[10px] text-gray-400 mt-1.5 truncate font-medium">
+                                <p className="text-[10px] text-white/60 mt-1.5 truncate font-medium">
                                   {getLastMessagePreview(t as ThreadWithMeta)}
                                 </p>
                               </div>
@@ -1087,7 +1089,7 @@ export default function ChatNegotiationCenter() {
                             <p className="text-[10px] text-ink-faint mt-0.5 truncate">{subtitle}</p>
                               <div className="mt-1.5 flex items-center gap-2">
                                 {t.isGroup && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-full">
+                                  <span className="inline-flex items-center gap-1 text-[8px] font-bold text-steel bg-steel-light px-1.5 py-0.5 rounded-full">
                                     <Users className="w-2 h-2" /> Group
                                   </span>
                                 )}
@@ -1098,9 +1100,9 @@ export default function ChatNegotiationCenter() {
                                 )}
                                 {isTradeOnly && (
                                   <span className={`px-1.5 py-0.5 text-[8px] font-extrabold rounded uppercase tracking-wide
-                                    ${t.status === 'RECEIPT_FINALIZED'   ? 'bg-green-50 text-green-700'
-                                    : t.status === 'RECEIPT_DRAFT' ? 'bg-amber-50 text-amber-700'
-                                    : 'bg-slate-100 text-slate-600'}`}>
+                                    ${t.status === 'RECEIPT_FINALIZED'   ? 'bg-teal-light text-teal'
+                                    : t.status === 'RECEIPT_DRAFT' ? 'bg-amber-light text-amber'
+                                    : 'bg-mist-light text-ink-faint'}`}>
                                     {t.status === 'RECEIPT_FINALIZED' ? 'Receipt Finalized' : t.status === 'RECEIPT_DRAFT' ? 'Receipt Draft' : 'Open'}
                                   </span>
                                 )}
@@ -1147,10 +1149,10 @@ export default function ChatNegotiationCenter() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-1.5 flex-wrap">
-                                        <h4 className="font-bold text-xs text-slate-900 leading-tight truncate">{member.fullName}</h4>
+                                        <h4 className="font-bold text-xs text-ink leading-tight truncate">{member.fullName}</h4>
                                         <BadgeCheck className="w-3 h-3 text-teal flex-shrink-0" aria-label="KYC Verified" />
                                       </div>
-                                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{member.companyName}</p>
+                                      <p className="text-[10px] text-ink-faint mt-0.5 truncate">{member.companyName}</p>
                                       <span className={`inline-block mt-1 text-[8px] px-1.5 py-0.5 font-bold rounded border uppercase tracking-wide ${color}`}>
                                         {JOB_ROLE_LABELS[member.jobRole] ?? member.jobRole.replace(/_/g, ' ')}
                                       </span>
@@ -1195,8 +1197,8 @@ export default function ChatNegotiationCenter() {
                                   {getInitials(member.fullName)}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-bold text-xs text-slate-900 truncate">{member.fullName}</p>
-                                  <p className="text-[10px] text-gray-500 truncate">{member.companyName}</p>
+                                  <p className="font-bold text-xs text-ink truncate">{member.fullName}</p>
+                                  <p className="text-[10px] text-ink-faint truncate">{member.companyName}</p>
                                 </div>
                                 <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full flex-shrink-0">
                                   Pending
@@ -1242,11 +1244,14 @@ export default function ChatNegotiationCenter() {
 
             {/* Shipment Receipt button — Trade Party threads only */}
             {isTradePartyThread && activeThread && (
-              <div className="p-3 bg-white border-t border-gray-200 shrink-0">
+              <div className="p-3 bg-white border-t border-mist shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowReceiptPanel(p => !p)}
-                  className="w-full bg-[#0058be] hover:bg-[#004395] text-white font-black py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 transition-all uppercase tracking-wider text-[10px] cursor-pointer active:scale-[0.98]"
+                  className="w-full text-white font-black py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 transition-all uppercase tracking-wider text-[10px] cursor-pointer active:scale-[0.98]"
+                  style={{ background: 'var(--theme-feature)' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--theme-feature-hover)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--theme-feature)'; }}
                 >
                   <Receipt className="w-4 h-4" /> SHIPMENT RECEIPT
                 </button>
@@ -1255,7 +1260,7 @@ export default function ChatNegotiationCenter() {
           </div>
 
           {/* ── CHAT AREA ──────────────────────────────────────────────────── */}
-          <div className="flex-1 flex overflow-hidden min-w-0 h-full bg-[#f8fafc]">
+          <div className="flex-1 flex overflow-hidden min-w-0 h-full bg-mist-light">
             {activeThread ? (
               <div className="flex-1 flex h-full overflow-hidden">
 
@@ -1263,7 +1268,7 @@ export default function ChatNegotiationCenter() {
                 <div className="flex-1 flex flex-col h-full bg-white overflow-hidden min-w-0">
 
                   {/* Chat header */}
-                  <div className="h-14 border-b border-gray-150 px-5 flex items-center justify-between bg-white shrink-0 select-none">
+                  <div className="h-14 border-b border-mist px-5 flex items-center justify-between bg-white shrink-0 select-none">
                     <button
                       type="button"
                       onClick={() => {
@@ -1275,35 +1280,35 @@ export default function ChatNegotiationCenter() {
                       }`}
                       title={!activeThread?.isGroup && activePartnerId ? 'View profile' : undefined}
                     >
-                      <div className="w-8 h-8 rounded-full bg-[#0058be] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+                      <div className="w-8 h-8 rounded-full bg-ink text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
                         {activeThread?.isGroup
                           ? <Users className="w-4 h-4" />
                           : getInitials((activeThread as any)?.otherParticipant?.fullName || '??')}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="font-bold text-xs text-gray-900 truncate">
+                          <h3 className="font-bold text-xs text-ink truncate">
                             {activeThread?.isGroup
                               ? (activeThread.groupName || 'Group Chat')
                               : ((activeThread as any)?.otherParticipant?.fullName || 'Representative')}
                           </h3>
                           {activeThread?.isGroup ? (
-                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
+                            <span className="px-1.5 py-0.5 bg-steel-light text-steel text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
                               <Users className="w-2.5 h-2.5" /> Group
                             </span>
                           ) : (
-                            <span className="px-1.5 py-0.5 bg-green-50 text-green-700 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
-                              <ShieldCheck className="w-2.5 h-2.5 text-green-600" /> KYC
+                            <span className="px-1.5 py-0.5 bg-teal-light text-teal text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
+                              <ShieldCheck className="w-2.5 h-2.5 text-teal" /> KYC
                             </span>
                           )}
                           {/* Trusted network badge — DMs only */}
                           {!activeThread?.isGroup && activePartnerIsTrusted && (
-                            <span className="px-1.5 py-0.5 bg-ocean-50 text-ocean-600 border border-ocean-100 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
+                            <span className="px-1.5 py-0.5 bg-teal-light text-teal border border-teal/20 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
                               <CheckCircle2 className="w-2 h-2" /> Trusted Network
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-0.5 font-medium truncate">
+                        <p className="text-[10px] text-ink-faint mt-0.5 font-medium truncate">
                           {activeThread?.isGroup
                             ? (() => {
                                 const members = (activeThread as any)?.groupParticipants ?? [];
@@ -1313,7 +1318,7 @@ export default function ChatNegotiationCenter() {
                         </p>
                       </div>
                     </button>
-                    <p className="text-[9px] font-mono font-bold text-gray-400 shrink-0">ID: {activeThread?.id}</p>
+                    <p className="text-[9px] font-mono font-bold text-ink-faint shrink-0">ID: {activeThread?.id}</p>
                   </div>
 
                   {/* Messages */}
@@ -1381,7 +1386,7 @@ export default function ChatNegotiationCenter() {
                                 ) : (
                                   <>
                                     {msg.imageUrl && (
-                                      <div className="relative rounded-lg overflow-hidden max-w-xs mb-1.5 border border-gray-200">
+                                      <div className="relative rounded-lg overflow-hidden max-w-xs mb-1.5 border border-mist">
                                         <img
                                           src={msg.imageUrl}
                                           alt="Attachment"
@@ -1400,7 +1405,7 @@ export default function ChatNegotiationCenter() {
                                   <span className={`text-[8px] font-mono ${isMe ? 'text-white/60' : 'text-ink-faint'}`}>
                                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </span>
-                                  {isMe && !msg.isUnsent && <span className="text-[10px] text-sky-200 font-bold opacity-40">✓✓</span>}
+                                  {isMe && !msg.isUnsent && <span className="text-[10px] text-white font-bold opacity-40">✓✓</span>}
                                 </div>
                               </div>
                             </div>
@@ -1535,11 +1540,11 @@ export default function ChatNegotiationCenter() {
                           </p>
 
                           {isFinalized && (
-                            <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl text-center space-y-1">
-                              <span className="block text-[10px] uppercase font-extrabold text-green-800 tracking-wider flex items-center justify-center gap-1">
+                            <div className="bg-teal-light border border-teal/20 text-teal p-3 rounded-xl text-center space-y-1">
+                              <span className="block text-[10px] uppercase font-extrabold text-teal-hover tracking-wider flex items-center justify-center gap-1">
                                 <CheckCircle className="w-3.5 h-3.5" /> Receipt Finalized
                               </span>
-                              <p className="text-[9.5px] text-green-600 leading-normal">
+                              <p className="text-[9.5px] text-teal leading-normal">
                                 Read-only — visible on the Create Shipment page for both parties.
                               </p>
                             </div>
@@ -1552,7 +1557,7 @@ export default function ChatNegotiationCenter() {
                           )}
 
                           {receiptError && (
-                            <p className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+                            <p className="text-[10px] font-bold text-wine bg-wine-light border border-wine/20 rounded-lg px-2.5 py-1.5">
                               {receiptError}
                             </p>
                           )}
