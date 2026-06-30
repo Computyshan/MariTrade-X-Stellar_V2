@@ -421,8 +421,11 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
 
         {/* MAIN CONTENT */}
         <main
-          className={`flex-1 overflow-y-auto${tradeParty ? '' : ' bg-mist-light'}`}
-          style={tradeParty ? { background: 'linear-gradient(160deg, #fff0f5 0%, #fdf6f9 40%, var(--color-mist-light) 100%)' } : undefined}
+          className="flex-1 overflow-y-auto"
+          style={isTradeParty
+            ? { background: 'linear-gradient(160deg, #fff0f5 0%, #fdf6f9 40%, var(--color-mist-light) 100%)' }
+            : { background: 'linear-gradient(160deg, #f4f7fb 0%, #eef2f8 40%, var(--color-mist-light) 100%)' }
+          }
         >
           {flush ? (
             <div className="h-full w-full flex flex-col">{children}</div>

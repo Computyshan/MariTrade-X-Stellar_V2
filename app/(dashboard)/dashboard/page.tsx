@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'motion/react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import { 
@@ -45,6 +46,25 @@ import { getUsdToPhpRate } from '@/lib/stellar/fx';
 const ADMIN_EMAIL = 'tyshaunsiga123@gmail.com';
 
 const MILESTONE_BY_JOB = ROLE_MILESTONES;
+
+// Groups a flat milestone feed by shipmentId, sorted so the shipment with the
+// most recent activity appears first, and each shipment's own events are
+// sorted newest-first.
+function groupMilestonesByShipment(milestones: MilestoneEvent[], shipments: Shipment[]) {
+  const byShipment = new Map<string, MilestoneEvent[]>();
+  for (const m of milestones) {
+    const list = byShipment.get(m.shipmentId) ?? [];
+    list.push(m);
+    byShipment.set(m.shipmentId, list);
+  }
+  const groups = Array.from(byShipment.entries()).map(([shipmentId, events]) => {
+    const sortedEvents = [...events].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+    const shipment = shipments.find(s => s.id === shipmentId);
+    return { shipmentId, shipment, events: sortedEvents, latestAt: sortedEvents[0]?.occurredAt };
+  });
+  groups.sort((a, b) => new Date(b.latestAt ?? 0).getTime() - new Date(a.latestAt ?? 0).getTime());
+  return groups;
+}
 
 // Human-readable labels matching the create-shipment priority milestone checklist.
 const MILESTONE_LABELS: Partial<Record<MilestoneType, string>> = {
@@ -597,44 +617,60 @@ export default function DashboardHome() {
                 )}
               </div>
 
-              {portActivityDrawerOpen && (
-                <>
-                  <div className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[2px]" onClick={() => setPortActivityDrawerOpen(false)} />
-                  <div className="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl flex flex-col">
-                    <div className="px-5 py-4 flex items-center justify-between flex-shrink-0" style={{ background: 'linear-gradient(110deg, var(--color-wine) 0%, #6E1138 100%)' }}>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(254,153,0,0.2)', border: '1px solid rgba(254,153,0,0.3)' }}><Activity className="w-4 h-4" style={{ color: 'var(--color-amber)' }} /></div>
-                        <div>
-                          <p className="text-white font-black text-sm">Port Activity</p>
-                          <p className="text-white/40 text-[10px]">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''} on record</p>
+              {/* Port Activity drawer — animated slide-in/out */}
+              <AnimatePresence>
+                {portActivityDrawerOpen && (
+                  <>
+                    <motion.div
+                      key="port-activity-backdrop"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[2px]"
+                      onClick={() => setPortActivityDrawerOpen(false)}
+                    />
+                    <motion.div
+                      key="port-activity-panel"
+                      initial={{ x: '100%' }}
+                      animate={{ x: 0 }}
+                      exit={{ x: '100%' }}
+                      transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                      className="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl flex flex-col"
+                    >
+                      <div className="px-5 py-4 flex items-center justify-between flex-shrink-0" style={{ background: 'linear-gradient(110deg, var(--color-wine) 0%, #6E1138 100%)' }}>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(254,153,0,0.2)', border: '1px solid rgba(254,153,0,0.3)' }}><Activity className="w-4 h-4" style={{ color: 'var(--color-amber)' }} /></div>
+                          <div>
+                            <p className="text-white font-black text-sm">Port Activity</p>
+                            <p className="text-white/40 text-[10px]">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''} on record</p>
+                          </div>
                         </div>
+                        <button onClick={() => setPortActivityDrawerOpen(false)} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"><X className="w-4 h-4 text-white" /></button>
                       </div>
-                      <button onClick={() => setPortActivityDrawerOpen(false)} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"><X className="w-4 h-4 text-white" /></button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                      {milestones.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center py-16 px-6 text-center">
-                          <CircleDot className="w-10 h-10 text-[color:var(--color-mist-dark)] mb-3" />
-                          <p className="text-xs text-[color:var(--color-ink-faint)] font-mono font-bold">NO RECENT PORT ACTIVITY</p>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-[color:var(--color-mist)]">
-                          {milestones.map((me, idx) => (
-                            <div key={idx} className="px-5 py-4 flex gap-3">
-                            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: 'var(--color-wine-light)' }}><PackageCheck className="w-4 h-4" style={{ color: 'var(--color-wine)' }} /></div>
-                            <div className="min-w-0 space-y-1">
-                            <p className="text-[11px] font-black text-[color:var(--color-ink)] uppercase tracking-tight leading-tight">{me.type.replace(/_/g, ' ')}</p>
-                            <p className="text-[11px] text-[color:var(--color-ink-faint)] leading-relaxed">{me.description || '—'}</p>
-                            <span className="text-[9px] font-mono text-[color:var(--color-ink-faint)] opacity-60">{new Date(me.occurredAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
+                      <div className="flex-1 overflow-y-auto">
+                        {milestones.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center py-16 px-6 text-center">
+                            <CircleDot className="w-10 h-10 text-[color:var(--color-mist-dark)] mb-3" />
+                            <p className="text-xs text-[color:var(--color-ink-faint)] font-mono font-bold">NO RECENT PORT ACTIVITY</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-[color:var(--color-mist)]">
+                            {groupMilestonesByShipment(milestones, shipments).map((group, gIdx) => (
+                              <ShipmentMilestoneGroup
+                                key={group.shipmentId}
+                                group={group}
+                                defaultOpen={gIdx === 0}
+                                variant="trade"
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
           ) : (
             <div className="space-y-6">
@@ -809,21 +845,50 @@ export default function DashboardHome() {
                 </>
               )}
 
-              {logsDrawerOpen && (
-                <>
-                  <div className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[2px]" onClick={() => setLogsDrawerOpen(false)} />
-                  <div className="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl flex flex-col">
-                    <div className="bg-[color:var(--color-ink)] px-5 py-4 flex items-center justify-between flex-shrink-0">
-                      <div className="flex items-center gap-2.5"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><Activity className="w-4 h-4 text-[color:var(--color-teal)]" /></div><div><p className="text-white font-black text-sm">Recent Logs</p><p className="text-white/40 text-[10px]">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''} on record</p></div></div>
-                      <button onClick={() => setLogsDrawerOpen(false)} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"><X className="w-4 h-4 text-white" /></button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                      {milestones.length === 0 ? <div className="h-full flex flex-col items-center justify-center py-16 px-6 text-center"><CircleDot className="w-10 h-10 text-[color:var(--color-mist-dark)] mb-3" /><p className="text-xs text-[color:var(--color-ink-faint)] font-mono font-bold">NO RECENT LOGS</p></div>
-                      : <div className="divide-y divide-[color:var(--color-mist)]">{milestones.map((me, idx) => (<div key={idx} className="px-5 py-4 flex gap-3"><div className="w-8 h-8 rounded-xl bg-[color:var(--color-teal-light)] flex items-center justify-center flex-shrink-0 mt-0.5"><PackageCheck className="w-4 h-4 text-[color:var(--color-teal)]" /></div><div className="min-w-0 space-y-1"><p className="text-[11px] font-black text-[color:var(--color-ink)] uppercase tracking-tight leading-tight">{me.type.replace(/_/g, ' ')}</p><p className="text-[11px] text-[color:var(--color-ink-faint)] leading-relaxed">{me.description || '—'}</p><span className="text-[9px] font-mono text-[color:var(--color-ink-faint)] opacity-60">{new Date(me.occurredAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div></div>))}</div>}
-                    </div>
-                  </div>
-                </>
-              )}
+              {/* Recent Logs drawer — animated slide-in/out */}
+              <AnimatePresence>
+                {logsDrawerOpen && (
+                  <>
+                    <motion.div
+                      key="logs-backdrop"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[2px]"
+                      onClick={() => setLogsDrawerOpen(false)}
+                    />
+                    <motion.div
+                      key="logs-panel"
+                      initial={{ x: '100%' }}
+                      animate={{ x: 0 }}
+                      exit={{ x: '100%' }}
+                      transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                      className="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl flex flex-col"
+                    >
+                      <div className="bg-[color:var(--color-ink)] px-5 py-4 flex items-center justify-between flex-shrink-0">
+                        <div className="flex items-center gap-2.5"><div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><Activity className="w-4 h-4 text-[color:var(--color-teal)]" /></div><div><p className="text-white font-black text-sm">Recent Logs</p><p className="text-white/40 text-[10px]">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''} on record</p></div></div>
+                        <button onClick={() => setLogsDrawerOpen(false)} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"><X className="w-4 h-4 text-white" /></button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto">
+                        {milestones.length === 0 ? <div className="h-full flex flex-col items-center justify-center py-16 px-6 text-center"><CircleDot className="w-10 h-10 text-[color:var(--color-mist-dark)] mb-3" /><p className="text-xs text-[color:var(--color-ink-faint)] font-mono font-bold">NO RECENT LOGS</p></div>
+                        : (
+                          <div className="divide-y divide-[color:var(--color-mist)]">
+                            {groupMilestonesByShipment(milestones, shipments).map((group, gIdx) => (
+                              <ShipmentMilestoneGroup
+                                key={group.shipmentId}
+                                group={group}
+                                defaultOpen={gIdx === 0}
+                                variant="logistics"
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
           )}
         </>
@@ -880,6 +945,86 @@ function MilestoneStep({ step, label, hint, active, done, required, children }: 
         {required && !done && <span className="text-[8px] bg-[color:var(--color-wine)] text-white font-bold px-1 py-0.5 rounded flex-shrink-0 mt-0.5">REQ</span>}
       </div>
       <div>{children}</div>
+    </div>
+  );
+}
+
+// ─── ShipmentMilestoneGroup ─────────────────────────────────────────────────
+// Collapsible group of milestone events for a single shipment, used by both
+// the Port Activity (Trade Party) and Recent Logs (Logistics Chain) drawers.
+// 'variant' swaps the accent color so each drawer keeps its own identity
+// (wine for Trade Party, teal/ink for Logistics Chain).
+
+interface MilestoneShipmentGroup {
+  shipmentId: string;
+  shipment?: Shipment;
+  events: MilestoneEvent[];
+  latestAt?: string;
+}
+
+function ShipmentMilestoneGroup({ group, defaultOpen, variant }: { group: MilestoneShipmentGroup; defaultOpen: boolean; variant: 'trade' | 'logistics' }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const { shipment, events } = group;
+
+  const accentText = variant === 'trade' ? 'var(--color-wine)' : 'var(--color-teal)';
+  const accentBg   = variant === 'trade' ? 'var(--color-wine-light)' : 'var(--color-teal-light)';
+  const iconBg     = variant === 'trade' ? 'var(--color-wine-light)' : 'var(--color-teal-light)';
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-5 py-3.5 flex items-center gap-3 text-left hover:bg-[color:var(--color-mist-light)]/60 transition-colors"
+      >
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: iconBg }}>
+          <Ship className="w-4 h-4" style={{ color: accentText }} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[11px] font-black text-[color:var(--color-ink)] tracking-tight leading-tight">
+              {shipment?.referenceCode ?? 'Unassigned Shipment'}
+            </p>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: accentBg, color: accentText }}>
+              {events.length} log{events.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          {shipment ? (
+            <p className="text-[10px] text-[color:var(--color-ink-faint)] truncate mt-0.5">
+              {shipment.originCountry} → {shipment.destinationPort?.toUpperCase()}
+            </p>
+          ) : (
+            <p className="text-[10px] text-[color:var(--color-ink-faint)] truncate mt-0.5">Shipment reference unavailable</p>
+          )}
+        </div>
+        <ChevronRight className={`w-3.5 h-3.5 text-[color:var(--color-ink-faint)] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="pl-[3.25rem] pr-5 pb-3 space-y-3">
+              {events.map((me, idx) => (
+                <div key={me.id ?? idx} className="flex gap-2.5 border-l-2 pl-3" style={{ borderColor: variant === 'trade' ? 'var(--color-wine-light)' : 'var(--color-teal-light)' }}>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[10.5px] font-black text-[color:var(--color-ink)] uppercase tracking-tight leading-tight">{me.type.replace(/_/g, ' ')}</p>
+                    <p className="text-[11px] text-[color:var(--color-ink-faint)] leading-relaxed">{me.description || '—'}</p>
+                    <span className="text-[9px] font-mono text-[color:var(--color-ink-faint)] opacity-60">
+                      {new Date(me.occurredAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
