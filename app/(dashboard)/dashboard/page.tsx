@@ -933,17 +933,45 @@ function EscrowHoldingsCard({ totalEscrow, variant = 'admin' }: { totalEscrow: n
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function MilestoneStep({ step, label, hint, active, done, required, children }: { step: number; label: string; hint: string; active: boolean; done: boolean; required?: boolean; children: React.ReactNode; }) {
+  // "Chain reveal": once a shipment is picked, steps 2-4 flip from `active`
+  // false → true in the same render. Framer Motion only replays a tween when
+  // the *target* actually changes, so giving each step a delay proportional
+  // to its position produces a sequential, link-by-link unlock — without any
+  // extra state to track re-selections of an already-chosen shipment.
+  const revealDelay = active ? (step - 1) * 0.13 : 0;
+
   return (
-    <div className={`p-5 space-y-3 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`} style={{ background: done ? 'linear-gradient(155deg, #ffffff 0%, var(--color-teal-light) 75%, rgba(11,175,176,0.12) 100%)' : 'linear-gradient(155deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%)' }}>
+    <motion.div
+      className="relative overflow-hidden p-5 space-y-3"
+      style={{ background: done ? 'linear-gradient(155deg, #ffffff 0%, var(--color-teal-light) 75%, rgba(11,175,176,0.12) 100%)' : 'linear-gradient(155deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%)' }}
+      initial={false}
+      animate={active ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0.45, y: 0, scale: 0.985 }}
+      transition={{ duration: 0.5, delay: revealDelay, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {/* Chain-link accent — sweeps in left-to-right on unlock, staggered per step */}
+      <motion.div
+        className="absolute top-0 left-0 h-[2px]"
+        style={{ background: 'linear-gradient(90deg, var(--color-teal) 0%, var(--color-amber) 100%)' }}
+        initial={false}
+        animate={{ width: active ? '100%' : '0%' }}
+        transition={{ duration: 0.4, delay: revealDelay, ease: 'easeOut' }}
+      />
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 ${done ? 'bg-[color:var(--color-teal)] text-white' : 'bg-[color:var(--color-mist)] text-[color:var(--color-ink-faint)] border border-[color:var(--color-mist-dark)]'}`}>{done ? '✓' : step}</div>
+          <motion.div
+            className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 ${done ? 'bg-[color:var(--color-teal)] text-white' : 'bg-[color:var(--color-mist)] text-[color:var(--color-ink-faint)] border border-[color:var(--color-mist-dark)]'}`}
+            initial={false}
+            animate={{ scale: active ? 1 : 0.8 }}
+            transition={{ duration: 0.4, delay: revealDelay, ease: [0.34, 1.56, 0.64, 1] }}
+          >
+            {done ? '✓' : step}
+          </motion.div>
           <div><p className="text-[10px] font-black text-[color:var(--color-ink)] uppercase tracking-wider leading-none">{label}</p><p className="text-[9px] text-[color:var(--color-ink-faint)] mt-0.5 leading-none">{hint}</p></div>
         </div>
         {required && !done && <span className="text-[8px] bg-[color:var(--color-wine)] text-white font-bold px-1 py-0.5 rounded flex-shrink-0 mt-0.5">REQ</span>}
       </div>
       <div>{children}</div>
-    </div>
+    </motion.div>
   );
 }
 
