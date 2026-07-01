@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
+import { ExternalCredential } from '@/types';
 
 // Public profile fields — sensitive payment details are always stripped.
 // bankDetails and stellarWallet are private to the account holder only.
@@ -16,6 +17,9 @@ type PublicProfile = {
   kycStatus: string;
   createdAt: string;
   updatedAt: string;
+  externalCredentials: ExternalCredential[];
+  /** True once the user has at least one external credential on file. */
+  preVerified: boolean;
 };
 
 export async function GET(
@@ -33,6 +37,8 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
+    const externalCredentials = user.externalCredentials ?? [];
+
     // Strip sensitive financial fields before returning to any caller
     const publicProfile: PublicProfile = {
       id:            user.id,
@@ -46,6 +52,8 @@ export async function GET(
       kycStatus:     user.kycStatus,
       createdAt:     user.createdAt,
       updatedAt:     user.updatedAt,
+      externalCredentials,
+      preVerified: externalCredentials.length > 0,
       // bankDetails  — intentionally omitted
       // stellarWallet — intentionally omitted
     };

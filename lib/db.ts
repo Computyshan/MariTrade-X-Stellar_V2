@@ -51,6 +51,7 @@
  *   receiver_id        ↔ receiverId
  *   folder_name        ↔ folderName
  *   created_by_user_id ↔ createdByUserId
+ *   external_credentials ↔ externalCredentials
  */
 
 import { getSupabaseAdmin } from './supabase';
@@ -95,6 +96,7 @@ function rowToUser(row: any): User {
     brandingCompanyLabel: row.branding_company_label ?? undefined,
     firmId: row.firm_id ?? undefined,
     firmRole: row.firm_role ?? undefined,
+    externalCredentials: row.external_credentials ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -120,6 +122,7 @@ function userToRow(user: User): any {
     branding_company_label: user.brandingCompanyLabel ?? null,
     firm_id: user.firmId ?? null,
     firm_role: user.firmRole ?? null,
+    external_credentials: user.externalCredentials ?? [],
     created_at: user.createdAt,
     updated_at: user.updatedAt,
   };

@@ -1,6 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
+import { ExternalCredential, ExternalCredentialType } from '@/types';
+
+const CREDENTIAL_TYPES: ExternalCredentialType[] = ['CERTIFICATE_URL', 'CERTIFICATE_IMAGE', 'RESUME_PDF'];
+const MAX_CREDENTIALS = 12;
+
+// Validates and normalizes the externalCredentials array coming from the
+// client. Throws a plain Error with a user-facing message on any problem —
+// the caller catches it and returns a 400.
+function sanitizeCredentials(input: unknown): ExternalCredential[] {
+  if (!Array.isArray(input)) throw new Error('externalCredentials must be an array.');
+  if (input.length > MAX_CREDENTIALS) throw new Error(`You can list at most ${MAX_CREDENTIALS} credentials.`);
+
+  return input.map((raw, i): ExternalCredential => {
+    if (!raw || typeof raw !== 'object') throw new Error(`Credential #${i + 1} is invalid.`);
+    const c = raw as Record<string, unknown>;
+
+    const type = c.type as string;
+    if (!CREDENTIAL_TYPES.includes(type as ExternalCredentialType)) {
+      throw new Error(`Credential #${i + 1} has an invalid type.`);
+    }
+
+    const title = String(c.title ?? '').trim().slice(0, 120);
+    if (!title) throw new Error(`Credential #${i + 1} needs a title.`);
+
+    const url = String(c.url ?? '').trim().slice(0, 2000);
+    if (!url) throw new Error(`Credential #${i + 1} needs a URL or uploaded file.`);
+    if (type === 'CERTIFICATE_URL') {
+      try { new URL(url); } catch { throw new Error(`Credential #${i + 1}'s link isn't a valid URL.`); }
+    }
+
+    const issuer = c.issuer !== undefined && c.issuer !== null ? String(c.issuer).trim().slice(0, 120) : undefined;
+    const id = typeof c.id === 'string' && c.id ? c.id : `cred_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const addedAt = typeof c.addedAt === 'string' && c.addedAt ? c.addedAt : new Date().toISOString();
+
+    return { id, type: type as ExternalCredentialType, title, issuer: issuer || undefined, url, addedAt };
+  });
+}
 
 export async function POST(req: NextRequest) {
   // CRITICAL FIX: authenticate every request
@@ -9,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { userId, fullName, fullAddress, contactNumber, companyName, bankDetails, stellarWallet, trackingTier, brandingLogoUrl, brandingPrimaryColor, brandingCompanyLabel } = body;
+    const { userId, fullName, fullAddress, contactNumber, companyName, bankDetails, stellarWallet, trackingTier, brandingLogoUrl, brandingPrimaryColor, brandingCompanyLabel, externalCredentials } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
@@ -29,6 +66,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid trackingTier' }, { status: 400 });
     }
 
+    let nextCredentials = existingUser.externalCredentials;
+    if (externalCredentials !== undefined) {
+      try {
+        nextCredentials = sanitizeCredentials(externalCredentials);
+      } catch (e: any) {
+        return NextResponse.json({ success: false, error: e.message }, { status: 400 });
+      }
+    }
+
     const updatedUser = {
       ...existingUser,
       fullName: fullName || existingUser.fullName,
@@ -41,6 +87,7 @@ export async function POST(req: NextRequest) {
       brandingLogoUrl: brandingLogoUrl !== undefined ? brandingLogoUrl : existingUser.brandingLogoUrl,
       brandingPrimaryColor: brandingPrimaryColor !== undefined ? brandingPrimaryColor : existingUser.brandingPrimaryColor,
       brandingCompanyLabel: brandingCompanyLabel !== undefined ? brandingCompanyLabel : existingUser.brandingCompanyLabel,
+      externalCredentials: nextCredentials,
       updatedAt: new Date().toISOString(),
     };
 

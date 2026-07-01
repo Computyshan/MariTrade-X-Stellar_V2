@@ -211,6 +211,28 @@ export const TRACKING_TIER_LABELS: Record<TrackingTier, string> = {
   WHITELABEL: 'White-Label',
 };
 
+// ─── External Credentials (Pre-Verified badge) ────────────────────────────────
+// Mixed-media prior-experience credentials any user (Trade Party or
+// Logistics Chain) can attach to their public profile — proof of standing
+// they bring *into* MariTrade, independent of in-platform KYC. Once a user
+// has at least one credential on file, they're shown with a "Pre-Verified"
+// badge everywhere they appear on MariNet.
+//
+//   CERTIFICATE_URL   — a link to an e-certificate hosted elsewhere (LinkedIn
+//                        Learning, Credly, an issuing authority's verify page, etc.)
+//   CERTIFICATE_IMAGE — a photographed/scanned certificate image, uploaded directly
+//   RESUME_PDF        — an existing resume/CV, uploaded as a PDF
+export type ExternalCredentialType = 'CERTIFICATE_URL' | 'CERTIFICATE_IMAGE' | 'RESUME_PDF';
+
+export interface ExternalCredential {
+  id: string;
+  type: ExternalCredentialType;
+  title: string;      // e.g. "Certified International Trade Professional"
+  issuer?: string;     // e.g. "Philippine Chamber of Commerce"
+  url: string;         // external link (URL type) or uploaded file URL (image/PDF types)
+  addedAt: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -231,6 +253,8 @@ export interface User {
   /** Multi-seat firm account this user belongs to, if any. */
   firmId?: string;
   firmRole?: FirmRole;
+  /** Prior-experience credentials imported by the user — see ExternalCredential above. */
+  externalCredentials?: ExternalCredential[];
   createdAt: string;
   updatedAt: string;
 }

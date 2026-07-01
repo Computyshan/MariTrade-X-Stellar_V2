@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import ExternalCredentialsSection from '@/components/ExternalCredentialsSection';
 import { useUserSession } from '@/hooks/use-user-session';
 import { authFetch } from '@/hooks/use-user-session';
 import { User, Shipment, ShipmentStatus } from '@/types';
@@ -577,6 +578,15 @@ export default function ProfilePage() {
           <div className="text-center py-12 text-ink-faint text-sm">
             No active profile session detected.
           </div>
+        )}
+
+        {/* ── EXTERNAL CREDENTIALS (Pre-Verified badge) ── */}
+        {currentUser?.id && (
+          <ExternalCredentialsSection
+            key={`creds-${currentUser.id}`}
+            currentUser={currentUser}
+            setCurrentUser={setCurrentUser}
+          />
         )}
       </div>
     </DashboardLayout>

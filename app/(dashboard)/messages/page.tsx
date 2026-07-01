@@ -1268,7 +1268,7 @@ export default function ChatNegotiationCenter() {
                 <div className="flex-1 flex flex-col h-full bg-white overflow-hidden min-w-0">
 
                   {/* Chat header */}
-                  <div className="h-14 border-b border-mist px-5 flex items-center justify-between bg-white shrink-0 select-none">
+                  <div className="h-16 border-b border-mist/70 px-5 flex items-center justify-between bg-white/95 backdrop-blur-sm shrink-0 select-none shadow-[0_1px_0_rgba(0,0,0,0.02),0_2px_10px_rgba(20,32,52,0.03)] relative z-10">
                     <button
                       type="button"
                       onClick={() => {
@@ -1280,7 +1280,7 @@ export default function ChatNegotiationCenter() {
                       }`}
                       title={!activeThread?.isGroup && activePartnerId ? 'View profile' : undefined}
                     >
-                      <div className="w-8 h-8 rounded-full bg-ink text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+                      <div className="w-9 h-9 rounded-full text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-md ring-2 ring-white" style={{ background: 'linear-gradient(135deg, var(--color-ink) 0%, var(--color-ink-soft) 100%)' }}>
                         {activeThread?.isGroup
                           ? <Users className="w-4 h-4" />
                           : getInitials((activeThread as any)?.otherParticipant?.fullName || '??')}
@@ -1293,17 +1293,17 @@ export default function ChatNegotiationCenter() {
                               : ((activeThread as any)?.otherParticipant?.fullName || 'Representative')}
                           </h3>
                           {activeThread?.isGroup ? (
-                            <span className="px-1.5 py-0.5 bg-steel-light text-steel text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
+                            <span className="px-1.5 py-0.5 bg-steel-light text-steel text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0 shadow-sm ring-1 ring-inset ring-steel/10">
                               <Users className="w-2.5 h-2.5" /> Group
                             </span>
                           ) : (
-                            <span className="px-1.5 py-0.5 bg-teal-light text-teal text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
+                            <span className="px-1.5 py-0.5 bg-teal-light text-teal text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0 shadow-sm ring-1 ring-inset ring-teal/10">
                               <ShieldCheck className="w-2.5 h-2.5 text-teal" /> KYC
                             </span>
                           )}
                           {/* Trusted network badge — DMs only */}
                           {!activeThread?.isGroup && activePartnerIsTrusted && (
-                            <span className="px-1.5 py-0.5 bg-teal-light text-teal border border-teal/20 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0">
+                            <span className="px-1.5 py-0.5 bg-teal-light text-teal border border-teal/20 text-[8px] font-extrabold rounded-full flex items-center gap-0.5 uppercase shrink-0 shadow-sm">
                               <CheckCircle2 className="w-2 h-2" /> Trusted Network
                             </span>
                           )}
@@ -1318,11 +1318,11 @@ export default function ChatNegotiationCenter() {
                         </p>
                       </div>
                     </button>
-                    <p className="text-[9px] font-mono font-bold text-ink-faint shrink-0">ID: {activeThread?.id}</p>
+                    <p className="text-[9px] font-mono font-bold text-ink-faint shrink-0 bg-mist-light px-2 py-1 rounded-full">ID: {activeThread?.id}</p>
                   </div>
 
                   {/* Messages */}
-                  <div className="flex-1 p-4 md:p-5 overflow-y-auto space-y-4 flex flex-col bg-mist-light/10">
+                  <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-3 flex flex-col" style={{ background: 'linear-gradient(180deg, #ffffff 0%, var(--color-mist-light) 100%)' }}>
                     {loadingMessages && messages.length === 0 ? (
                       <div className="flex-1 flex items-center justify-center">
                         <div className="text-center">
@@ -1360,18 +1360,18 @@ export default function ChatNegotiationCenter() {
                               {!isMe && (
                               <div className="flex flex-col items-center shrink-0 select-none">
                                 <span className="text-[8px] font-bold uppercase text-ink-faint mb-0.5 font-mono">{sName}</span>
-                                <div className="w-7 h-7 rounded-full bg-mist-light border border-mist flex items-center justify-center font-bold text-[9px] text-ink-faint">{sInits}</div>
+                                <div className="w-7 h-7 rounded-full bg-mist-light border border-mist flex items-center justify-center font-bold text-[9px] text-ink-faint shadow-sm ring-2 ring-white">{sInits}</div>
                               </div>
                             )}
                             <div className="text-left">
-                              <div className={`p-3 rounded-2xl shadow-sm ${
+                              <div className={`px-4 py-2.5 rounded-[20px] transition-shadow ${
                                 msg.isUnsent
                                   ? 'bg-mist-light text-ink-faint border border-mist italic text-[11px]'
                                   : isMe
-                                    ? 'text-white rounded-tr-none'
-                                    : 'bg-white text-ink border border-mist rounded-tl-none'
+                                    ? 'text-white rounded-tr-md shadow-[0_2px_6px_rgba(20,32,52,0.12),0_1px_2px_rgba(20,32,52,0.08)]'
+                                    : 'bg-white text-ink rounded-tl-md shadow-[0_1px_2px_rgba(20,32,52,0.04),0_2px_10px_rgba(20,32,52,0.05)] border border-mist/60'
                               }`}
-                              style={isMe && !msg.isUnsent ? { background: 'var(--theme-accent)' } : {}}>
+                              style={isMe && !msg.isUnsent ? { background: 'linear-gradient(135deg, var(--theme-accent) 0%, color-mix(in srgb, var(--theme-accent) 82%, black) 100%)' } : !isMe && !msg.isUnsent ? { background: 'linear-gradient(160deg, #ffffff 0%, var(--color-mist-light) 130%)' } : {}}>
                                 {isMe && !msg.isUnsent && (
                                   <button
                                     type="button"
@@ -1386,7 +1386,7 @@ export default function ChatNegotiationCenter() {
                                 ) : (
                                   <>
                                     {msg.imageUrl && (
-                                      <div className="relative rounded-lg overflow-hidden max-w-xs mb-1.5 border border-mist">
+                                      <div className="relative rounded-xl overflow-hidden max-w-xs mb-1.5 border border-mist shadow-sm">
                                         <img
                                           src={msg.imageUrl}
                                           alt="Attachment"
@@ -1412,7 +1412,7 @@ export default function ChatNegotiationCenter() {
                             {isMe && (
                               <div className="flex flex-col items-center shrink-0 select-none">
                                 <span className="text-[8px] font-bold uppercase mb-0.5 font-mono" style={{ color: 'var(--theme-accent)' }}>You</span>
-                                <div className="w-7 h-7 rounded-full border flex items-center justify-center font-bold text-[9px]" style={{ background: 'color-mix(in srgb, var(--theme-accent) 15%, white)', borderColor: 'var(--theme-accent-border)', color: 'var(--theme-accent)' }}>ME</div>
+                                <div className="w-7 h-7 rounded-full border flex items-center justify-center font-bold text-[9px] shadow-sm ring-2 ring-white" style={{ background: 'color-mix(in srgb, var(--theme-accent) 15%, white)', borderColor: 'var(--theme-accent-border)', color: 'var(--theme-accent)' }}>ME</div>
                               </div>
                             )}
                           </div>
@@ -1423,7 +1423,7 @@ export default function ChatNegotiationCenter() {
                   </div>
 
                   {/* Input area */}
-                  <div className="p-3 border-t border-mist bg-white shrink-0 space-y-3">
+                  <div className="p-4 border-t border-mist/70 bg-white shrink-0 space-y-3">
                     {/* Quick replies */}
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 select-none">
                       <span className="text-[8.5px] text-ink-faint font-bold uppercase font-mono tracking-wider shrink-0 mr-1">⚡ QUICK:</span>
@@ -1434,16 +1434,16 @@ export default function ChatNegotiationCenter() {
                         ['📝 Verify Docs',  'Uploaded the latest required trade credentials. Please verify and sign.'],
                       ].map(([label, text]) => (
                         <button key={label} type="button" onClick={() => setReplyText(prev => prev ? prev : text)}
-                          className="px-3 py-1 bg-mist-light hover:bg-mist border border-mist rounded-full text-[10px] font-bold text-ink-faint whitespace-nowrap cursor-pointer transition-all">
+                          className="px-3 py-1 bg-white hover:bg-mist-light border border-mist rounded-full text-[10px] font-bold text-ink-faint whitespace-nowrap cursor-pointer transition-all shadow-sm hover:shadow hover:-translate-y-px hover:border-mist-dark">
                           {label}
                         </button>
                       ))}
                     </div>
 
                     {selectedImage && (
-                      <div className="flex items-center justify-between gap-3 bg-mist-light border border-dashed border-mist rounded-lg px-3 py-2 max-w-xs">
+                      <div className="flex items-center justify-between gap-3 bg-mist-light border border-dashed border-mist rounded-xl px-3 py-2 max-w-xs shadow-sm">
                         <div className="flex items-center gap-2 min-w-0">
-                          <img src={selectedImage} alt="Preview" className="w-8 h-8 object-cover rounded border border-mist shrink-0" referrerPolicy="no-referrer" />
+                          <img src={selectedImage} alt="Preview" className="w-8 h-8 object-cover rounded-lg border border-mist shrink-0" referrerPolicy="no-referrer" />
                           <span className="text-[10px] text-teal font-bold">Ready to send</span>
                         </div>
                         <button type="button" onClick={() => setSelectedImage(null)} className="text-ink-faint hover:text-wine cursor-pointer">
@@ -1452,19 +1452,19 @@ export default function ChatNegotiationCenter() {
                       </div>
                     )}
 
-                    <form onSubmit={handleSendMessage} className="flex gap-2.5 items-center">
-                      <button
-                        type="button"
-                        onClick={() => setShowImagePicker(p => !p)}
-                        className={`p-2 rounded-lg transition-all shrink-0 cursor-pointer
-                          ${showImagePicker ? 'bg-mist-light text-ink' : 'bg-mist-light text-ink-faint hover:bg-mist'}`}
-                      >
-                        <Paperclip className="w-4 h-4" />
-                      </button>
-                      <div className="flex-1 bg-mist-light border border-mist rounded-lg overflow-hidden focus-within:border-ink-faint transition-all">
+                    <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
+                      <div className="flex-1 flex items-end gap-1 bg-mist-light/60 border border-mist rounded-[26px] shadow-sm focus-within:border-[color:var(--theme-accent-border,var(--theme-accent))] focus-within:shadow-md focus-within:bg-white transition-all pl-1.5 pr-1.5 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowImagePicker(p => !p)}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer
+                            ${showImagePicker ? 'bg-white text-ink shadow-sm' : 'text-ink-faint hover:bg-white hover:shadow-sm'}`}
+                        >
+                          <Paperclip className="w-4 h-4" />
+                        </button>
                         <textarea
                           rows={1}
-                          className="w-full bg-transparent px-3 py-2 text-xs text-ink placeholder-ink-faint resize-none outline-none"
+                          className="flex-1 bg-transparent px-1 py-1.5 text-xs text-ink placeholder-ink-faint resize-none outline-none max-h-24"
                           placeholder="Type your message..."
                           value={replyText}
                           onChange={e => setReplyText(e.target.value)}
@@ -1481,17 +1481,18 @@ export default function ChatNegotiationCenter() {
                       <button
                         type="submit"
                         disabled={submittingMsg}
-                        className="px-4 py-2 text-white font-black rounded-lg flex items-center gap-1 transition-all uppercase tracking-wider text-[10px] cursor-pointer disabled:opacity-60"
-                        style={{ background: 'var(--theme-accent)' }}
+                        className="w-11 h-11 shrink-0 text-white rounded-full flex items-center justify-center transition-all cursor-pointer disabled:opacity-60 shadow-md hover:shadow-lg hover:-translate-y-px active:translate-y-0 active:shadow-sm"
+                        style={{ background: 'linear-gradient(135deg, var(--theme-accent) 0%, color-mix(in srgb, var(--theme-accent) 80%, black) 100%)' }}
                       >
-                        {submittingMsg ? 'Sending...' : 'SEND'}
-                        <Send className="w-3 h-3" />
+                        {submittingMsg
+                          ? <RefreshCw className="w-4 h-4 animate-spin" />
+                          : <Send className="w-4 h-4" />}
                       </button>
                     </form>
 
                     {showImagePicker && (
                       <div className="relative">
-                        <div className="absolute bottom-12 left-0 bg-white border border-mist shadow-xl rounded-xl p-3 z-40 w-64 space-y-2">
+                        <div className="absolute bottom-12 left-0 bg-white border border-mist shadow-xl rounded-2xl p-3 z-40 w-64 space-y-2">
                           <div className="flex justify-between items-center border-b border-mist pb-1.5">
                             <span className="font-bold text-[9px] text-ink-faint uppercase tracking-wider font-mono">Attach Image</span>
                             <button onClick={() => setShowImagePicker(false)} className="text-ink-faint hover:text-ink cursor-pointer">
@@ -1501,7 +1502,7 @@ export default function ChatNegotiationCenter() {
                           <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full bg-mist-light hover:bg-mist border border-dashed border-mist-dark rounded-lg py-2 text-[9.5px] font-bold text-ink-faint flex items-center justify-center gap-1 cursor-pointer"
+                            className="w-full bg-mist-light hover:bg-mist border border-dashed border-mist-dark rounded-xl py-2 text-[9.5px] font-bold text-ink-faint flex items-center justify-center gap-1 cursor-pointer transition-colors"
                           >
                             <FileUp className="w-3.5 h-3.5 text-ink-faint/60" /> Select from device
                           </button>

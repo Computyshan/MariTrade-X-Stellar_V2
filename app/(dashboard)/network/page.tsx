@@ -27,6 +27,7 @@ import {
   X,
   Eye,
   Star,
+  Sparkles,
 } from 'lucide-react';
 import { JobRole, User } from '@/types';
 import UserProfileModal from '@/components/UserProfileModal';
@@ -441,11 +442,26 @@ export default function NetworkPage() {
                           </p>
                         </div>
                       </div>
-                      <BadgeCheck className="w-5 h-5 text-teal flex-shrink-0 mt-0.5" aria-label="KYC Verified" />
+                      <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                        {(member.externalCredentials?.length ?? 0) > 0 && (
+                          <Sparkles className="w-4 h-4" style={{ color: 'var(--color-amber)' }} aria-label="Pre-Verified" />
+                        )}
+                        <BadgeCheck className="w-5 h-5 text-teal" aria-label="KYC Verified" />
+                      </div>
                     </div>
 
                     <div className="space-y-2">
-                      <RoleBadge role={member.jobRole} />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <RoleBadge role={member.jobRole} />
+                        {(member.externalCredentials?.length ?? 0) > 0 && (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                            style={{ background: 'rgba(254,153,0,0.15)', color: 'var(--color-amber)', border: '1px solid rgba(254,153,0,0.3)' }}
+                          >
+                            <Sparkles className="w-3 h-3" /> Pre-Verified
+                          </span>
+                        )}
+                      </div>
                       {member.fullAddress && (
                         <p className="text-[10px] text-ink-faint">{member.fullAddress}</p>
                       )}
@@ -726,7 +742,17 @@ export default function NetworkPage() {
                     </p>
                     </div>
                     </div>
-                        <RoleBadge role={member.jobRole} />
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <RoleBadge role={member.jobRole} />
+                          {(member.externalCredentials?.length ?? 0) > 0 && (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                              style={{ background: 'rgba(254,153,0,0.15)', color: 'var(--color-amber)', border: '1px solid rgba(254,153,0,0.3)' }}
+                            >
+                              <Sparkles className="w-3 h-3" /> Pre-Verified
+                            </span>
+                          )}
+                        </div>
                         <div className="pt-2 border-t border-mist text-[10px] text-ink-faint flex items-center gap-1">
                           <BadgeCheck className="w-3.5 h-3.5 text-teal" />
                           KYC Verified · Connected {new Date(conn.updatedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}

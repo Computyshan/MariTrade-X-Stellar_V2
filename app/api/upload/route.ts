@@ -10,6 +10,7 @@ const BUCKETS = {
   'kyc-documents':      { public: false, accept: ['image/jpeg', 'image/png', 'application/pdf'] },
   'milestone-evidence': { public: true,  accept: ['image/jpeg', 'image/png', 'application/pdf', 'image/webp'] },
   'chat-images':        { public: true,  accept: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] },
+  'credentials':        { public: true,  accept: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] },
 } as const;
 
 type BucketName = keyof typeof BUCKETS;
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
       'kyc-documents':      10 * 1024 * 1024, // 10 MB
       'milestone-evidence': 20 * 1024 * 1024, // 20 MB
       'chat-images':         2 * 1024 * 1024, //  2 MB
+      'credentials':        15 * 1024 * 1024, // 15 MB
     };
     if (file.size > MAX_SIZES[bucket]) {
       const mb = (MAX_SIZES[bucket] / 1024 / 1024).toFixed(0);

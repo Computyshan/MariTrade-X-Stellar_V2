@@ -30,8 +30,15 @@ import {
   Shield,
   User,
   Mail,
+  Award,
+  Link2,
+  Image as ImageIcon,
+  FileText,
+  ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import { authFetch } from '@/hooks/use-user-session';
+import { ExternalCredential, ExternalCredentialType } from '@/types';
 
 // ─── Public profile shape (mirrors server-side PublicProfile) ─────────────────
 
@@ -47,6 +54,8 @@ export interface PublicProfile {
   kycStatus: string;
   createdAt: string;
   updatedAt: string;
+  externalCredentials?: ExternalCredential[];
+  preVerified?: boolean;
   // bankDetails  — intentionally absent (stripped server-side)
   // stellarWallet — intentionally absent (stripped server-side)
 }
@@ -92,6 +101,12 @@ function formatDate(iso: string): string {
     year:  'numeric',
   });
 }
+
+const CREDENTIAL_TYPE_META: Record<ExternalCredentialType, { label: string; icon: React.ReactNode }> = {
+  CERTIFICATE_URL:   { label: 'Link',   icon: <Link2 className="w-3.5 h-3.5" /> },
+  CERTIFICATE_IMAGE: { label: 'Image',  icon: <ImageIcon className="w-3.5 h-3.5" /> },
+  RESUME_PDF:        { label: 'Résumé', icon: <FileText className="w-3.5 h-3.5" /> },
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -274,6 +289,11 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
                               <ShieldCheck className="w-3 h-3" /> KYC Submitted
                             </span>
                           )}
+                          {profile.preVerified && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(254,153,0,0.15)', color: 'var(--color-amber)', border: '1px solid rgba(254,153,0,0.3)' }}>
+                              <Sparkles className="w-3 h-3" /> Pre-Verified
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -343,6 +363,41 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
                       </div>
                     </div>
                   </div>
+
+                  {/* External Credentials */}
+                  {(profile.externalCredentials?.length ?? 0) > 0 && (
+                    <div className="px-5 py-4 border-t border-mist space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Award className="w-3.5 h-3.5" style={{ color: 'var(--color-amber)' }} />
+                        <p className="text-[9px] text-ink-faint uppercase font-mono tracking-wider font-bold">External Credentials</p>
+                      </div>
+                      <div className="space-y-2">
+                        {profile.externalCredentials!.map(c => {
+                          const m = CREDENTIAL_TYPE_META[c.type];
+                          return (
+                            <a
+                              key={c.id}
+                              href={c.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-2.5 border border-mist hover:border-mist-dark bg-mist-light/40 hover:bg-mist-light rounded-lg px-3 py-2.5 transition-all group"
+                            >
+                              <div className="w-7 h-7 rounded-lg bg-white border border-mist flex items-center justify-center text-ink-faint flex-shrink-0">
+                                {m.icon}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] font-bold text-ink truncate">{c.title}</p>
+                                <p className="text-[9.5px] text-ink-faint truncate">
+                                  {m.label}{c.issuer ? ` · ${c.issuer}` : ''}
+                                </p>
+                              </div>
+                              <ExternalLink className="w-3 h-3 text-ink-faint/50 group-hover:text-ink-faint flex-shrink-0" />
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Privacy notice */}
                   <div className="px-5 py-4 border-t border-mist">
