@@ -93,11 +93,16 @@ function DonutChart({ slices, size = 88 }: { slices: { value: number; color: str
   const r = size / 2 - 10;
   const cx = size / 2;
   const cy = size / 2;
-  let cumulative = 0;
+  // Precompute each slice's running start offset without mutating a
+  // shared variable during render (avoids react-hooks/immutability).
+  const offsets: number[] = [];
+  slices.reduce((running, s) => {
+    offsets.push(running);
+    return running + s.value;
+  }, 0);
   const paths = slices.map((s, i) => {
-    const start = (cumulative / total) * 2 * Math.PI - Math.PI / 2;
-    cumulative += s.value;
-    const end = (cumulative / total) * 2 * Math.PI - Math.PI / 2;
+    const start = (offsets[i] / total) * 2 * Math.PI - Math.PI / 2;
+    const end = ((offsets[i] + s.value) / total) * 2 * Math.PI - Math.PI / 2;
     const x1 = cx + r * Math.cos(start);
     const y1 = cy + r * Math.sin(start);
     const x2 = cx + r * Math.cos(end);

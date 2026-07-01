@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const [allShipments, allAssignments, allMilestones] = await Promise.all([
       dbStore.getShipments(),
       dbStore.getAssignments(),
-      dbStore.getMilestones(),
+      dbStore.getAllMilestones(),
     ]);
 
     const userId = user!.id;
