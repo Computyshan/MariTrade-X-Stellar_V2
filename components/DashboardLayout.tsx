@@ -173,13 +173,13 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
         <header
           className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0"
           style={isTradeParty
-            ? { background: 'linear-gradient(90deg, #6E1138 0%, #8B1646 50%, #5C0A2E 100%)', borderBottomColor: 'rgba(255,255,255,0.1)' }
+            ? { background: 'linear-gradient(160deg, #fff0f5 0%, #fdf6f9 40%, var(--color-mist-light) 100%)', borderBottomColor: 'var(--color-mist)' }
             : { background: 'linear-gradient(90deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%)', borderBottomColor: 'var(--color-mist)' }
           }
         >
           <div className="flex items-center gap-3">
             <button
-              className={`md:hidden p-1.5 rounded-lg transition-colors ${isTradeParty ? 'text-white/70 hover:bg-white/10' : 'text-ink-faint hover:bg-mist-light'}`}
+              className={`md:hidden p-1.5 rounded-lg transition-colors ${isTradeParty ? 'text-wine/70 hover:bg-wine-light' : 'text-ink-faint hover:bg-mist-light'}`}
               onClick={() => setMobileMenuOpen(true)}
             >
               <Menu className="w-5 h-5" />
@@ -198,7 +198,7 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
 
           {/* Right: user info + sign out */}
           <div className="flex items-center gap-3">
-            <span className={`hidden sm:flex items-center gap-1.5 text-[11px] font-semibold ${isTradeParty ? 'text-white/50' : 'text-ink-faint'}`}>
+            <span className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
               {currentUser?.jobRole.replace(/_/g, ' ')}
             </span>
 
@@ -206,7 +206,7 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
             <div className="relative">
               <button
                 onClick={() => setShowNotifPanel(v => !v)}
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors relative ${isTradeParty ? 'text-white/70 hover:bg-white/10' : 'text-ink-faint hover:bg-mist-light'}`}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors relative ${isTradeParty ? 'text-wine/70 hover:bg-wine-light' : 'text-ink-faint hover:bg-mist-light'}`}
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
@@ -294,17 +294,13 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
 
             <Link
               href="/profile"
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isTradeParty ? 'text-white/70 hover:bg-white/10' : 'text-ink-faint hover:bg-mist-light'}`}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isTradeParty ? 'text-wine/70 hover:bg-wine-light' : 'text-ink-faint hover:bg-mist-light'}`}
             >
               <UserCircle className="w-5 h-5" />
             </Link>
             <button
               onClick={handleSignOut}
-              className={`text-[11px] font-bold transition-colors cursor-pointer px-2 py-1 rounded-lg ${
-                isTradeParty
-                  ? 'text-white/60 hover:text-white hover:bg-white/10'
-                  : 'text-ink-faint hover:text-wine hover:bg-wine-light'
-              }`}
+              className="text-[11px] font-bold transition-colors cursor-pointer px-2 py-1 rounded-lg text-ink-faint hover:text-wine hover:bg-wine-light"
             >
               Sign Out
             </button>
