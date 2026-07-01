@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -143,8 +142,6 @@ export default function EscrowLedger() {
     setChainLoading(false);
   }, []);
 
-  // Auto-refresh chain data once shipments load
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (shipments.length > 0) refreshChainData(shipments);
   }, [shipments, refreshChainData]);

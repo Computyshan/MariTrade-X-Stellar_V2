@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
@@ -358,14 +357,13 @@ export default function DashboardHome() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchData(); }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchData(); }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
     const list = MILESTONE_BY_JOB[currentUser.jobRole];
     if (list && list.length > 0) setLogMilestoneType(list[0]);
-  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
   useEffect(() => {
     setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[logMilestoneType]);

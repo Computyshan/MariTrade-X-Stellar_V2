@@ -14,7 +14,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Shipment reference code not found' }, { status: 404 });
     }
 
-    const milestones = await dbStore.getMilestones(shipment.id);
+    const milestonesRaw = await dbStore.getMilestones(shipment.id);
 
     // ── Involved parties — public-safe view ──────────────────────────────────
     // Trade Party (Importer / Exporter): only the company name is exposed,
@@ -24,6 +24,19 @@ export async function GET(
     // shipment's operational point of contact — still no email/contact/wallet.
     const importerUser = await dbStore.getUserById(shipment.importerId);
     const exporterUser = shipment.exporterId ? await dbStore.getUserById(shipment.exporterId) : undefined;
+
+    // ── Tracking page tier (owned by the importer who shares the link) ───────
+    const tier = importerUser?.trackingTier ?? 'BRANDED';
+    // BRANDED tier shows status only, no milestone-by-milestone timeline
+    const milestones = tier === 'BRANDED' ? [] : milestonesRaw;
+    const branding =
+      tier === 'WHITELABEL'
+        ? {
+            logoUrl: importerUser?.brandingLogoUrl ?? undefined,
+            primaryColor: importerUser?.brandingPrimaryColor ?? undefined,
+            companyLabel: importerUser?.brandingCompanyLabel ?? undefined,
+          }
+        : undefined;
 
     const assignments = await dbStore.getAssignmentsForShipment(shipment.id);
     const assignedUsers = await Promise.all(
@@ -55,7 +68,7 @@ export async function GET(
       createdAt: shipment.createdAt,
     };
 
-    return NextResponse.json({ success: true, data: { shipment: publicShipment, milestones, involvedParties } });
+    return NextResponse.json({ success: true, data: { shipment: publicShipment, milestones, involvedParties, tier, branding } });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }

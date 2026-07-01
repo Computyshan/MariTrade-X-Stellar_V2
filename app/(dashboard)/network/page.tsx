@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -27,6 +26,7 @@ import {
   RefreshCw,
   X,
   Eye,
+  Star,
 } from 'lucide-react';
 import { JobRole, User } from '@/types';
 import UserProfileModal from '@/components/UserProfileModal';
@@ -50,6 +50,7 @@ interface ConnectionEntry {
   updatedAt: string;
   direction: 'SENT' | 'RECEIVED';
   otherParty: User | null;
+  favoritedBy?: string[];
 }
 
 type Tab = 'directory' | 'pending' | 'network';
@@ -103,6 +104,7 @@ export default function NetworkPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   // Profile drawer
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
 
@@ -139,11 +141,8 @@ export default function NetworkPage() {
     setLoading(false);
   }, [fetchDirectory, fetchConnections, currentUserId]);
 
-  // Initial load — run once when user is ready
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (currentUserId) refresh();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
 
   // Background poll every 30s
@@ -160,12 +159,10 @@ export default function NetworkPage() {
 
   // Search debounce — skip on mount (refresh already ran), only fire on search changes
   const isMounted = React.useRef(false);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }
     const t = setTimeout(fetchDirectory, 350);
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   const sendRequest = async (receiverId: string) => {
@@ -226,6 +223,36 @@ export default function NetworkPage() {
     }
   };
 
+  const toggleFavorite = async (connId: string) => {
+    if (!currentUser?.id) return;
+    // Optimistic toggle
+    setConnections(prev =>
+      prev.map(c => {
+        if (c.id !== connId) return c;
+        const current = c.favoritedBy ?? [];
+        const isFav = current.includes(currentUser.id);
+        return {
+          ...c,
+          favoritedBy: isFav ? current.filter(id => id !== currentUser.id) : [...current, currentUser.id],
+        };
+      })
+    );
+    try {
+      const res = await authFetch(`/api/network/connections/${connId}/favorite`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorId: currentUser.id }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        showToast('error', json.error || 'Could not update favorite.');
+        await fetchConnections(); // re-sync on failure
+      }
+    } catch {
+      await fetchConnections();
+    }
+  };
+
   const removeConnection = async (connId: string, memberId: string, mode: 'cancel' | 'remove') => {
     if (!currentUser?.id || !connId) return;
     // Optimistically clear local state immediately
@@ -260,7 +287,18 @@ export default function NetworkPage() {
 
   const pendingReceived = connections.filter(c => c.direction === 'RECEIVED' && c.status === 'PENDING');
   const pendingSent     = connections.filter(c => c.direction === 'SENT'     && c.status === 'PENDING');
-  const trustedNetwork  = connections.filter(c => c.status === 'ACCEPTED');
+  const trustedNetworkAll = connections
+    .filter(c => c.status === 'ACCEPTED')
+    .sort((a, b) => {
+      const aFav = (a.favoritedBy ?? []).includes(currentUserId ?? '');
+      const bFav = (b.favoritedBy ?? []).includes(currentUserId ?? '');
+      if (aFav !== bFav) return aFav ? -1 : 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  const favoritedCount = trustedNetworkAll.filter(c => (c.favoritedBy ?? []).includes(currentUserId ?? '')).length;
+  const trustedNetwork = favoritesOnly
+    ? trustedNetworkAll.filter(c => (c.favoritedBy ?? []).includes(currentUserId ?? ''))
+    : trustedNetworkAll;
 
   // Guard: currentUser may be null briefly during sign-out redirect
   if (!currentUser) return null;
@@ -268,7 +306,7 @@ export default function NetworkPage() {
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: 'directory', label: 'Member Directory' },
     { id: 'pending',   label: 'Pending', count: pendingReceived.length + pendingSent.length },
-    { id: 'network',   label: 'My MariNet', count: trustedNetwork.length },
+    { id: 'network',   label: 'My MariNet', count: trustedNetworkAll.length },
   ];
 
   return (
@@ -316,7 +354,7 @@ export default function NetworkPage() {
       {/* Summary Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Connections',   value: trustedNetwork.length,    colorClass: 'text-teal',     bg: 'bg-teal-light border-teal/15' },
+          { label: 'Connections',   value: trustedNetworkAll.length,    colorClass: 'text-teal',     bg: 'bg-teal-light border-teal/15' },
           { label: 'Pending',       value: pendingSent.length + pendingReceived.length, colorClass: 'text-amber', bg: 'bg-amber-light border-amber/15' },
           { label: 'Total Members', value: totalMemberCount,          colorClass: 'text-ink',      bg: 'bg-white border-mist' },
         ].map(stat => (
@@ -596,7 +634,35 @@ export default function NetworkPage() {
       {/* ══ TAB: MY MARINET ════════════════════════════════════════════════════ */}
       {activeTab === 'network' && (
         <div className="space-y-4">
+          {trustedNetworkAll.length > 0 && (
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setFavoritesOnly(f => !f)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer
+                  ${favoritesOnly ? 'bg-amber-light border-amber/30 text-amber' : 'border-mist text-ink-faint hover:text-ink hover:bg-mist-light'}`}
+              >
+                <Star className={`w-3.5 h-3.5 ${favoritesOnly ? 'fill-amber' : ''}`} />
+                {favoritesOnly ? `Favorites (${favoritedCount})` : `Show Favorites Only${favoritedCount ? ` (${favoritedCount})` : ''}`}
+              </button>
+            </div>
+          )}
           {trustedNetwork.length === 0 ? (
+            favoritesOnly ? (
+              <div className="text-center py-16 bg-white border border-mist rounded-2xl">
+                <Star className="w-10 h-10 text-mist-dark mx-auto mb-3" />
+                <p className="text-sm font-bold text-ink-faint">No favorited counterparties yet</p>
+                <p className="text-xs text-ink-faint/60 mt-1 max-w-xs mx-auto">
+                  Star a connection below to pin it here for quick access.
+                </p>
+                <button
+                  onClick={() => setFavoritesOnly(false)}
+                  className="mt-4 flex items-center gap-1.5 mx-auto text-white text-xs font-bold px-4 py-2 rounded-lg transition-all cursor-pointer"
+                  style={{ background: 'var(--theme-accent)' }}
+                >
+                  View All Connections <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
             <div className="text-center py-16 bg-white border border-mist rounded-2xl">
               <Users className="w-10 h-10 text-mist-dark mx-auto mb-3" />
               <p className="text-sm font-bold text-ink-faint">Your MariNet is empty</p>
@@ -611,18 +677,28 @@ export default function NetworkPage() {
                 Browse Directory <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
+            )
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {trustedNetwork.map(conn => {
               const member = conn.otherParty;
               if (!member) return null;
+              const isFavorited = (conn.favoritedBy ?? []).includes(currentUserId ?? '');
               return (
-              <div key={conn.id} className="bg-white border border-mist rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+              <div key={conn.id} className={`bg-white border rounded-2xl p-5 flex flex-col gap-4 shadow-sm ${isFavorited ? 'border-amber/30 ring-1 ring-amber/15' : 'border-mist'}`}>
               <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal uppercase tracking-wider">
               <CheckCircle2 className="w-3.5 h-3.5" /> MariNet Member
               </div>
               <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => toggleFavorite(conn.id)}
+                title={isFavorited ? 'Remove from favorites' : 'Save as favorite'}
+                className={`flex items-center justify-center w-7 h-7 rounded-lg border transition-all cursor-pointer
+                  ${isFavorited ? 'bg-amber-light border-amber/30 text-amber' : 'border-mist text-ink-faint hover:text-amber hover:border-amber/30'}`}
+              >
+                <Star className={`w-3.5 h-3.5 ${isFavorited ? 'fill-amber' : ''}`} />
+              </button>
               <button
                 onClick={() => setViewProfileId(member.id)}
                 className="flex items-center gap-1 border border-mist hover:bg-mist-light text-ink-faint hover:text-ink text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"

@@ -20,7 +20,13 @@ import {
   ClipboardCheck,
   Warehouse,
 } from 'lucide-react';
-import { MilestoneEvent, Shipment, JobRole } from '@/types';
+import { MilestoneEvent, Shipment, JobRole, TrackingTier } from '@/types';
+
+interface TrackingBranding {
+  logoUrl?: string;
+  primaryColor?: string;
+  companyLabel?: string;
+}
 
 interface LogisticsChainMember {
   fullName: string;
@@ -55,6 +61,8 @@ export default function PublicTrackingPage() {
   const [shipment, setShipment] = useState<Partial<Shipment> | null>(null);
   const [milestones, setMilestones] = useState<MilestoneEvent[]>([]);
   const [involvedParties, setInvolvedParties] = useState<InvolvedParties | null>(null);
+  const [tier, setTier] = useState<TrackingTier>('TIMELINE');
+  const [branding, setBranding] = useState<TrackingBranding | undefined>(undefined);
   const [errorText, setErrorText] = useState('');
 
   useEffect(() => {
@@ -71,6 +79,8 @@ export default function PublicTrackingPage() {
           setShipment(result.data.shipment);
           setMilestones(result.data.milestones || []);
           setInvolvedParties(result.data.involvedParties || null);
+          setTier(result.data.tier || 'BRANDED');
+          setBranding(result.data.branding || undefined);
         } else {
           setErrorText(result.error || 'Tracking code not found');
         }
@@ -89,18 +99,29 @@ export default function PublicTrackingPage() {
       {/* Header */}
       <header className="bg-white border-b border-mist sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image
-              src="/MariTrade logo.png"
-              alt="MariTrade"
-              width={110}
-              height={44}
-              className="h-9 w-auto object-contain"
-            />
-          </Link>
+          {tier === 'WHITELABEL' && branding?.logoUrl ? (
+            <div className="flex items-center gap-2.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={branding.logoUrl} alt={branding.companyLabel || 'Tracking'} className="h-9 w-auto object-contain" />
+              {branding.companyLabel && (
+                <span className="text-sm font-bold text-ink">{branding.companyLabel}</span>
+              )}
+            </div>
+          ) : (
+            <Link href="/" className="flex items-center gap-2.5">
+              <Image
+                src="/MariTrade logo.png"
+                alt="MariTrade"
+                width={110}
+                height={44}
+                className="h-9 w-auto object-contain"
+              />
+            </Link>
+          )}
           <Link
             href="/login"
             className="text-[12px] bg-amber hover:bg-amber-hover text-white font-semibold px-4 py-2 rounded-md transition-colors"
+            style={tier === 'WHITELABEL' && branding?.primaryColor ? { background: branding.primaryColor } : undefined}
           >
             Dashboard Portal
           </Link>
@@ -281,7 +302,17 @@ export default function PublicTrackingPage() {
               </div>
             </div>
 
-            {/* Milestone Timeline Card */}
+            {/* Milestone Timeline Card — gated by tracking tier */}
+            {tier === 'BRANDED' ? (
+              <div className="bg-white border border-mist p-6 rounded-xl shadow-sm space-y-3 text-center">
+                <Clock className="w-8 h-8 text-mist-dark mx-auto" />
+                <p className="text-[13px] font-bold text-ink">Live milestone-by-milestone tracking is not enabled for this shipment</p>
+                <p className="text-[11px] text-ink-faint max-w-md mx-auto leading-relaxed">
+                  This sender is on the Branded Link tier, which shows status updates only.
+                  Current status: <strong className="text-ink">{shipment?.status?.replace(/_/g, ' ')}</strong>
+                </p>
+              </div>
+            ) : (
             <div className="bg-white border border-mist p-6 rounded-xl shadow-sm space-y-5">
               <h2 className="font-display font-medium text-[19px] text-ink flex items-center gap-2">
                 <Clock className="w-4 h-4 text-ink-faint" />
@@ -297,7 +328,10 @@ export default function PublicTrackingPage() {
                 <div className="relative pl-6 space-y-7 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-px before:bg-mist">
                   {milestones.map((me) => (
                     <div key={me.id} className="relative space-y-1.5">
-                      <span className="absolute -left-[21.5px] top-1 w-3.5 h-3.5 rounded-full bg-teal border-2 border-white ring-4 ring-teal-light inline-block" />
+                      <span
+                        className="absolute -left-[21.5px] top-1 w-3.5 h-3.5 rounded-full bg-teal border-2 border-white ring-4 ring-teal-light inline-block"
+                        style={tier === 'WHITELABEL' && branding?.primaryColor ? { background: branding.primaryColor } : undefined}
+                      />
 
                       <div className="flex flex-wrap items-center justify-between gap-1.5">
                         <span className="text-[11px] font-bold tracking-tight text-ink bg-mist-light px-2 py-0.5 rounded border border-mist">
@@ -317,8 +351,10 @@ export default function PublicTrackingPage() {
                 </div>
               )}
             </div>
+            )}
 
-            {/* Signup Banner */}
+            {/* Signup Banner — suppressed on white-label pages to keep the embed clean */}
+            {tier !== 'WHITELABEL' && (
             <div className="bg-ink p-6 sm:p-8 text-white rounded-xl text-center space-y-4 relative overflow-hidden">
               <div
                 className="absolute inset-0 opacity-10 pointer-events-none"
@@ -338,6 +374,7 @@ export default function PublicTrackingPage() {
                 </Link>
               </div>
             </div>
+            )}
           </div>
         )}
       </main>

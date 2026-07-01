@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { userId, fullName, fullAddress, contactNumber, companyName, bankDetails, stellarWallet } = body;
+    const { userId, fullName, fullAddress, contactNumber, companyName, bankDetails, stellarWallet, trackingTier, brandingLogoUrl, brandingPrimaryColor, brandingCompanyLabel } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
@@ -25,6 +25,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
+    if (trackingTier !== undefined && !['BRANDED', 'TIMELINE', 'WHITELABEL'].includes(trackingTier)) {
+      return NextResponse.json({ success: false, error: 'Invalid trackingTier' }, { status: 400 });
+    }
+
     const updatedUser = {
       ...existingUser,
       fullName: fullName || existingUser.fullName,
@@ -33,6 +37,10 @@ export async function POST(req: NextRequest) {
       companyName: companyName !== undefined ? companyName : existingUser.companyName,
       bankDetails: bankDetails !== undefined ? bankDetails : existingUser.bankDetails,
       stellarWallet: stellarWallet !== undefined ? stellarWallet : existingUser.stellarWallet,
+      trackingTier: trackingTier !== undefined ? trackingTier : existingUser.trackingTier,
+      brandingLogoUrl: brandingLogoUrl !== undefined ? brandingLogoUrl : existingUser.brandingLogoUrl,
+      brandingPrimaryColor: brandingPrimaryColor !== undefined ? brandingPrimaryColor : existingUser.brandingPrimaryColor,
+      brandingCompanyLabel: brandingCompanyLabel !== undefined ? brandingCompanyLabel : existingUser.brandingCompanyLabel,
       updatedAt: new Date().toISOString(),
     };
 

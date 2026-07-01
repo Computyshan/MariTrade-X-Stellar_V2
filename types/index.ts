@@ -197,6 +197,20 @@ export const PHASE_MILESTONE_SEQUENCE: Record<ShipmentPhase, MilestoneType[]> = 
   ],
 };
 
+// ─── Tracking page tiers ───────────────────────────────────────────────────
+// Owned by the Importer — applies to every shipment they create and share a
+// public tracking link for.
+//   BRANDED    — status header only, MariTrade-branded link (default/free)
+//   TIMELINE   — adds the full milestone-by-milestone handoff timeline
+//   WHITELABEL — TIMELINE + custom logo / accent color on the public page
+export type TrackingTier = 'BRANDED' | 'TIMELINE' | 'WHITELABEL';
+
+export const TRACKING_TIER_LABELS: Record<TrackingTier, string> = {
+  BRANDED: 'Branded Link',
+  TIMELINE: 'Milestone Timeline',
+  WHITELABEL: 'White-Label',
+};
+
 export interface User {
   id: string;
   email: string;
@@ -210,6 +224,43 @@ export interface User {
   bankDetails?: string;
   kycStatus: KycStatus;
   kycDocumentUrl?: string;
+  trackingTier?: TrackingTier;
+  brandingLogoUrl?: string;
+  brandingPrimaryColor?: string;
+  brandingCompanyLabel?: string;
+  /** Multi-seat firm account this user belongs to, if any. */
+  firmId?: string;
+  firmRole?: FirmRole;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Team Seats (Multi-Seat Firm Accounts) ─────────────────────────────────
+// A firm is a real entity multiple users can belong to — distinct from the
+// free-text `companyName` field on User, which is purely cosmetic. Firm
+// membership drives seat limits, invite management, shared shipment
+// visibility between teammates, and assignment reassignment when a
+// teammate leaves.
+
+export type FirmRole = 'OWNER' | 'MEMBER';
+
+export interface Firm {
+  id: string;
+  name: string;
+  ownerId: string;
+  seatLimit: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FirmInviteStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'REVOKED';
+
+export interface FirmInvite {
+  id: string;
+  firmId: string;
+  invitedEmail: string;
+  invitedById: string;
+  status: FirmInviteStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -433,6 +484,9 @@ export interface ConnectionRequest {
   status: ConnectionStatus;
   createdAt: string;
   updatedAt: string;
+  /** User ids who have starred this connection as a favorite/saved counterparty.
+   *  Personal per-user, not shared — check `favoritedBy.includes(currentUserId)`. */
+  favoritedBy?: string[];
 }
 
 // ─── BOC Document Vault ──────────────────────────────────────────────────────
@@ -467,7 +521,11 @@ export type NotificationType =
   | 'CONNECTION_REQUEST'     // Someone sent you a connection request
   | 'CONNECTION_ACCEPTED'    // Your connection request was accepted
   | 'SHIPMENT_ASSIGNED'      // You were assigned/added as a party to a shipment
-  | 'SHIPMENT_STATUS_CHANGE' // Shipment status changed;
+  | 'SHIPMENT_STATUS_CHANGE' // Shipment status changed
+  | 'FIRM_INVITE'            // You were invited to join a team/firm
+  | 'FIRM_INVITE_ACCEPTED'   // Someone accepted your firm invite
+  | 'FIRM_MEMBER_REMOVED'    // You were removed from a firm
+  | 'SHIPMENT_REASSIGNED';   // A shipment assignment was reassigned to you
 
 export interface AppNotification {
   id: string;
@@ -477,5 +535,30 @@ export interface AppNotification {
   body: string;
   linkHref?: string;           // Optional deep-link inside the app
   isRead: boolean;
+  createdAt: string;
+}
+
+// ─── Saved Shipment List Views ─────────────────────────────────────────────
+// Personal, per-user presets for the Shipments list page filters/sort —
+// lets a user save "Active overseas shipments sorted by ETA" etc. and
+// re-apply it in one click instead of re-selecting filters each visit.
+
+export interface ShipmentListFilters {
+  status?: ShipmentStatus[];
+  shipmentScope?: ShipmentScope[];
+  escrowStatus?: EscrowStatus[];
+  search?: string;
+}
+
+export type ShipmentSortField = 'createdAt' | 'estimatedArrival' | 'totalValueUSD' | 'referenceCode';
+export type SortDirection = 'asc' | 'desc';
+
+export interface SavedShipmentView {
+  id: string;
+  userId: string;
+  name: string;
+  filters: ShipmentListFilters;
+  sortBy: ShipmentSortField;
+  sortDir: SortDirection;
   createdAt: string;
 }

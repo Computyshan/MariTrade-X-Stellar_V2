@@ -16,10 +16,69 @@ import {
   Anchor,
   Zap,
   BookOpen,
+  Link2,
+  Palette,
+  CheckCircle2,
 } from 'lucide-react';
+import { TrackingTier, TRACKING_TIER_LABELS } from '@/types';
+import { authFetch } from '@/hooks/use-user-session';
+
+const TIER_OPTIONS: { value: TrackingTier; description: string }[] = [
+  { value: 'BRANDED', description: 'Public link shows shipment status only, under the MariTrade brand.' },
+  { value: 'TIMELINE', description: 'Adds the full milestone-by-milestone handoff timeline to the public link.' },
+  { value: 'WHITELABEL', description: 'Timeline plus your own logo, accent color, and company label — no MariTrade branding.' },
+];
 
 export default function SettingsPage() {
-  const { currentUser, loading } = useUserSession();
+  const { currentUser, loading, setCurrentUser } = useUserSession();
+
+  const [tier, setTier] = React.useState<TrackingTier>('BRANDED');
+  const [logoUrl, setLogoUrl] = React.useState('');
+  const [primaryColor, setPrimaryColor] = React.useState('');
+  const [companyLabel, setCompanyLabel] = React.useState('');
+  const [savingTier, setSavingTier] = React.useState(false);
+  const [tierSaved, setTierSaved] = React.useState(false);
+
+  // Sync local form state from currentUser once it loads (or changes user),
+  // without a useEffect — adjusting state during render per React's guidance
+  // for "resetting state when a prop changes" avoids an extra render pass.
+  const [syncedUserId, setSyncedUserId] = React.useState<string | undefined>(undefined);
+  if (currentUser && currentUser.id !== syncedUserId) {
+    setSyncedUserId(currentUser.id);
+    setTier(currentUser.trackingTier ?? 'BRANDED');
+    setLogoUrl(currentUser.brandingLogoUrl ?? '');
+    setPrimaryColor(currentUser.brandingPrimaryColor ?? '');
+    setCompanyLabel(currentUser.brandingCompanyLabel ?? '');
+  }
+
+  const handleSaveTier = async () => {
+    if (!currentUser) return;
+    setSavingTier(true);
+    setTierSaved(false);
+    try {
+      const res = await authFetch('/api/auth/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          trackingTier: tier,
+          brandingLogoUrl: logoUrl,
+          brandingPrimaryColor: primaryColor,
+          brandingCompanyLabel: companyLabel,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setCurrentUser(json.data);
+        setTierSaved(true);
+        setTimeout(() => setTierSaved(false), 2500);
+      }
+    } catch (err) {
+      console.error('Failed to save tracking tier:', err);
+    } finally {
+      setSavingTier(false);
+    }
+  };
 
   if (loading || !currentUser) {
     return (
@@ -112,13 +171,19 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="border-t border-mist pt-3">
+              <div className="border-t border-mist pt-3 space-y-2">
                 <Link
                   href="/profile"
                   className="flex items-center gap-1.5 text-[11px] font-bold hover:opacity-70 transition-opacity"
                   style={{ color: 'var(--theme-accent)' }}
                 >
                   Edit profile details <ChevronRight className="w-3 h-3" />
+                </Link>
+                <Link
+                  href="/team"
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-ink-faint hover:opacity-70 transition-opacity"
+                >
+                  Manage team seats <ChevronRight className="w-3 h-3" />
                 </Link>
               </div>
             </div>
@@ -243,6 +308,109 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* ── CARD 4: Public Tracking Page Tier (Importers only) ── */}
+        {currentUser.jobRole === 'IMPORTER' && (
+        <div className="bg-white border border-mist rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-mist flex items-center gap-2"
+            style={{ background: 'var(--theme-accent-muted)' }}>
+            <Link2 className="w-4 h-4" style={{ color: 'var(--theme-accent)' }} />
+            <h3 className="text-[11px] font-black uppercase tracking-widest"
+              style={{ color: 'var(--theme-accent)' }}>
+              Public Tracking Page Tier
+            </h3>
+          </div>
+
+          <div className="p-5 space-y-5">
+            <p className="text-xs text-ink-faint leading-relaxed">
+              Choose what counterparties and customers see when they open a public{' '}
+              <code className="bg-mist-light px-1.5 py-0.5 rounded text-ink font-mono text-[11px]">/track/&lt;code&gt;</code>{' '}
+              link for your shipments.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {TIER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setTier(opt.value)}
+                  className={`text-left border rounded-xl p-4 space-y-2 transition-all cursor-pointer ${
+                    tier === opt.value
+                      ? 'ring-2 bg-mist-light'
+                      : 'border-mist hover:border-mist-dark bg-white'
+                  }`}
+                  style={tier === opt.value ? { borderColor: 'var(--theme-accent)', boxShadow: '0 0 0 2px var(--theme-accent-muted)' } as React.CSSProperties : undefined}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wide text-ink">
+                      {TRACKING_TIER_LABELS[opt.value]}
+                    </span>
+                    {tier === opt.value && <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: 'var(--theme-accent)' }} />}
+                  </div>
+                  <p className="text-[11px] text-ink-faint leading-relaxed">{opt.description}</p>
+                </button>
+              ))}
+            </div>
+
+            {tier === 'WHITELABEL' && (
+              <div className="border-t border-mist pt-4 space-y-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide text-ink-faint">
+                  <Palette className="w-3.5 h-3.5" />
+                  White-Label Branding
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="block text-[10px] text-ink-faint uppercase font-mono tracking-wider">Logo URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://yourcompany.com/logo.png"
+                      value={logoUrl}
+                      onChange={(e) => setLogoUrl(e.target.value)}
+                      className="w-full bg-white border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-amber"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] text-ink-faint uppercase font-mono tracking-wider">Accent Color</label>
+                    <input
+                      type="text"
+                      placeholder="#1f6f54"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      className="w-full bg-white border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-amber"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] text-ink-faint uppercase font-mono tracking-wider">Company Label</label>
+                    <input
+                      type="text"
+                      placeholder="Your Company Logistics"
+                      value={companyLabel}
+                      onChange={(e) => setCompanyLabel(e.target.value)}
+                      className="w-full bg-white border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-amber"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-mist pt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSaveTier}
+                disabled={savingTier}
+                className="bg-amber hover:bg-amber-hover disabled:opacity-60 text-white text-[11px] font-bold px-5 py-2.5 rounded-lg transition-colors cursor-pointer"
+              >
+                {savingTier ? 'Saving…' : 'Save Tracking Tier'}
+              </button>
+              {tierSaved && (
+                <span className="flex items-center gap-1 text-[11px] font-bold text-teal">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        )}
 
         {/* ── BOTTOM PANEL: Session info ── */}
         <div className="bg-ink rounded-2xl p-5 text-white flex flex-wrap items-center justify-between gap-4">

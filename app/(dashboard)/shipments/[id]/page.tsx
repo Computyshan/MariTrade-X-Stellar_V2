@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useEffect, useState, use, useRef } from 'react';
 import Link from 'next/link';
@@ -31,6 +30,8 @@ import {
   XCircle,
   Scale,
   ShieldAlert,
+  Link2,
+  Copy,
 } from 'lucide-react';
 import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE, MILESTONE_EVIDENCE_MODE } from '@/types';
 import { formatAsset } from '@/lib/stellar/assets';
@@ -117,6 +118,25 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   // ── Cancel modal ────────────────────────────────────────────────────────────
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelState, setCancelState] = useState<CancelState>(CANCEL_INITIAL);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const handleCopyTrackingLink = async () => {
+    if (!shipment) return;
+    const url = `${window.location.origin}/track/${shipment.referenceCode}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Fallback for browsers without clipboard API permission
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
 
   const fetchDetails = async () => {
     try {
@@ -612,6 +632,24 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}
+          <button
+            type="button"
+            onClick={handleCopyTrackingLink}
+            title="Copy the public tracking link for this shipment"
+            className="bg-mist-light hover:bg-mist text-ink border border-mist px-3 py-1 rounded-full font-bold flex items-center gap-1 transition-all cursor-pointer">
+            {linkCopied ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal" />
+                <span className="text-teal">Link Copied</span>
+              </>
+            ) : (
+              <>
+                <Link2 className="w-3.5 h-3.5" />
+                <span>Copy Tracking Link</span>
+                <Copy className="w-3 h-3 text-ink-faint" />
+              </>
+            )}
+          </button>
         </div>
       </div>
 

@@ -612,10 +612,13 @@ export default function LandingPage() {
               ].map((tech) => (
                 <div key={tech.name} className="flex items-center gap-2.5 grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
                   {tech.slug ? (
-                    <img
+                    <Image
                       src={`https://cdn.simpleicons.org/${tech.slug}`}
                       alt={tech.name}
+                      width={32}
+                      height={32}
                       className="h-7 sm:h-8 w-auto object-contain"
+                      unoptimized
                     />
                   ) : (
                     <Globe className="h-7 w-7 sm:h-8 sm:w-8 text-ink-faint" />

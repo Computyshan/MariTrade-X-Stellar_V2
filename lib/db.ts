@@ -68,6 +68,9 @@ import {
   VaultFolder,
   AppNotification,
   ShipmentReceipt,
+  SavedShipmentView,
+  Firm,
+  FirmInvite,
 } from '../types';
 
 // ─── Row → TypeScript mappers ─────────────────────────────────────────────────
@@ -86,6 +89,12 @@ function rowToUser(row: any): User {
     bankDetails: row.bank_details ?? undefined,
     kycStatus: row.kyc_status,
     kycDocumentUrl: row.kyc_document_url ?? undefined,
+    trackingTier: (row.tracking_tier ?? 'BRANDED') as User['trackingTier'],
+    brandingLogoUrl: row.branding_logo_url ?? undefined,
+    brandingPrimaryColor: row.branding_primary_color ?? undefined,
+    brandingCompanyLabel: row.branding_company_label ?? undefined,
+    firmId: row.firm_id ?? undefined,
+    firmRole: row.firm_role ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -105,6 +114,12 @@ function userToRow(user: User): any {
     bank_details: user.bankDetails ?? null,
     kyc_status: user.kycStatus,
     kyc_document_url: user.kycDocumentUrl ?? null,
+    tracking_tier: user.trackingTier ?? 'BRANDED',
+    branding_logo_url: user.brandingLogoUrl ?? null,
+    branding_primary_color: user.brandingPrimaryColor ?? null,
+    branding_company_label: user.brandingCompanyLabel ?? null,
+    firm_id: user.firmId ?? null,
+    firm_role: user.firmRole ?? null,
     created_at: user.createdAt,
     updated_at: user.updatedAt,
   };
@@ -318,6 +333,7 @@ function rowToConnection(row: any): ConnectionRequest {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    favoritedBy: row.favorited_by ?? [],
   };
 }
 
@@ -329,6 +345,7 @@ function connectionToRow(c: ConnectionRequest): any {
     status: c.status,
     created_at: c.createdAt,
     updated_at: c.updatedAt,
+    favorited_by: c.favoritedBy ?? [],
   };
 }
 
@@ -419,6 +436,76 @@ function receiptToRow(r: ShipmentReceipt): any {
     finalized_at: r.finalizedAt ?? null,
     created_at: r.createdAt,
     updated_at: r.updatedAt,
+  };
+}
+
+function rowToSavedView(row: any): SavedShipmentView {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    filters: row.filters ?? {},
+    sortBy: row.sort_by ?? 'createdAt',
+    sortDir: row.sort_dir ?? 'desc',
+    createdAt: row.created_at,
+  };
+}
+
+function savedViewToRow(v: SavedShipmentView): any {
+  return {
+    id: v.id,
+    user_id: v.userId,
+    name: v.name,
+    filters: v.filters ?? {},
+    sort_by: v.sortBy ?? 'createdAt',
+    sort_dir: v.sortDir ?? 'desc',
+    created_at: v.createdAt,
+  };
+}
+
+function rowToFirm(row: any): Firm {
+  return {
+    id: row.id,
+    name: row.name,
+    ownerId: row.owner_id,
+    seatLimit: row.seat_limit,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function firmToRow(f: Firm): any {
+  return {
+    id: f.id,
+    name: f.name,
+    owner_id: f.ownerId,
+    seat_limit: f.seatLimit,
+    created_at: f.createdAt,
+    updated_at: f.updatedAt,
+  };
+}
+
+function rowToFirmInvite(row: any): FirmInvite {
+  return {
+    id: row.id,
+    firmId: row.firm_id,
+    invitedEmail: row.invited_email,
+    invitedById: row.invited_by_id,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function firmInviteToRow(inv: FirmInvite): any {
+  return {
+    id: inv.id,
+    firm_id: inv.firmId,
+    invited_email: inv.invitedEmail,
+    invited_by_id: inv.invitedById,
+    status: inv.status,
+    created_at: inv.createdAt,
+    updated_at: inv.updatedAt,
   };
 }
 
@@ -926,6 +1013,29 @@ export const dbStore = {
     return rowToConnection(data);
   },
 
+  /** Toggle whether `userId` has favorited connection `connId`. Returns the
+   *  updated connection. Either party (requester or receiver) may favorite —
+   *  it's a personal bookmark, not a shared/mutual flag. */
+  toggleConnectionFavorite: async (connId: string, userId: string): Promise<ConnectionRequest> => {
+    const admin = getSupabaseAdmin();
+    const conn = await dbStore.getConnectionRequestById(connId);
+    if (!conn) throw new Error('Connection not found');
+    if (conn.requesterId !== userId && conn.receiverId !== userId) {
+      throw new Error('Not authorised to favorite this connection');
+    }
+    const current = conn.favoritedBy ?? [];
+    const isFav = current.includes(userId);
+    const nextFavoritedBy = isFav ? current.filter(id => id !== userId) : [...current, userId];
+    const { data, error } = await admin
+      .from('connection_requests')
+      .update({ favorited_by: nextFavoritedBy })
+      .eq('id', connId)
+      .select()
+      .single();
+    assertNoError(error, 'toggleConnectionFavorite');
+    return rowToConnection(data);
+  },
+
   // ── Notifications ─────────────────────────────────────────────────────────
 
   getNotificationsForUser: async (userId: string): Promise<AppNotification[]> => {
@@ -996,5 +1106,174 @@ export const dbStore = {
       .eq('user_id', userId)
       .eq('is_read', false);
     assertNoError(error, 'markAllNotificationsRead');
+  },
+
+  // ── Saved Shipment List Views ──────────────────────────────────────────
+
+  getSavedViewsForUser: async (userId: string): Promise<SavedShipmentView[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('saved_shipment_views')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    assertNoError(error, 'getSavedViewsForUser');
+    return (data ?? []).map(rowToSavedView);
+  },
+
+  saveSavedView: async (view: SavedShipmentView): Promise<SavedShipmentView> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('saved_shipment_views')
+      .upsert(savedViewToRow(view), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveSavedView');
+    return rowToSavedView(data);
+  },
+
+  deleteSavedView: async (id: string, userId: string): Promise<void> => {
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
+      .from('saved_shipment_views')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+    assertNoError(error, 'deleteSavedView');
+  },
+
+  // ── Team Seats (Firms & Invites) ──────────────────────────────────────────
+
+  getFirmById: async (id: string): Promise<Firm | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.from('firms').select('*').eq('id', id).maybeSingle();
+    assertNoError(error, 'getFirmById');
+    return data ? rowToFirm(data) : undefined;
+  },
+
+  saveFirm: async (firm: Firm): Promise<Firm> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('firms')
+      .upsert(firmToRow(firm), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveFirm');
+    return rowToFirm(data);
+  },
+
+  /** All users sharing the given firm — the seat roster. */
+  getFirmMembers: async (firmId: string): Promise<User[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('users')
+      .select('*')
+      .eq('firm_id', firmId)
+      .order('created_at');
+    assertNoError(error, 'getFirmMembers');
+    return (data ?? []).map(rowToUser);
+  },
+
+  /** Detach a user from their firm (used for removal / leaving). */
+  removeUserFromFirm: async (userId: string): Promise<void> => {
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
+      .from('users')
+      .update({ firm_id: null, firm_role: null })
+      .eq('id', userId);
+    assertNoError(error, 'removeUserFromFirm');
+  },
+
+  /** Attach a user to a firm with the given role. */
+  setUserFirm: async (userId: string, firmId: string | null, firmRole: 'OWNER' | 'MEMBER' | null): Promise<void> => {
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
+      .from('users')
+      .update({ firm_id: firmId, firm_role: firmRole })
+      .eq('id', userId);
+    assertNoError(error, 'setUserFirm');
+  },
+
+  getFirmInvitesForFirm: async (firmId: string): Promise<FirmInvite[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('firm_invites')
+      .select('*')
+      .eq('firm_id', firmId)
+      .order('created_at', { ascending: false });
+    assertNoError(error, 'getFirmInvitesForFirm');
+    return (data ?? []).map(rowToFirmInvite);
+  },
+
+  /** Pending invites addressed to a given email — used to show "You've been invited" on the Team page. */
+  getPendingFirmInvitesForEmail: async (email: string): Promise<FirmInvite[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('firm_invites')
+      .select('*')
+      .ilike('invited_email', email)
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false });
+    assertNoError(error, 'getPendingFirmInvitesForEmail');
+    return (data ?? []).map(rowToFirmInvite);
+  },
+
+  getFirmInviteById: async (id: string): Promise<FirmInvite | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.from('firm_invites').select('*').eq('id', id).maybeSingle();
+    assertNoError(error, 'getFirmInviteById');
+    return data ? rowToFirmInvite(data) : undefined;
+  },
+
+  saveFirmInvite: async (invite: FirmInvite): Promise<FirmInvite> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('firm_invites')
+      .upsert(firmInviteToRow(invite), { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveFirmInvite');
+    return rowToFirmInvite(data);
+  },
+
+  /**
+   * Reassign a shipment's assignment from one teammate to another.
+   * If the target user is already assigned to the shipment, the departing
+   * user's assignment is simply removed (no duplicate row). Otherwise the
+   * existing assignment row's user_id is updated in place, preserving
+   * `assignedAt` history rather than creating a fresh row.
+   */
+  reassignShipmentAssignment: async (
+    shipmentId: string,
+    fromUserId: string,
+    toUserId: string
+  ): Promise<void> => {
+    const admin = getSupabaseAdmin();
+
+    const { data: targetExisting, error: checkErr } = await admin
+      .from('shipment_assignments')
+      .select('id')
+      .eq('shipment_id', shipmentId)
+      .eq('user_id', toUserId)
+      .maybeSingle();
+    assertNoError(checkErr, 'reassignShipmentAssignment:check');
+
+    if (targetExisting) {
+      // Target teammate already on this shipment — just drop the departing assignment.
+      const { error } = await admin
+        .from('shipment_assignments')
+        .delete()
+        .eq('shipment_id', shipmentId)
+        .eq('user_id', fromUserId);
+      assertNoError(error, 'reassignShipmentAssignment:delete');
+      return;
+    }
+
+    const { error } = await admin
+      .from('shipment_assignments')
+      .update({ user_id: toUserId })
+      .eq('shipment_id', shipmentId)
+      .eq('user_id', fromUserId);
+    assertNoError(error, 'reassignShipmentAssignment:update');
   },
 };

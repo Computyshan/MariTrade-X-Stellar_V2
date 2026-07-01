@@ -17,17 +17,23 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Scope to shipments the requester is actually party to: importer,
-    // exporter, or an assigned logistics user. dbStore uses the Supabase
-    // service-role client (bypasses RLS), so this filtering has to happen
-    // here rather than relying on the "shipments_involved_users" RLS policy.
+    // exporter, or an assigned logistics user — plus, for multi-seat firm
+    // accounts, any shipment a *teammate* (same firm_id) is party to. dbStore
+    // uses the Supabase service-role client (bypasses RLS), so this filtering
+    // has to happen here rather than relying on RLS policies alone.
     const myUserId = user!.id;
-    const myAssignedShipmentIds = new Set(
-      assignments.filter(a => a.userId === myUserId).map(a => a.shipmentId)
+    const me = users.find(u => u.id === myUserId);
+    const teammateIds = me?.firmId
+      ? new Set(users.filter(u => u.firmId === me.firmId).map(u => u.id))
+      : new Set([myUserId]);
+
+    const relevantAssignedShipmentIds = new Set(
+      assignments.filter(a => teammateIds.has(a.userId)).map(a => a.shipmentId)
     );
     const myShipments = list.filter(s =>
-      s.importerId === myUserId ||
-      s.exporterId === myUserId ||
-      myAssignedShipmentIds.has(s.id)
+      teammateIds.has(s.importerId) ||
+      (s.exporterId ? teammateIds.has(s.exporterId) : false) ||
+      relevantAssignedShipmentIds.has(s.id)
     );
 
     const decoratedList = myShipments.map(s => {

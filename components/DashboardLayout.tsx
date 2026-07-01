@@ -5,12 +5,12 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUserSession } from '@/hooks/use-user-session';
-import { 
+import {
   Ship,
-  MessageSquare, 
-  FileText, 
-  CreditCard, 
-  Settings, 
+  MessageSquare,
+  FileText,
+  CreditCard,
+  Settings,
   Menu,
   X,
   LayoutDashboard,
@@ -19,6 +19,8 @@ import {
   Network,
   CheckCheck,
   ExternalLink,
+  BarChart3,
+  Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from '@/hooks/use-notifications';
@@ -44,13 +46,15 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Shipments', href: '/shipments', icon: Ship },
-    { name: 'Network',   href: '/network',   icon: Network },
-    { name: 'Messages',  href: '/messages',  icon: MessageSquare },
-    { name: 'Documents', href: '/documents', icon: FileText },
-    { name: 'Escrow',    href: '/payments',  icon: CreditCard },
-    { name: 'Settings',  href: '/settings',  icon: Settings },
+    { name: 'Dashboard',  href: '/dashboard',  icon: LayoutDashboard },
+    { name: 'Shipments',  href: '/shipments',  icon: Ship },
+    { name: 'Network',    href: '/network',    icon: Network },
+    { name: 'Team',       href: '/team',       icon: Users },
+    { name: 'Messages',   href: '/messages',   icon: MessageSquare },
+    { name: 'Documents',  href: '/documents',  icon: FileText },
+    { name: 'Escrow',     href: '/payments',   icon: CreditCard },
+    { name: 'Analytics',  href: '/analytics',  icon: BarChart3 },
+    { name: 'Settings',   href: '/settings',   icon: Settings },
   ];
 
   const userInitials = currentUser?.fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() ?? '??';
