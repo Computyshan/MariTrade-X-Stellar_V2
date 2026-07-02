@@ -113,7 +113,10 @@ export default function LandingPage() {
     <div data-theme={activeGroup === 'trade' ? 'trade-party' : activeGroup === 'logistics' ? 'logistics-chain' : undefined} className="min-h-screen bg-mist-light text-ink flex flex-col font-sans select-none scroll-smooth transition-colors duration-500">
 
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 flex justify-between items-center w-full px-8 py-0 h-16 bg-white border-b border-mist">
+      <nav
+        className="sticky top-0 z-50 flex justify-between items-center w-full px-8 py-0 h-16 border-b border-mist transition-[background] duration-500"
+        style={{ background: 'var(--theme-nav-gradient)' }}
+      >
         <div className="flex items-center gap-10">
           <Link href="/" className="flex items-center gap-2.5 group">
             <Image
@@ -152,10 +155,17 @@ export default function LandingPage() {
       <main className="flex-1">
 
         {/* Hero */}
-        <section className="relative overflow-hidden bg-ink min-h-[680px] flex flex-col items-center justify-center text-center px-6">
+        <section
+          className="relative overflow-hidden min-h-[680px] flex flex-col items-center justify-center text-center px-6 transition-[background] duration-500"
+          style={{ background: 'var(--theme-dark-gradient)' }}
+        >
 
-          {/* Subtle ambient glow */}
+          {/* Subtle ambient glow — base layer mirrors the role's dashboard shimmer, plus a mouse-reactive layer on top */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div
+              className="absolute inset-0 transition-[background] duration-500"
+              style={{ background: 'var(--theme-dark-glow-1), var(--theme-dark-glow-2)' }}
+            />
             <div
               className="absolute top-[20%] left-[30%] w-[500px] h-[500px] rounded-full opacity-[0.07]"
               style={{
@@ -255,7 +265,7 @@ export default function LandingPage() {
                 <p className="text-wine-light text-[11px] text-left mt-2 pl-1 font-sans">⚠ {errorSearch}</p>
               )}
               <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-steel">
-                <span>MariTrade offers visibility and transparency among its users by providing real-time updates on shipment status.</span>
+                <span>MariTrade offers visibility and transparency even to its non-users by providing real-time updates on shipment status.</span>
               </div>
             </div>
 
@@ -264,15 +274,21 @@ export default function LandingPage() {
 
         {/* How it works*/}
         <section id="flow" className="py-20 px-6 sm:px-8 max-w-6xl mx-auto scroll-mt-16">
-          <div className="text-center max-w-xl mx-auto mb-14">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            className="text-center max-w-xl mx-auto mb-14"
+          >
             <span className="text-[26px] font-sans uppercase tracking-widest text-[var(--theme-accent)] font-bold transition-colors duration-500">The MariTrade Flow</span>
             <h2 className="text-2xl sm:text-[55px] font-display font-medium text-ink tracking-tight mt-2 leading-tight">
               Payment-secured. Milestone-verified. Settled instantly.
             </h2>
             <p className="text-[13px] text-ink-faint mt-3 leading-relaxed">
-              Every peso in escrow moves only when verified events are confirmed by each member of your logistics chain.
+              Every peso/dollar in escrow moves only when verified events are confirmed by each member of your logistics chain.
             </p>
-          </div>
+          </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 relative">
             {/* Connector line */}
@@ -319,9 +335,19 @@ export default function LandingPage() {
         </section>
 
         {/* How to Use MariTrade — Role Guide */}
-        <section id="role-guide" className="py-20 px-6 sm:px-8 bg-white border-t border-mist scroll-mt-16">
+        <section
+          id="role-guide"
+          className="py-20 px-6 sm:px-8 border-t border-mist scroll-mt-16 transition-[background] duration-500"
+          style={{ background: 'var(--theme-surface-gradient)' }}
+        >
           <div className="max-w-6xl mx-auto">
-            <div className="text-center max-w-xl mx-auto mb-10">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-80px' }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+              className="text-center max-w-xl mx-auto mb-10"
+            >
               <span className="text-[26px] font-sans uppercase tracking-widest text-amber font-bold">Role-Based Guide</span>
               <h2 className="text-2xl sm:text-[55px] font-display font-medium text-ink tracking-tight mt-2 leading-tight">
                 How to use MariTrade — by role
@@ -329,10 +355,16 @@ export default function LandingPage() {
               <p className="text-[13px] text-ink-faint mt-3 leading-relaxed">
                 Select your role in the trade chain to see your workflow.
               </p>
-            </div>
+            </motion.div>
 
             {/* Group selector */}
-            <div className="flex flex-col sm:flex-row gap-5 justify-center mb-12">
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-80px' }}
+              transition={{ duration: 0.5, delay: 0.1, ease: 'easeOut' }}
+              className="flex flex-col sm:flex-row gap-5 justify-center mb-12"
+            >
 
               {/* ── Trade Party selector ── amber border + wine icon */}
               <button
@@ -400,7 +432,7 @@ export default function LandingPage() {
                   activeGroup === 'logistics' ? 'text-steel rotate-90' : 'text-ink-faint'
                 }`} />
               </button>
-            </div>
+            </motion.div>
 
             {/* Trade Party cards — Amber + Wine */}
             {activeGroup === 'trade' && (
@@ -441,7 +473,12 @@ export default function LandingPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.35, delay: i * 0.08, ease: 'easeOut' }}
-                    className="rounded-xl border border-wine/20 overflow-hidden shadow-sm"
+                    onClick={() => setActiveGroup('trade')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveGroup('trade'); }}
+                    aria-label={`View ${card.role} palette`}
+                    className="rounded-xl border border-wine/20 overflow-hidden shadow-sm cursor-pointer transition-shadow hover:shadow-md"
                     style={{ background: 'linear-gradient(160deg, var(--color-amber-light) 0%, var(--color-wine-light) 100%)' }}
                   >
                     {/* Dual-colour top bar: amber → wine */}
@@ -527,7 +564,12 @@ export default function LandingPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.35, delay: i * 0.08, ease: 'easeOut' }}
-                    className="rounded-xl border border-steel/20 overflow-hidden shadow-sm"
+                    onClick={() => setActiveGroup('logistics')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveGroup('logistics'); }}
+                    aria-label={`View ${card.role} palette`}
+                    className="rounded-xl border border-steel/20 overflow-hidden shadow-sm cursor-pointer transition-shadow hover:shadow-md"
                     style={{ background: 'linear-gradient(160deg, var(--color-teal-light) 0%, var(--color-steel-light) 100%)' }}
                   >
                     {/* Dual-colour top bar: teal → steel */}
@@ -564,12 +606,22 @@ export default function LandingPage() {
         </section>
 
         {/* Capabilities strip */}
-        <section id="capabilities" className="bg-white border-t border-b border-mist py-14 px-6 scroll-mt-16">
+        <section
+          id="capabilities"
+          className="border-t border-b border-mist py-14 px-6 scroll-mt-16 transition-[background] duration-500"
+          style={{ background: 'var(--theme-surface-gradient)' }}
+        >
           <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-10">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-80px' }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+              className="text-center mb-10"
+            >
               <span className="text-[26px] font-sans uppercase tracking-widest text-[var(--theme-accent)] font-bold transition-colors duration-500">Built for the Whole Chain</span>
               <h2 className="text-2xl sm:text-[55px] font-display font-medium text-ink tracking-tight mt-2 leading-tight">Everything the trade chain needs</h2>
-            </div>
+            </motion.div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {[
                 { icon: <Lock className="w-6 h-6 text-[var(--theme-accent)]" />, title: 'Multi-Sig Escrow', desc: 'USDC held in Stellar 3-of-3 multi-signature accounts. No single party can unilaterally move funds.' },
@@ -600,7 +652,13 @@ export default function LandingPage() {
 
         {/* Powered By */}
         <section className="bg-mist-light py-12 px-6 border-b border-mist">
-          <div className="max-w-5xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            className="max-w-5xl mx-auto text-center"
+          >
             <span className="text-[11px] font-sans uppercase tracking-widest text-ink-faint font-bold">Powered By</span>
             <div className="mt-7 flex flex-wrap items-center justify-center gap-x-12 gap-y-7">
               {[
@@ -609,8 +667,14 @@ export default function LandingPage() {
                 { name: 'Supabase', slug: 'supabase' },
                 { name: 'Next.js', slug: 'nextdotjs' },
                 { name: 'Google Gemini', slug: 'googlegemini' },
-              ].map((tech) => (
-                <div key={tech.name} className="flex items-center gap-2.5 grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
+              ].map((tech, ti) => (
+                <motion.div
+                  key={tech.name}
+                  initial={{ opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-40px' }}
+                  transition={{ duration: 0.35, delay: ti * 0.06, ease: 'easeOut' }}
+                  className="flex items-center gap-2.5 grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
                   {tech.slug ? (
                     <Image
                       src={`https://cdn.simpleicons.org/${tech.slug}`}
@@ -626,15 +690,24 @@ export default function LandingPage() {
                   <span className="text-[16px] sm:text-[18px] font-display font-medium text-ink-faint tracking-tight">
                     {tech.name}
                   </span>
-                </div>
+                </motion.div>
               ))}
             </div>
-          </div>
+          </motion.div>
         </section>
 
         {/* CTA Section */}
-        <section className="py-20 bg-ink text-center px-6">
-          <div className="max-w-2xl mx-auto space-y-5">
+        <section
+          className="py-20 text-center px-6 transition-[background] duration-500"
+          style={{ background: 'var(--theme-dark-gradient)' }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.55, ease: 'easeOut' }}
+            className="max-w-2xl mx-auto space-y-5"
+          >
             <h2 className="text-[32px] font-display font-medium text-white tracking-tight leading-tight">
               Ready to protect your next<br />cargo shipment?
             </h2>
@@ -659,14 +732,23 @@ export default function LandingPage() {
               </button>
             </div>
             <p className="text-[11px] text-ink-faint font-sans">No credit card required · Currently in Early Access</p>
-          </div>
+          </motion.div>
         </section>
 
       </main>
 
       {/* Footer */}
-      <footer className="w-full bg-white border-t border-mist py-14 px-8">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-start gap-12 pb-10 border-b border-mist">
+      <footer
+        className="w-full border-t border-mist py-14 px-8 transition-[background] duration-500"
+        style={{ background: 'var(--theme-surface-gradient)' }}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-start gap-12 pb-10 border-b border-mist"
+        >
           <div className="space-y-3 max-w-xs">
             <div className="flex items-center">
               <Image
@@ -696,7 +778,7 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
         <div className="max-w-6xl mx-auto pt-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-[11px] text-ink-faint font-sans">
           <span>© 2026 MariTrade Logistics. All rights reserved.</span>

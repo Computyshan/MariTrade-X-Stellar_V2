@@ -77,6 +77,10 @@
   --color-error-light: var(--color-wine-light);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background-color: var(--color-mist-light);
   color: var(--color-ink);
@@ -92,6 +96,17 @@ body {
   --theme-feature:       var(--color-steel);
   --theme-feature-hover: var(--color-steel-hover);
   --theme-feature-light: var(--color-steel-light);
+
+  /* ── Landing-page surface gradients (default / no role selected) ──
+     Mirrors the neutral ink tone used app-wide before a portal theme is
+     applied. Overridden per-theme below so a Role Guide selection can
+     retint the whole landing page — including gradients — to match that
+     role's actual dashboard palette (see DashboardLayout.tsx). */
+  --theme-dark-gradient:    linear-gradient(175deg, var(--color-ink) 0%, var(--color-ink-soft) 45%, var(--color-ink) 160%);
+  --theme-dark-glow-1:      radial-gradient(ellipse at 110% 5%, rgba(207,226,230,0.10) 0%, transparent 45%);
+  --theme-dark-glow-2:      radial-gradient(ellipse at -10% 95%, rgba(207,226,230,0.06) 0%, transparent 50%);
+  --theme-nav-gradient:     #ffffff;
+  --theme-surface-gradient: linear-gradient(160deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist-light) 100%);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -118,6 +133,15 @@ body {
   --theme-sidebar-active-bg:   rgba(254, 153, 0, 0.13);
   --theme-sidebar-active-text: var(--color-amber);
   --theme-portal-name:         "Trade Party";
+
+  /* Surface gradients — lifted directly from DashboardLayout.tsx's
+     Trade Party sidebar / topbar / main so the landing page matches the
+     real dashboard exactly, gradients included. */
+  --theme-dark-gradient:    linear-gradient(175deg, #5C0A2E 0%, #8B1646 45%, #6E1138 160%);
+  --theme-dark-glow-1:      radial-gradient(ellipse at 110% 5%, rgba(254,153,0,0.22) 0%, transparent 45%);
+  --theme-dark-glow-2:      radial-gradient(ellipse at -10% 95%, rgba(254,153,0,0.10) 0%, transparent 50%);
+  --theme-nav-gradient:     linear-gradient(160deg, #fff0f5 0%, #fdf6f9 40%, var(--color-mist-light) 100%);
+  --theme-surface-gradient: linear-gradient(160deg, #fff0f5 0%, #fdf6f9 40%, var(--color-mist-light) 100%);
 }
 
 /* ── LOGISTICS CHAIN  (Freight Forwarders, Customs Brokers, WHOps)
@@ -135,4 +159,13 @@ body {
   --theme-sidebar-active-bg:   rgba(11, 175, 176, 0.12);
   --theme-sidebar-active-text: var(--color-mist);
   --theme-portal-name:         "Logistics Chain";
+
+  /* Surface gradients — lifted directly from DashboardLayout.tsx's
+     Logistics Chain sidebar / topbar / main so the landing page matches
+     the real dashboard exactly, gradients included. */
+  --theme-dark-gradient:    linear-gradient(175deg, var(--color-ink) 0%, var(--color-ink-soft) 45%, var(--color-teal-hover) 160%);
+  --theme-dark-glow-1:      radial-gradient(ellipse at 110% 5%, rgba(207,226,230,0.18) 0%, transparent 45%);
+  --theme-dark-glow-2:      radial-gradient(ellipse at -10% 95%, rgba(207,226,230,0.12) 0%, transparent 50%);
+  --theme-nav-gradient:     linear-gradient(90deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%);
+  --theme-surface-gradient: linear-gradient(160deg, #f4f7fb 0%, #eef2f8 40%, var(--color-mist-light) 100%);
 }
