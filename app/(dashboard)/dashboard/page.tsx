@@ -38,7 +38,7 @@ import {
   Users,
   FileUp,
 } from 'lucide-react';
-import { MilestoneType, JobRole, Shipment, MilestoneEvent, ROLE_MILESTONES, MILESTONE_EVIDENCE_MODE, MILESTONE_EVIDENCE_REF_LABEL } from '@/types';
+import { MilestoneType, JobRole, Shipment, MilestoneEvent, ROLE_MILESTONES, MILESTONE_EVIDENCE_MODE, MILESTONE_EVIDENCE_REF_LABEL, getUserJobRoles } from '@/types';
 import { formatAsset, AssetCode } from '@/lib/stellar/assets';
 import { getUsdToPhpRate } from '@/lib/stellar/fx';
 
@@ -314,6 +314,7 @@ export default function DashboardHome() {
   const [loading, setLoading] = useState(true);
 
   const [selectedShipmentLogId, setSelectedShipmentLogId] = useState('');
+  const [logJobRole, setLogJobRole]             = useState<JobRole>('FREIGHT_FORWARDER');
   const [logMilestoneType, setLogMilestoneType] = useState<MilestoneType>('BOOKING_CONFIRMED');
   const [logMessage, setLogMessage]             = useState('');
   const [logEvidence, setLogEvidence]           = useState('');   // URL after upload
@@ -361,7 +362,13 @@ export default function DashboardHome() {
 
   useEffect(() => {
     if (!currentUser) return;
-    const list = MILESTONE_BY_JOB[currentUser.jobRole];
+    const roles = getUserJobRoles(currentUser);
+    // Prefer the account's primary/display role if it's actually in the
+    // stacked role list; otherwise fall back to the first stacked role.
+    const primaryRole = roles.includes(currentUser.jobRole) ? currentUser.jobRole : roles[0];
+    if (!primaryRole) return;
+    setLogJobRole(primaryRole);
+    const list = MILESTONE_BY_JOB[primaryRole];
     if (list && list.length > 0) setLogMilestoneType(list[0]);
   }, [currentUser]);
 
@@ -406,6 +413,23 @@ export default function DashboardHome() {
     setLogEvidenceRef('');
     setLogUploadError('');
     setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[type]);
+    if (logFileInputRef.current) logFileInputRef.current.value = '';
+  };
+
+  // Step 2 of the picker for multi-role accounts: switching the job role
+  // re-scopes the milestone-type dropdown to that role's milestones and
+  // resets whatever evidence had been entered for the previous selection.
+  const handleLogJobRoleChange = (role: JobRole) => {
+    setLogJobRole(role);
+    const opts = MILESTONE_BY_JOB[role] ?? [];
+    const nextType = opts[0];
+    if (nextType) {
+      setLogMilestoneType(nextType);
+      setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[nextType]);
+    }
+    setLogEvidence('');
+    setLogEvidenceRef('');
+    setLogUploadError('');
     if (logFileInputRef.current) logFileInputRef.current.value = '';
   };
 
@@ -465,6 +489,17 @@ export default function DashboardHome() {
     s.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Multi-role support for the Log a Milestone picker: only Logistics Chain
+  // roles are loggable (Trade Party roles have no milestones), so the job-role
+  // dropdown only ever needs to offer the stacked LOGISTICS_CHAIN roles on
+  // this account. When the account only holds one role, the extra dropdown
+  // is skipped entirely and the flow behaves exactly as it did before.
+  const userLogJobRoles   = getUserJobRoles(currentUser).filter(r => (MILESTONE_BY_JOB[r] ?? []).length > 0);
+  const hasMultipleLogRoles = userLogJobRoles.length > 1;
+  const milestoneTypeStep  = hasMultipleLogRoles ? 3 : 2;
+  const whatHappenedStep   = hasMultipleLogRoles ? 4 : 3;
+  const proofStep          = hasMultipleLogRoles ? 5 : 4;
+
   return (
     <DashboardLayout tradeParty={currentUser.userType === 'TRADE_PARTY'}>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -473,7 +508,7 @@ export default function DashboardHome() {
             Kamusta, {currentUser.fullName.split(' ')[0]}.
           </h1>
           <p className="text-[11px] text-ink-faint mt-1.5 flex items-center gap-3 font-medium tracking-wide">
-            <span>ROLE: <span className="text-ink font-bold">{currentUser.jobRole.replace(/_/g, ' ')}</span></span>
+            <span>ROLE: <span className="text-ink font-bold">{getUserJobRoles(currentUser).map(r => r.replace(/_/g, ' ')).join(' + ')}</span></span>
             <span className="text-mist-dark">|</span>
             <span>SYSTEM STATUS: <span className="text-teal font-bold">SECURE</span></span>
           </p>
@@ -672,7 +707,7 @@ export default function DashboardHome() {
             </div>
           ) : (
             <div className="space-y-6">
-              <LogisticsScopeBanner jobRole={currentUser.jobRole} shipments={shipments} milestones={milestones} />
+              <LogisticsScopeBanner jobRoles={getUserJobRoles(currentUser)} shipments={shipments} milestones={milestones} />
               <div className="bg-white border border-[color:var(--color-mist-dark)] rounded-3xl shadow-sm overflow-hidden">
                 <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-3 relative overflow-hidden" style={{ background: 'linear-gradient(110deg, var(--color-ink) 0%, var(--color-ink-soft) 55%, var(--color-teal-hover) 145%)' }}>
                   <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle at 90% 0%, var(--color-mist) 0%, transparent 55%)' }} />
@@ -687,7 +722,7 @@ export default function DashboardHome() {
                 <form onSubmit={handleQuickLogMilestone} className="p-6 space-y-0">
                   {logStatusError && <div className="mb-5 bg-[color:var(--color-wine-light)] border border-[color:var(--color-wine)] text-[color:var(--color-wine)] text-xs p-3.5 rounded-xl leading-normal flex items-start gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{logStatusError}</span></div>}
                   {logStatusSuccess && <div className="mb-5 bg-[color:var(--color-teal-light)] border border-[color:var(--color-teal)] text-[color:var(--color-teal)] text-xs p-3.5 rounded-xl font-bold flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /><span>{logStatusSuccess}</span></div>}
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-0 md:gap-px rounded-2xl overflow-hidden border border-[color:var(--color-mist-dark)]" style={{ background: 'linear-gradient(120deg, var(--color-mist) 0%, var(--color-steel) 160%)', boxShadow: 'inset 0 1px 0 rgba(207,226,230,0.6)' }}>
+                  <div className={`grid grid-cols-1 md:grid-cols-2 ${hasMultipleLogRoles ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-0 md:gap-px rounded-2xl overflow-hidden border border-[color:var(--color-mist-dark)]`} style={{ background: 'linear-gradient(120deg, var(--color-mist) 0%, var(--color-steel) 160%)', boxShadow: 'inset 0 1px 0 rgba(207,226,230,0.6)' }}>
                     <MilestoneStep step={1} label="Cargo Reference" hint="Which shipment are you handling?" active={true} done={!!selectedShipmentLogId}>
                       <select className="w-full bg-white border border-mist rounded-lg px-3 py-2 text-xs text-ink outline-none focus:border-amber font-sans" value={selectedShipmentLogId} onChange={(e) => { setSelectedShipmentLogId(e.target.value); setLogStatusError(''); setLogStatusSuccess(''); }}>
                         <option value="">— Select assigned cargo —</option>
@@ -695,13 +730,21 @@ export default function DashboardHome() {
                       </select>
                       {selectedShipmentLogId && (() => { const s = shipments.find(x => x.id === selectedShipmentLogId); return s ? <div className="mt-2 text-[10px] text-ink-faint leading-relaxed"><span className="font-medium text-ink-faint">{s.description.substring(0,40)}{s.description.length > 40 ? '…' : ''}</span><br /><span className="flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3 text-amber" />{s.originCountry} → {s.destinationPort}</span></div> : null; })()}
                     </MilestoneStep>
-                    <MilestoneStep step={2} label="Milestone Type" hint="Restricted to your job role." active={!!selectedShipmentLogId} done={!!logMilestoneType && !!selectedShipmentLogId}>
+                    {hasMultipleLogRoles && (
+                      <MilestoneStep step={2} label="Job Role" hint="You hold multiple roles — pick which one applies." active={!!selectedShipmentLogId} done={!!logJobRole && !!selectedShipmentLogId}>
+                        <select className="w-full bg-white border border-mist rounded-lg px-3 py-2 text-xs text-ink outline-none focus:border-amber disabled:opacity-40 disabled:cursor-not-allowed" value={logJobRole} disabled={!selectedShipmentLogId} onChange={(e) => handleLogJobRoleChange(e.target.value as JobRole)}>
+                          {userLogJobRoles.map((role) => <option key={role} value={role}>{ROLE_META[role]?.label ?? role.replace(/_/g, ' ')}</option>)}
+                        </select>
+                        <p className="mt-2 text-[10px] text-ink-faint">{userLogJobRoles.length} roles on this account.</p>
+                      </MilestoneStep>
+                    )}
+                    <MilestoneStep step={milestoneTypeStep} label="Milestone Type" hint={hasMultipleLogRoles ? 'Restricted to the role selected above.' : 'Restricted to your job role.'} active={!!selectedShipmentLogId} done={!!logMilestoneType && !!selectedShipmentLogId}>
                       <select className="w-full bg-white border border-mist rounded-lg px-3 py-2 text-xs text-ink outline-none focus:border-amber disabled:opacity-40 disabled:cursor-not-allowed" value={logMilestoneType} disabled={!selectedShipmentLogId} onChange={(e) => handleLogMilestoneTypeChange(e.target.value as MilestoneType)}>
-                        {(MILESTONE_BY_JOB[currentUser.jobRole] ?? []).map((mType) => <option key={mType} value={mType}>{MILESTONE_LABELS[mType] ?? mType.replace(/_/g, ' ')}</option>)}
+                        {(MILESTONE_BY_JOB[logJobRole] ?? []).map((mType) => <option key={mType} value={mType}>{MILESTONE_LABELS[mType] ?? mType.replace(/_/g, ' ')}</option>)}
                       </select>
-                      <p className="mt-2 text-[10px] text-ink-faint">{(MILESTONE_BY_JOB[currentUser.jobRole] ?? []).length} milestones for your role.</p>
+                      <p className="mt-2 text-[10px] text-ink-faint">{(MILESTONE_BY_JOB[logJobRole] ?? []).length} milestones for {hasMultipleLogRoles ? (ROLE_META[logJobRole]?.label ?? 'this role') : 'your role'}.</p>
                     </MilestoneStep>
-                    <MilestoneStep step={3} label="What Happened" hint="Describe this handoff event." active={!!selectedShipmentLogId} done={logMessage.trim().length > 5}>
+                    <MilestoneStep step={whatHappenedStep} label="What Happened" hint="Describe this handoff event." active={!!selectedShipmentLogId} done={logMessage.trim().length > 5}>
                       <button type="button" disabled={!selectedShipmentLogId} onClick={() => setDescriptionModalOpen(true)} className={`w-full text-left border rounded-lg px-3 py-2.5 transition-all group ${!selectedShipmentLogId ? 'opacity-40 cursor-not-allowed border-[color:var(--color-mist-dark)] bg-[color:var(--color-mist-light)]' : logMessage.trim().length > 5 ? 'border-[color:var(--color-teal)] bg-[color:var(--color-teal-light)] hover:border-[color:var(--color-teal-hover,var(--color-teal))]' : 'border-[color:var(--color-mist-dark)] bg-white hover:border-[color:var(--color-teal)]'}`}>
                         <div className="flex items-center justify-between gap-2">
                           <span className={`text-xs leading-relaxed line-clamp-2 flex-1 min-w-0 ${logMessage.trim().length > 5 ? 'text-[color:var(--color-ink)]' : 'text-[color:var(--color-ink-faint)]'}`}>{logMessage.trim().length > 5 ? logMessage : 'Click to add a description…'}</span>
@@ -710,7 +753,7 @@ export default function DashboardHome() {
                         {logMessage.trim().length > 5 && <p className="text-[9px] text-[color:var(--color-teal)] mt-1.5 font-bold uppercase tracking-widest">{logMessage.trim().length} chars · tap to edit</p>}
                       </button>
                     </MilestoneStep>
-                    <MilestoneStep step={4} label="Proof of Event" hint={logEvidenceMode === 'REFERENCE_NUMBER' ? 'Enter the reference number.' : logEvidenceMode === 'DOCUMENT' ? 'Upload the required document.' : 'Photo optional; description accepted.'} active={!!selectedShipmentLogId} done={logEvidenceMode === 'REFERENCE_NUMBER' ? logEvidenceRef.trim().length > 0 : logEvidenceMode === 'DOCUMENT' ? !!logEvidence : !!(logEvidence || logMessage.trim())} required>
+                    <MilestoneStep step={proofStep} label="Proof of Event" hint={logEvidenceMode === 'REFERENCE_NUMBER' ? 'Enter the reference number.' : logEvidenceMode === 'DOCUMENT' ? 'Upload the required document.' : 'Photo optional; description accepted.'} active={!!selectedShipmentLogId} done={logEvidenceMode === 'REFERENCE_NUMBER' ? logEvidenceRef.trim().length > 0 : logEvidenceMode === 'DOCUMENT' ? !!logEvidence : !!(logEvidence || logMessage.trim())} required>
                       {/* ── REFERENCE_NUMBER mode ── */}
                       {logEvidenceMode === 'REFERENCE_NUMBER' && (
                         <div className="space-y-1.5">
@@ -1063,9 +1106,13 @@ const ROLE_META: Record<JobRole, { label: string; description: string; accentBg:
   EXPORTER: { label: 'Exporter', description: '', accentBg: 'bg-mist-light', accentText: 'text-ink-faint', accentBorder: 'border-mist', badgeBg: 'bg-ink-faint text-white', icon: <Shield className="w-5 h-5" /> },
 };
 
-function LogisticsScopeBanner({ jobRole, shipments, milestones }: { jobRole: JobRole; shipments: Shipment[]; milestones: MilestoneEvent[]; }) {
-  const meta = ROLE_META[jobRole];
-  const roleMillestones = MILESTONE_BY_JOB[jobRole] ?? [];
+function LogisticsScopeBanner({ jobRoles, shipments, milestones }: { jobRoles: JobRole[]; shipments: Shipment[]; milestones: MilestoneEvent[]; }) {
+  const primaryRole = jobRoles[0] ?? 'FREIGHT_FORWARDER';
+  const meta = ROLE_META[primaryRole];
+  const hasMultipleRoles = jobRoles.length > 1;
+  // Union of every milestone across all stacked roles — a dual-role account
+  // is in scope for the combined set, not just the primary role's set.
+  const roleMillestones = Array.from(new Set(jobRoles.flatMap(r => MILESTONE_BY_JOB[r] ?? [])));
   const activeCount = shipments.filter(s => s.status !== 'DELIVERED' && s.status !== 'CANCELLED').length;
   const inTransitCount = shipments.filter(s => s.status === 'IN_TRANSIT').length;
   const loggedToday = milestones.filter(m => { const d = new Date(m.occurredAt); const now = new Date(); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate(); }).length;
@@ -1079,9 +1126,18 @@ function LogisticsScopeBanner({ jobRole, shipments, milestones }: { jobRole: Job
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
       <div className={`lg:col-span-1 rounded-2xl border-2 ${meta.accentBorder} p-5 flex flex-col justify-between gap-3 text-white shadow-md relative overflow-hidden`} style={{ background: 'linear-gradient(140deg, var(--color-ink) 0%, var(--color-ink-soft) 40%, var(--color-teal-hover) 115%)', boxShadow: '0 4px 16px rgba(20,32,52,0.25), 0 1px 3px rgba(11,175,176,0.25)' }}>
         <div className="absolute inset-0 opacity-30 pointer-events-none" style={{ background: 'radial-gradient(circle at 85% 15%, var(--color-mist) 0%, transparent 55%), radial-gradient(circle at 15% 90%, rgba(207,226,230,0.4) 0%, transparent 50%)' }} />
-        <div className="flex items-center gap-3 relative z-10"><div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/15 backdrop-blur-sm flex-shrink-0`}>{meta.icon}</div><div><p className="text-[9px] font-black uppercase tracking-widest text-white/55">Active Role</p><p className="text-[28px] font-display font-medium leading-snug text-white">{meta.label}</p></div></div>
+        <div className="flex items-center gap-3 relative z-10"><div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/15 backdrop-blur-sm flex-shrink-0`}>{meta.icon}</div><div><p className="text-[9px] font-black uppercase tracking-widest text-white/55">{hasMultipleRoles ? 'Active Roles' : 'Active Role'}</p><p className="text-[28px] font-display font-medium leading-snug text-white">{meta.label}</p></div></div>
+        {hasMultipleRoles && (
+          <div className="flex flex-wrap gap-1.5 relative z-10">
+            {jobRoles.map(r => (
+              <span key={r} className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/15 text-white">
+                {ROLE_META[r]?.label ?? r.replace(/_/g, ' ')}
+              </span>
+            ))}
+          </div>
+        )}
         <p className="text-[11px] text-white/70 leading-relaxed relative z-10">{meta.description}</p>
-        <div className="flex items-center gap-1.5 relative z-10"><Lock className="w-3 h-3 text-[color:var(--color-mist)] opacity-80" /><span className="text-[9px] font-black uppercase tracking-widest text-[color:var(--color-mist)] opacity-90">{roleMillestones.length} milestones in scope</span></div>
+        <div className="flex items-center gap-1.5 relative z-10"><Lock className="w-3 h-3 text-[color:var(--color-mist)] opacity-80" /><span className="text-[9px] font-black uppercase tracking-widest text-[color:var(--color-mist)] opacity-90">{roleMillestones.length} milestones in scope{hasMultipleRoles ? ' (combined)' : ''}</span></div>
       </div>
       {stats.map((stat) => (<div key={stat.label} className="border border-[color:var(--color-mist-dark)] rounded-2xl p-5 flex flex-col justify-between shadow-sm" style={{ background: 'linear-gradient(145deg, #ffffff 0%, var(--color-mist) 55%, var(--color-mist-dark) 100%)', boxShadow: '0 1px 3px rgba(129,151,198,0.12), 0 4px 12px rgba(129,151,198,0.08)' }}><span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--color-ink-faint)]">{stat.label}</span><div><strong className="text-[40px] font-display font-medium text-[color:var(--color-ink)] leading-none tracking-tight">{stat.value}</strong><p className="text-[11px] text-[color:var(--color-ink-faint)] mt-1">{stat.sub}</p></div></div>))}
     </div>

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from '@/hooks/use-notifications';
+import { getUserJobRoles } from '@/types';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -199,7 +200,7 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
           {/* Right: user info + sign out */}
           <div className="flex items-center gap-3">
             <span className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
-              {currentUser?.jobRole.replace(/_/g, ' ')}
+              {getUserJobRoles(currentUser).map(r => r.replace(/_/g, ' ')).join(' + ')}
             </span>
 
             {/* ── Notification Bell ── */}
