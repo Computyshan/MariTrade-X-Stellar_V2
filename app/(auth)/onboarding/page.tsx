@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUserSession } from '@/hooks/use-user-session';
+import { useFreighter } from '@/hooks/use-freighter';
 import { 
   Truck, 
   MapPin, 
@@ -16,13 +17,15 @@ import {
   Check,
   CreditCard,
   Lock,
-  Loader
+  Loader,
+  Wallet,
 } from 'lucide-react';
 import { UserType, JobRole } from '@/types';
 
 export default function OnboardingPage() {
   const router = useRouter();
   const { currentUser, updateUserKyc } = useUserSession();
+  const freighter = useFreighter();
 
   const [step, setStep] = useState(1);
   const [userType, setUserType] = useState<UserType>('TRADE_PARTY');
@@ -30,6 +33,8 @@ export default function OnboardingPage() {
   // Primary/display role — always the first entry in jobRoles.
   const jobRole = jobRoles[0];
   const [companyName, setCompanyName] = useState('');
+  const [stellarWallet, setStellarWallet] = useState('');
+  const [stellarWalletError, setStellarWalletError] = useState('');
   const [idFile, setIdFile] = useState<string>('');         // filename for display
   const [idFileUrl, setIdFileUrl] = useState<string>('');   // real Storage URL
   const [idFileObject, setIdFileObject] = useState<File | null>(null); // staged File
@@ -83,6 +88,26 @@ export default function OnboardingPage() {
     fileInputRef.current?.click();
   };
 
+  // Keep the manual input in sync once Freighter connects, and clear any
+  // stale format error from a previous manual paste attempt.
+  React.useEffect(() => {
+    if (freighter.publicKey) {
+      setStellarWallet(freighter.publicKey);
+      setStellarWalletError('');
+    }
+  }, [freighter.publicKey]);
+
+  const isValidStellarAddress = (addr: string) => /^G[A-Z2-7]{55}$/.test(addr.trim());
+
+  const handleStellarWalletChange = (value: string) => {
+    setStellarWallet(value);
+    if (!value.trim() || isValidStellarAddress(value)) {
+      setStellarWalletError('');
+    } else {
+      setStellarWalletError('Stellar addresses start with "G" and are 56 characters long.');
+    }
+  };
+
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -105,6 +130,12 @@ export default function OnboardingPage() {
   const handleComplete = async () => {
     if (!currentUser) {
       router.replace('/register');
+      return;
+    }
+
+    if (stellarWallet.trim() && !isValidStellarAddress(stellarWallet)) {
+      setStellarWalletError('Stellar addresses start with "G" and are 56 characters long.');
+      setStep(3);
       return;
     }
 
@@ -150,7 +181,7 @@ export default function OnboardingPage() {
           'Content-Type': 'application/json',
           ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
         },
-        body: JSON.stringify({ userType, jobRole, jobRoles, companyName, kycDocumentUrl }),
+        body: JSON.stringify({ userType, jobRole, jobRoles, companyName, kycDocumentUrl, stellarWallet: stellarWallet.trim() || undefined }),
       });
 
       const result = await res.json();
@@ -381,13 +412,47 @@ export default function OnboardingPage() {
                     )}
                 </div>
 
-                {/* Optional stellar address with Coming soon badge */}
-                <div className="space-y-1 sm:col-span-2 bg-mist-light border border-mist p-3 rounded-lg flex items-center justify-between opacity-70">
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-bold text-ink-faint block uppercase tracking-wider">Stellar Public Key Wallet</span>
-                    <span className="text-[10px] text-ink-faint font-medium block">Automatic payout routing</span>
+                {/* Stellar Public Key Wallet — now active. Required for exporters
+                    and logistics users to be selectable/paid on shipments. */}
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">
+                    Stellar Public Key Wallet (only accepts Freighter for now) <span className="text-[10px] font-normal normal-case text-ink-faint">(optional — required before you can be selected as an exporter or paid logistics user)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="G..."
+                      className={`flex-1 bg-white border rounded-lg px-3 py-2 text-sm font-sans tracking-tight outline-none ${
+                        stellarWalletError ? 'border-wine focus:border-wine' : 'border-mist focus:border-amber'
+                      }`}
+                      value={stellarWallet}
+                      onChange={(e) => handleStellarWalletChange(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => freighter.connect().catch(() => {})}
+                      disabled={freighter.connecting}
+                      className="flex-shrink-0 flex items-center gap-1.5 bg-amber-light hover:bg-amber-light/70 text-ink border border-amber/30 rounded-lg px-3 py-2 text-xs font-bold cursor-pointer disabled:opacity-60"
+                    >
+                      <Wallet className="w-3.5 h-3.5" />
+                      {freighter.connecting ? 'Connecting…' : freighter.publicKey ? 'Connected' : 'Connect Freighter'}
+                    </button>
                   </div>
-                  <span className="text-[10px] bg-ink-faint text-white font-bold px-2 py-0.5 rounded font-sans">PHASE 2 - COMING SOON</span>
+                  {stellarWalletError && (
+                    <p className="text-xs text-wine font-semibold flex items-center gap-1.5">
+                      <span>⚠</span> {stellarWalletError}
+                    </p>
+                  )}
+                  {freighter.error && (
+                    <p className="text-xs text-wine font-semibold flex items-center gap-1.5">
+                      <span>⚠</span> {freighter.error}
+                    </p>
+                  )}
+                  {!stellarWalletError && stellarWallet.trim() && isValidStellarAddress(stellarWallet) && (
+                    <p className="text-xs text-teal font-semibold flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" /> Valid Stellar address — payouts will route here automatically.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -418,6 +483,10 @@ export default function OnboardingPage() {
                   <div className="col-span-2 border-t border-mist pt-3">
                     <span className="block text-ink-faint uppercase font-sans tracking-wider text-[9px]">Compliance Document ID File</span>
                     <strong className="text-ink font-semibold block mt-0.5">{idFile || 'Attached pre-verified demo license.png'}</strong>
+                  </div>
+                  <div className="col-span-2 border-t border-mist pt-3">
+                    <span className="block text-ink-faint uppercase font-sans tracking-wider text-[9px]">Stellar Public Key Wallet</span>
+                    <strong className="text-ink font-semibold block mt-0.5 font-sans break-all">{stellarWallet.trim() || 'Not set — add later from My Profile to receive/send escrow payouts'}</strong>
                   </div>
                 </div>
               </div>

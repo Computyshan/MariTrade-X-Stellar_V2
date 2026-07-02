@@ -11,11 +11,23 @@ export async function POST(req: NextRequest) {
     if (errorResponse) return errorResponse;
 
     const body = await req.json();
-    const { jobRole, jobRoles, kycDocumentUrl, companyName, userType } = body;
+    const { jobRole, jobRoles, kycDocumentUrl, companyName, userType, stellarWallet } = body;
 
     const existingUser = await dbStore.getUserById(user!.id);
     if (!existingUser) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    // Basic Stellar address format check (G... + 55 base32 chars) — only
+    // validated if provided, since the field is optional at onboarding time.
+    if (stellarWallet !== undefined && stellarWallet !== null && String(stellarWallet).trim() !== '') {
+      const wallet = String(stellarWallet).trim();
+      if (!/^G[A-Z2-7]{55}$/.test(wallet)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid Stellar wallet address format.' },
+          { status: 400 }
+        );
+      }
     }
 
     // Accept either a `jobRoles` array (preferred, multi-select) or a legacy
@@ -43,6 +55,7 @@ export async function POST(req: NextRequest) {
       ...(nextRoles && { jobRole: nextRoles[0], jobRoles: nextRoles }),
       ...(companyName && { companyName }),
       ...(kycDocumentUrl && { kycDocumentUrl }),
+      ...(stellarWallet !== undefined && stellarWallet !== null && String(stellarWallet).trim() !== '' && { stellarWallet: String(stellarWallet).trim() }),
       kycStatus: 'SUBMITTED' as const,
       updatedAt: new Date().toISOString(),
     };
