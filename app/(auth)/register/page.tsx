@@ -92,14 +92,16 @@ export default function RegisterPage() {
 
         {/* Brand */}
         <div className="flex flex-col items-center text-center space-y-2">
-          <Image
-              src="/MariTrade logo.png"
-              alt="MariTrade"
-              width={160}
-              height={64}
-              className="h-14 w-auto object-contain"
-              priority
-            />
+          <Link href="/" className="cursor-pointer">
+            <Image
+                src="/MariTrade logo.png"
+                alt="MariTrade"
+                width={160}
+                height={64}
+                className="h-14 w-auto object-contain"
+                priority
+              />
+          </Link>
           <div>
             <h1 className="text-2xl font-display font-medium text-ink tracking-tight">MariTrade</h1>
             <p className="text-xs text-ink-faint font-medium">Create your account</p>

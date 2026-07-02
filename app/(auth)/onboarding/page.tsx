@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUserSession } from '@/hooks/use-user-session';
 import { 
-  Building2, 
   Truck, 
   MapPin, 
   FileCheck, 
@@ -186,10 +187,17 @@ export default function OnboardingPage() {
         
         {/* LOGO */}
         <div className="flex items-center gap-3 justify-center">
-          <div className="w-8 h-8 bg-amber rounded-lg flex items-center justify-center text-white">
-            <Building2 className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-display font-medium text-lg text-ink">MariTrade Onboarding Wizard</span>
+          <Link href="/" className="flex items-center gap-3 cursor-pointer">
+            <Image
+              src="/MariTrade logo.png"
+              alt="MariTrade"
+              width={32}
+              height={32}
+              className="h-8 w-auto object-contain"
+              priority
+            />
+            <span className="font-display font-medium text-lg text-ink">MariTrade Onboarding Wizard</span>
+          </Link>
         </div>
 
         {/* STEP PROGRESS BAR */}
