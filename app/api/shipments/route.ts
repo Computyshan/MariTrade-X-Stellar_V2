@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   // CRITICAL FIX: authenticate every request
-  const { errorResponse } = await requireAuth(req);
+  const { user: authedUser, errorResponse } = await requireAuth(req);
   if (errorResponse) return errorResponse;
 
   try {
@@ -81,6 +81,16 @@ export async function POST(req: NextRequest) {
 
     if (!importerId || !description || !originCountry || !destinationPort || !shipmentScope || !totalValueUSD) {
       return NextResponse.json({ success: false, error: 'Missing required shipment details' }, { status: 400 });
+    }
+
+    // A caller may only create a shipment where they themselves are the
+    // importer — otherwise any authenticated user could forge shipment
+    // records (and downstream escrow state) on behalf of someone else.
+    if (importerId !== authedUser!.id) {
+      return NextResponse.json(
+        { success: false, error: 'You can only create shipments where you are the importer.' },
+        { status: 403 },
+      );
     }
 
     // Generate reference code: MT-YYYY-NNNNN

@@ -25,7 +25,9 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState(1);
   const [userType, setUserType] = useState<UserType>('TRADE_PARTY');
-  const [jobRole, setJobRole] = useState<JobRole>('IMPORTER');
+  const [jobRoles, setJobRoles] = useState<JobRole[]>(['IMPORTER']);
+  // Primary/display role — always the first entry in jobRoles.
+  const jobRole = jobRoles[0];
   const [companyName, setCompanyName] = useState('');
   const [idFile, setIdFile] = useState<string>('');         // filename for display
   const [idFileUrl, setIdFileUrl] = useState<string>('');   // real Storage URL
@@ -50,12 +52,24 @@ export default function OnboardingPage() {
 
   const handleNext = () => {
     if (step < 4) {
-      // Auto-set starting default job role if user swapped type
+      // Auto-set starting default job role(s) if user swapped type
       if (step === 1) {
-          setJobRole(userType === 'TRADE_PARTY' ? 'IMPORTER' : 'FREIGHT_FORWARDER');
+          setJobRoles([userType === 'TRADE_PARTY' ? 'IMPORTER' : 'FREIGHT_FORWARDER']);
       }
       setStep(prev => prev + 1);
     }
+  };
+
+  const toggleJobRole = (role: JobRole) => {
+    setJobRoles(prev => {
+      const has = prev.includes(role);
+      if (has) {
+        // Never allow the last role to be unchecked — a user must hold at least one.
+        if (prev.length === 1) return prev;
+        return prev.filter(r => r !== role);
+      }
+      return [...prev, role];
+    });
   };
 
   const handleBack = () => {
@@ -135,24 +149,24 @@ export default function OnboardingPage() {
           'Content-Type': 'application/json',
           ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
         },
-        body: JSON.stringify({ userType, jobRole, companyName, kycDocumentUrl }),
+        body: JSON.stringify({ userType, jobRole, jobRoles, companyName, kycDocumentUrl }),
       });
 
       const result = await res.json();
       sessionStorage.removeItem('mt_access_token');
 
       if (result.success) {
-        updateUserKyc('SUBMITTED', jobRole, companyName);
+        updateUserKyc('SUBMITTED', jobRoles, companyName);
         router.push('/dashboard');
       } else {
         console.error('Onboarding update failed:', result.error);
-        updateUserKyc('SUBMITTED', jobRole, companyName);
+        updateUserKyc('SUBMITTED', jobRoles, companyName);
         router.push('/dashboard');
       }
     } catch (err) {
       console.error('Onboarding update failed:', err);
       sessionStorage.removeItem('mt_access_token');
-      updateUserKyc('SUBMITTED', jobRole, companyName);
+      updateUserKyc('SUBMITTED', jobRoles, companyName);
       router.push('/dashboard');
     } finally {
       setUploading(false);
@@ -251,27 +265,33 @@ export default function OnboardingPage() {
           {step === 2 && (
             <div className="space-y-6">
               <div className="text-center">
-                <h2 className="text-xl font-display font-medium text-ink">Select Your Professional Role</h2>
-                <p className="text-xs text-ink-faint mt-1">Your milestone logging permissions are restricted to your specific profession.</p>
+                <h2 className="text-xl font-display font-medium text-ink">Select Your Professional Role(s)</h2>
+                <p className="text-xs text-ink-faint mt-1">You can hold more than one role at once — your milestone logging permissions cover every role you check below.</p>
               </div>
 
               <div className="space-y-2">
-                <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">Job Role Dropdown</label>
-                <select
-                  className="w-full bg-white border border-mist rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer focus:border-amber text-ink"
-                  value={jobRole}
-                  onChange={(e) => setJobRole(e.target.value as JobRole)}
-                >
-                  {userType === 'TRADE_PARTY' ? (
-                    tradePartyJobs.map(job => (
-                      <option key={job.value} value={job.value}>{job.label}</option>
-                    ))
-                  ) : (
-                    logisticsJobs.map(job => (
-                      <option key={job.value} value={job.value}>{job.label}</option>
-                    ))
-                  )}
-                </select>
+                <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider">Job Roles (select one or more)</label>
+                <div className="space-y-2">
+                  {(userType === 'TRADE_PARTY' ? tradePartyJobs : logisticsJobs).map(job => {
+                    const checked = jobRoles.includes(job.value as JobRole);
+                    return (
+                      <label
+                        key={job.value}
+                        className={`flex items-start gap-3 border rounded-lg px-4 py-3 text-sm cursor-pointer transition-all ${
+                          checked ? 'border-amber bg-amber-light/40' : 'border-mist hover:border-mist-dark bg-white'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 accent-amber cursor-pointer"
+                          checked={checked}
+                          onChange={() => toggleJobRole(job.value as JobRole)}
+                        />
+                        <span className="text-ink">{job.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Security note badge */}
@@ -380,8 +400,8 @@ export default function OnboardingPage() {
                     <strong className="text-ink font-bold block mt-0.5">{userType.replace('_', ' ')}</strong>
                   </div>
                   <div>
-                    <span className="block text-ink-faint uppercase font-sans tracking-wider text-[9px]">Assigned Job Role</span>
-                    <strong className="text-steel font-bold block mt-0.5">{jobRole.replace(/_/g, ' ')}</strong>
+                    <span className="block text-ink-faint uppercase font-sans tracking-wider text-[9px]">Assigned Job Role{jobRoles.length > 1 ? 's' : ''}</span>
+                    <strong className="text-steel font-bold block mt-0.5">{jobRoles.map(r => r.replace(/_/g, ' ')).join(', ')}</strong>
                   </div>
                   <div className="col-span-2 border-t border-mist pt-3">
                     <span className="block text-ink-faint uppercase font-sans tracking-wider text-[9px]">Registered Company / SME Name</span>

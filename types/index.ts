@@ -148,6 +148,66 @@ export const ROLE_MILESTONES: Record<JobRole, MilestoneType[]> = {
   ],
 };
 
+// ─── Multi-role support ─────────────────────────────────────────────────────
+// A single account can hold more than one JobRole at once (e.g. a Trade
+// Party account that is both Importer and Exporter — common for SME
+// traders who both buy and sell — or a Logistics Chain account that is
+// simultaneously Freight Forwarder and Customs Broker, reflecting how a
+// single trusted operator often wears several hats in practice). Roles
+// must stay within one category: a user is either a Trade Party account
+// (IMPORTER / EXPORTER, any combination) or a Logistics Chain account
+// (FREIGHT_FORWARDER / WAREHOUSE_OPERATOR / CUSTOMS_BROKER, any
+// combination) — never a mix of both categories.
+//
+// `User.jobRole` (singular) is retained as the "primary" / display role for
+// legacy records and default UI selection. `User.jobRoles` (plural) is the
+// source of truth for what the account can actually do. Use the helpers
+// below rather than reading either field directly, so legacy single-role
+// records (jobRoles missing or empty) keep working via the jobRole fallback.
+
+/** Every job role a user holds. Falls back to `[user.jobRole]` for legacy
+ *  records that predate multi-role support. */
+export function getUserJobRoles(user: Pick<User, 'jobRole' | 'jobRoles'>): JobRole[] {
+  if (user.jobRoles && user.jobRoles.length > 0) return user.jobRoles;
+  return user.jobRole ? [user.jobRole] : [];
+}
+
+/** Whether the user holds the given role, across all their stacked roles. */
+export function userHasJobRole(user: Pick<User, 'jobRole' | 'jobRoles'>, role: JobRole): boolean {
+  return getUserJobRoles(user).includes(role);
+}
+
+/** The category (Trade Party vs Logistics Chain) a set of roles belongs to.
+ *  Returns null for an empty list — callers should treat that as invalid. */
+export function jobRoleCategory(roles: JobRole[]): UserType | null {
+  const tradePartyRoles: JobRole[] = ['IMPORTER', 'EXPORTER'];
+  if (roles.length === 0) return null;
+  return roles.every(r => tradePartyRoles.includes(r)) ? 'TRADE_PARTY' : 'LOGISTICS_CHAIN';
+}
+
+/** True if every role in the list belongs to the same category (Trade Party
+ *  or Logistics Chain) — roles may never mix across categories. */
+export function areJobRolesConsistent(roles: JobRole[]): boolean {
+  if (roles.length === 0) return false;
+  const tradePartyRoles: JobRole[] = ['IMPORTER', 'EXPORTER'];
+  const logisticsRoles: JobRole[] = ['FREIGHT_FORWARDER', 'WAREHOUSE_OPERATOR', 'CUSTOMS_BROKER'];
+  const allTrade = roles.every(r => tradePartyRoles.includes(r));
+  const allLogistics = roles.every(r => logisticsRoles.includes(r));
+  return allTrade || allLogistics;
+}
+
+/** Union of every milestone type the user is authorized to log, across all
+ *  their stacked job roles — e.g. a dual Freight-Forwarder + Customs-Broker
+ *  account inherits both milestone sets, rather than being limited to one. */
+export function getMilestonesForUser(user: Pick<User, 'jobRole' | 'jobRoles'>): MilestoneType[] {
+  const roles = getUserJobRoles(user);
+  const set = new Set<MilestoneType>();
+  for (const r of roles) {
+    for (const m of ROLE_MILESTONES[r]) set.add(m);
+  }
+  return Array.from(set);
+}
+
 /**
  * Phase labels for grouping milestones in the timeline UI.
  */
@@ -240,7 +300,16 @@ export interface User {
   fullAddress?: string;
   contactNumber?: string;
   userType: UserType;
+  /** Primary / display role — kept for legacy records and default UI selection.
+   *  Prefer `jobRoles` + the getUserJobRoles()/getMilestonesForUser() helpers
+   *  above for anything permission-related. */
   jobRole: JobRole;
+  /** All job roles this account holds (stacked responsibilities). A Trade
+   *  Party account may hold IMPORTER and/or EXPORTER; a Logistics Chain
+   *  account may hold any combination of FREIGHT_FORWARDER,
+   *  WAREHOUSE_OPERATOR, and CUSTOMS_BROKER. Roles never mix categories.
+   *  May be empty/undefined on legacy records — use getUserJobRoles(user). */
+  jobRoles: JobRole[];
   companyName?: string;
   stellarWallet?: string;
   bankDetails?: string;

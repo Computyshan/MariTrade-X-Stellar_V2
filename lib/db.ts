@@ -10,7 +10,8 @@
  *   full_address       ↔ fullAddress
  *   contact_number     ↔ contactNumber
  *   user_type          ↔ userType
- *   job_role           ↔ jobRole
+ *   job_role           ↔ jobRole (primary role — first entry in job_roles)
+ *   job_roles          ↔ jobRoles (array — all stacked roles the account holds)
  *   company_name       ↔ companyName
  *   stellar_wallet     ↔ stellarWallet
  *   kyc_status         ↔ kycStatus
@@ -85,6 +86,7 @@ function rowToUser(row: any): User {
     contactNumber: row.contact_number ?? undefined,
     userType: row.user_type,
     jobRole: row.job_role,
+    jobRoles: (row.job_roles && row.job_roles.length > 0) ? row.job_roles : [row.job_role],
     companyName: row.company_name ?? undefined,
     stellarWallet: row.stellar_wallet ?? undefined,
     bankDetails: row.bank_details ?? undefined,
@@ -110,7 +112,10 @@ function userToRow(user: User): any {
     full_address: user.fullAddress ?? null,
     contact_number: user.contactNumber ?? null,
     user_type: user.userType,
-    job_role: user.jobRole,
+    // job_role stays the "primary" role (first entry in job_roles) for
+    // legacy queries/columns; job_roles is the multi-role source of truth.
+    job_role: (user.jobRoles && user.jobRoles.length > 0) ? user.jobRoles[0] : user.jobRole,
+    job_roles: (user.jobRoles && user.jobRoles.length > 0) ? user.jobRoles : [user.jobRole],
     company_name: user.companyName ?? null,
     stellar_wallet: user.stellarWallet ?? null,
     bank_details: user.bankDetails ?? null,

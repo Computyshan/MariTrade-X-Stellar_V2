@@ -1,50 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
-import { MilestoneEvent, MilestoneType, JobRole, MILESTONE_EVIDENCE_MODE } from '@/types';
+import { MilestoneEvent, MilestoneType, MILESTONE_EVIDENCE_MODE, getMilestonesForUser, getUserJobRoles } from '@/types';
 
-// ─── Role permission map ───────────────────────────────────────────────────────
-
-const ROLE_MILESTONES: Record<JobRole, MilestoneType[]> = {
-  // Trade Party — no logging rights
-  IMPORTER: [],
-  EXPORTER: [],
-  // ─── Logistics Chain ───
-  FREIGHT_FORWARDER: [
-    'BOOKING_CONFIRMED',
-    'DOCUMENTS_SUBMITTED_TO_CARRIER',
-    'SPACE_ON_VESSEL_SECURED',
-    'CONTAINER_GATED_OUT_ORIGIN',
-    'CONTAINER_LOADED_ON_VESSEL',
-    'VESSEL_CLEARED_TO_DEPART',
-    'VESSEL_DEPARTED_ORIGIN',
-    'BILL_OF_LADING_ISSUED',
-    'VESSEL_ARRIVED_AT_BERTH',
-    'VESSEL_ARRIVED_DESTINATION',
-    'CONTAINER_OFFLOADED',
-    'CONTAINER_GATED_IN_DESTINATION',
-    'CARGO_RELEASED_FOR_PICKUP',
-    'IN_TRANSIT_TO_DESTINATION',
-    'ARRIVED_AT_DELIVERY_ADDRESS',
-    'DELIVERED_AND_SIGNED_OFF',
-  ],
-  CUSTOMS_BROKER: [
-    'BOC_ENTRY_FILED',
-    'PORT_HOLD_PLACED_OR_LIFTED',
-    'DUTIES_AND_TAXES_PAID',
-    'CUSTOMS_EXAMINATION_REQUESTED',
-    'CUSTOMS_CLEARANCE_APPROVED',
-  ],
-  WAREHOUSE_OPERATOR: [
-    'CARGO_READY_FOR_COLLECTION',
-    'CARGO_INSPECTED_AND_PACKED',
-    'CARGO_STAGED_FOR_PICKUP',
-    'CARGO_HANDED_OFF_TO_CARRIER',
-    'CARGO_PICKED_UP_FROM_PORT',
-    'CARGO_RECEIVED_AT_WAREHOUSE',
-    'INCOMING_CARGO_STORED',
-  ],
-};
+// Role → milestone permission comes from the canonical ROLE_MILESTONES map
+// in types/index.ts via getMilestonesForUser(), which unions the milestone
+// sets of every role a user holds — so a dual-role account (e.g. Freight
+// Forwarder + Customs Broker) is authorized for both sets, not just one.
 
 // ─── GET /api/shipments/[id]/milestones ───────────────────────────────────────
 
@@ -117,13 +79,16 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
     }
 
-    // Enforce role-based milestone permission
-    const allowedForRole = ROLE_MILESTONES[logger.jobRole] ?? [];
+    // Enforce role-based milestone permission — union across every role the
+    // logger's account holds (stacked responsibilities), not just their
+    // single primary jobRole.
+    const loggerRoles = getUserJobRoles(logger);
+    const allowedForRole = getMilestonesForUser(logger);
     if (!allowedForRole.includes(type as MilestoneType)) {
       return NextResponse.json(
         {
           success: false,
-          error: `Role '${logger.jobRole}' is not authorized to log milestone '${type}'. Check the milestone responsibility matrix.`,
+          error: `Role(s) '${loggerRoles.join(', ')}' are not authorized to log milestone '${type}'. Check the milestone responsibility matrix.`,
         },
         { status: 403 }
       );

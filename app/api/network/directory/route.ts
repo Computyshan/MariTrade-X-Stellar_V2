@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
+import { getUserJobRoles } from '@/types';
 
 // CRITICAL FIX: authenticate every request
 export async function GET(req: NextRequest) {
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
         (search === '' ||
           u.fullName.toLowerCase().includes(search) ||
           (u.companyName || '').toLowerCase().includes(search) ||
-          u.jobRole.toLowerCase().includes(search))
+          getUserJobRoles(u).some(r => r.toLowerCase().includes(search)))
     );
 
     const decorated = members.map(m => {

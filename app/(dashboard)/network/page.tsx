@@ -29,7 +29,7 @@ import {
   Star,
   Sparkles,
 } from 'lucide-react';
-import { JobRole, User } from '@/types';
+import { JobRole, User, getUserJobRoles } from '@/types';
 import UserProfileModal from '@/components/UserProfileModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -90,6 +90,18 @@ function RoleBadge({ role }: { role: string }) {
       {icon}
       {JOB_ROLE_LABELS[role as JobRole] ?? role.replace(/_/g, ' ')}
     </span>
+  );
+}
+
+/** Renders a RoleBadge for every stacked role the member holds, not just
+ *  their primary display role. */
+function RoleBadges({ user }: { user: Pick<User, 'jobRole' | 'jobRoles'> }) {
+  return (
+    <>
+      {getUserJobRoles(user).map(role => (
+        <RoleBadge key={role} role={role} />
+      ))}
+    </>
   );
 }
 
@@ -452,7 +464,7 @@ export default function NetworkPage() {
 
                     <div className="space-y-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <RoleBadge role={member.jobRole} />
+                        <RoleBadges user={member} />
                         {(member.externalCredentials?.length ?? 0) > 0 && (
                           <span
                             className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -743,7 +755,7 @@ export default function NetworkPage() {
                     </div>
                     </div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <RoleBadge role={member.jobRole} />
+                          <RoleBadges user={member} />
                           {(member.externalCredentials?.length ?? 0) > 0 && (
                             <span
                               className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"

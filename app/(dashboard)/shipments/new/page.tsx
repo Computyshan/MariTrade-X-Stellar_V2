@@ -16,7 +16,7 @@ import {
   DollarSign, Hash, FolderLock, Key, Eye, EyeOff, Copy, CheckCircle2,
   Shuffle, ShieldCheck, FolderOpen, ExternalLink, Receipt, Sparkles, MessageSquare,
 } from 'lucide-react';
-import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase, ShipmentReceipt, CURRENCY_SYMBOLS, ROLE_MILESTONES } from '@/types';
+import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase, ShipmentReceipt, CURRENCY_SYMBOLS, ROLE_MILESTONES, getUserJobRoles, getMilestonesForUser } from '@/types';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
 import { signAndSubmitWithRetry } from '@/lib/stellar/freighter';
 import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
@@ -522,7 +522,7 @@ export default function NewShipmentPage() {
     (logisticsSearch === '' ||
       u.fullName.toLowerCase().includes(logisticsSearch.toLowerCase()) ||
       (u.companyName || '').toLowerCase().includes(logisticsSearch.toLowerCase()) ||
-      JOB_ROLE_LABELS[u.jobRole].toLowerCase().includes(logisticsSearch.toLowerCase()))
+      getUserJobRoles(u).some(r => JOB_ROLE_LABELS[r].toLowerCase().includes(logisticsSearch.toLowerCase())))
   );
   const toggleUser = (id: string) =>
     setAssignedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -1355,7 +1355,7 @@ export default function NewShipmentPage() {
             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
               {(() => {
                 const exporters = allUsers.filter(u =>
-                  u.jobRole === 'EXPORTER' &&
+                  getUserJobRoles(u).includes('EXPORTER') &&
                   u.id !== currentUser.id &&
                   (exporterSearch === '' ||
                     u.fullName.toLowerCase().includes(exporterSearch.toLowerCase()) ||
@@ -1371,6 +1371,7 @@ export default function NewShipmentPage() {
                 return exporters.map(user => {
                   const selected = selectedExporterId === user.id;
                   const hasWallet = Boolean(user.stellarWallet);
+                  const userRoles = getUserJobRoles(user);
                   return (
                     <button key={user.id}
                       onClick={() => hasWallet && setSelectedExporterId(selected ? null : user.id)}
@@ -1383,7 +1384,14 @@ export default function NewShipmentPage() {
                           : 'border-mist hover:border-teal-light cursor-pointer'
                       }`}>
                       <div>
-                        <p className="text-xs font-bold text-ink">{user.fullName}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-xs font-bold text-ink">{user.fullName}</p>
+                          {userRoles.length > 1 && (
+                            <span className="text-[8px] font-black bg-wine-light text-wine px-1.5 py-0.5 rounded uppercase tracking-wide">
+                              also {userRoles.filter(r => r !== 'EXPORTER').join(', ')}
+                            </span>
+                          )}
+                        </div>
                         <p className={`text-[10px] ${hasWallet ? 'text-ink-faint' : 'text-wine font-semibold'}`}>
                           {user.companyName} · {hasWallet ? '🔗 Stellar wallet linked' : '⚠️ No Stellar wallet — cannot be selected'}
                         </p>
@@ -1436,8 +1444,14 @@ export default function NewShipmentPage() {
                     CUSTOMS_BROKER:     { label: '🛃 Customs Broker',     color: 'bg-wine-light text-wine',         phases: 'BOC filing, duties, clearance' },
                     WAREHOUSE_OPERATOR: { label: '🏬 Warehouse Operator', color: 'bg-steel-light text-steel-hover', phases: 'Packing, staging, handoff' },
                   };
-                  const rc = roleConfig[user.jobRole] ?? { label: JOB_ROLE_LABELS[user.jobRole], color: 'bg-mist text-ink-faint', phases: '' };
-                  const ownedCount = (ROLE_MILESTONES[user.jobRole as JobRole] ?? []).length;
+                  // Multi-role support: a Logistics Chain user can hold more than one
+                  // stacked role (e.g. Freight Forwarder + Customs Broker). Show one chip
+                  // per role and union their milestone responsibilities/count, rather than
+                  // reading only the single primary jobRole.
+                  const userRoles = getUserJobRoles(user);
+                  const roleChips = userRoles.map(role => roleConfig[role] ?? { label: JOB_ROLE_LABELS[role], color: 'bg-mist text-ink-faint', phases: '' });
+                  const combinedPhases = Array.from(new Set(roleChips.map(rc => rc.phases).filter(Boolean))).join(' · ');
+                  const ownedCount = getMilestonesForUser(user).length;
                   return (
                     <button key={user.id} onClick={() => toggleUser(user.id)}
                       className={`w-full flex items-start justify-between p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
@@ -1446,15 +1460,21 @@ export default function NewShipmentPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold text-ink">{user.fullName}</p>
-                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide ${rc.color}`}>
-                            {rc.label}
-                          </span>
+                          {roleChips.map((rc, i) => (
+                            <span key={userRoles[i]} className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide ${rc.color}`}>
+                              {rc.label}
+                            </span>
+                          ))}
                         </div>
                         <p className="text-[10px] text-ink-faint mt-0.5">{user.companyName}</p>
-                        {rc.phases && (
+                        {combinedPhases && (
                           <p className="text-[10px] text-ink-faint mt-1 leading-tight">
-                            <span className="font-semibold">Responsible for:</span> {rc.phases}
-                            {ownedCount > 0 && <span className="ml-1 text-[9px] bg-mist text-ink-faint px-1 rounded">{ownedCount} milestones</span>}
+                            <span className="font-semibold">Responsible for:</span> {combinedPhases}
+                            {ownedCount > 0 && (
+                              <span className="ml-1 text-[9px] bg-mist text-ink-faint px-1 rounded">
+                                {ownedCount} milestones{userRoles.length > 1 ? ` · ${userRoles.length} roles` : ''}
+                              </span>
+                            )}
                           </p>
                         )}
                       </div>

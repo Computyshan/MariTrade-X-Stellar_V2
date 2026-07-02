@@ -13,6 +13,7 @@ type PublicProfile = {
   contactNumber?: string;
   userType: string;
   jobRole: string;
+  jobRoles: string[];
   companyName?: string;
   kycStatus: string;
   createdAt: string;
@@ -48,6 +49,7 @@ export async function GET(
       contactNumber: user.contactNumber,
       userType:      user.userType,
       jobRole:       user.jobRole,
+      jobRoles:      (user.jobRoles && user.jobRoles.length > 0) ? user.jobRoles : [user.jobRole],
       companyName:   user.companyName,
       kycStatus:     user.kycStatus,
       createdAt:     user.createdAt,

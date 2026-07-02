@@ -50,6 +50,7 @@ export interface PublicProfile {
   contactNumber?: string;
   userType: string;
   jobRole: string;
+  jobRoles?: string[];
   companyName?: string;
   kycStatus: string;
   createdAt: string;
@@ -167,9 +168,9 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
   const loading   = state.status === 'idle' || state.status === 'loading';
   const error     = state.status === 'error' ? state.message : '';
   const profile   = state.status === 'success' ? state.profile : null;
+  const profileRoles = profile ? ((profile.jobRoles && profile.jobRoles.length > 0) ? profile.jobRoles : [profile.jobRole]) : [];
   const roleColor = profile ? (JOB_ROLE_COLOR[profile.jobRole] ?? 'bg-mist text-ink-faint border-mist-dark') : '';
   const roleIcon  = profile ? (JOB_ROLE_ICON[profile.jobRole]  ?? <User className="w-3.5 h-3.5" />)         : null;
-  const roleLabel = profile ? (JOB_ROLE_LABELS[profile.jobRole] ?? profile.jobRole.replace(/_/g, ' '))       : '';
   const initials  = profile ? getInitials(profile.fullName) : '??';
 
   return (
@@ -272,12 +273,14 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
                           </p>
                         )}
 
-                        {/* Role badge + KYC badge */}
+                        {/* Role badge(s) + KYC badge */}
                         <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                          <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColor}`}>
-                            {roleIcon}
-                            {roleLabel}
-                          </span>
+                          {profileRoles.map(role => (
+                            <span key={role} className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${JOB_ROLE_COLOR[role] ?? 'bg-mist text-ink-faint border-mist-dark'}`}>
+                              {JOB_ROLE_ICON[role] ?? <User className="w-3.5 h-3.5" />}
+                              {JOB_ROLE_LABELS[role] ?? role.replace(/_/g, ' ')}
+                            </span>
+                          ))}
 
                           {profile.kycStatus === 'VERIFIED' && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-light text-teal border border-teal/20">

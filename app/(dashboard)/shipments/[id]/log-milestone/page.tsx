@@ -22,10 +22,11 @@ import {
   MilestoneType,
   JobRole,
   PHASE_MILESTONE_SEQUENCE,
-  ROLE_MILESTONES,
   ShipmentPhase,
   MILESTONE_EVIDENCE_MODE,
   MILESTONE_EVIDENCE_REF_LABEL,
+  getUserJobRoles,
+  getMilestonesForUser,
 } from '@/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -121,10 +122,15 @@ export default function LogMilestonePage({ params }: PageProps) {
     );
   }
 
-  const role              = currentUser.jobRole;
-  const meta              = ROLE_META[role];
+  // Multi-role support: a user can hold more than one Logistics Chain role
+  // at once (e.g. Freight Forwarder + Customs Broker). Their allowed
+  // milestones are the union across every role they hold, and the badge
+  // strip below shows one chip per role rather than a single role.
+  const roles             = getUserJobRoles(currentUser);
+  const primaryRole       = roles[0] ?? currentUser.jobRole;
+  const meta              = ROLE_META[primaryRole];
   const Icon              = meta.icon;
-  const allowedMilestones = ROLE_MILESTONES[role];
+  const allowedMilestones = getMilestonesForUser(currentUser);
   const canLog            = allowedMilestones.length > 0;
 
   const phases = (Object.keys(PHASE_MILESTONE_SEQUENCE) as ShipmentPhase[]).filter(phase =>
@@ -237,8 +243,8 @@ export default function LogMilestonePage({ params }: PageProps) {
           <AlertTriangle className="w-12 h-12 text-coral-400 mx-auto" />
           <h2 className="font-extrabold text-lg text-maritime-900">Access Restricted</h2>
           <p className="text-xs text-gray-500 leading-relaxed">
-            Your current role <strong className="text-maritime-900 uppercase">({meta.label})</strong> is a Trade Party
-            observer. Milestone logging is exclusively managed by Logistics Chain operators:{' '}
+            Your current role{roles.length > 1 ? 's' : ''} <strong className="text-maritime-900 uppercase">({roles.map(r => ROLE_META[r].label).join(', ')})</strong> {roles.length > 1 ? 'are' : 'is a'} Trade Party
+            observer{roles.length > 1 ? 's' : ''}. Milestone logging is exclusively managed by Logistics Chain operators:{' '}
             <strong>Freight Forwarder</strong>, <strong>Customs Broker</strong>, and <strong>Warehouse Operator</strong>.
           </p>
           <p className="text-[11px] text-gray-400">Switch your profile in the top bar to a logistics role to log milestones.</p>
@@ -283,17 +289,24 @@ export default function LogMilestonePage({ params }: PageProps) {
         {/* ── Left: form ──────────────────────────────────────────────────── */}
         <div className="lg:col-span-3 space-y-6">
 
-          {/* Role badge */}
+          {/* Role badge(s) — one chip per stacked role */}
           <div className={`flex items-center gap-3 p-4 rounded-xl border ${meta.border} ${meta.bg}`}>
             <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center shrink-0">
               <Icon className={`w-5 h-5 ${meta.color}`} />
             </div>
-            <div>
-              <p className="text-xs font-black text-maritime-900 uppercase tracking-wide">{meta.label}</p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {roles.map(r => (
+                  <span key={r} className="text-xs font-black text-maritime-900 uppercase tracking-wide">
+                    {ROLE_META[r].label}{roles.indexOf(r) < roles.length - 1 ? ' ·' : ''}
+                  </span>
+                ))}
+              </div>
               <p className="text-[11px] text-gray-500">{currentUser.fullName} · {currentUser.companyName}</p>
             </div>
-            <span className="ml-auto text-[9px] bg-ocean-400 text-maritime-900 font-black px-2 py-0.5 rounded uppercase tracking-wider">
+            <span className="ml-auto text-[9px] bg-ocean-400 text-maritime-900 font-black px-2 py-0.5 rounded uppercase tracking-wider shrink-0">
               {allowedMilestones.length} milestones
+              {roles.length > 1 ? ` · ${roles.length} roles` : ''}
             </span>
           </div>
 
@@ -516,8 +529,8 @@ export default function LogMilestonePage({ params }: PageProps) {
               Your Milestone Responsibilities
             </h3>
             <p className="text-[11px] text-maritime-300 leading-relaxed">
-              As a <strong className="text-white">{meta.label}</strong>, you own the following milestones.
-              Each milestone uses the most practical evidence type for that event.
+              As a <strong className="text-white">{roles.map(r => ROLE_META[r].label).join(' + ')}</strong>, you own the following milestones
+              {roles.length > 1 ? ' (combined across your roles)' : ''}. Each milestone uses the most practical evidence type for that event.
             </p>
 
             {/* Evidence mode explanation */}

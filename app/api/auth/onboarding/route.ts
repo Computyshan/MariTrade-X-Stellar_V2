@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
+import { JobRole, areJobRolesConsistent } from '@/types';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,17 +11,36 @@ export async function POST(req: NextRequest) {
     if (errorResponse) return errorResponse;
 
     const body = await req.json();
-    const { jobRole, kycDocumentUrl, companyName, userType } = body;
+    const { jobRole, jobRoles, kycDocumentUrl, companyName, userType } = body;
 
     const existingUser = await dbStore.getUserById(user!.id);
     if (!existingUser) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
+    // Accept either a `jobRoles` array (preferred, multi-select) or a legacy
+    // singular `jobRole`. Whichever comes in, we always write BOTH fields
+    // together so `jobRoles` never goes stale relative to `jobRole` (this
+    // used to leave a stale jobRoles array behind, silently breaking
+    // milestone-logging permissions for the role the user actually picked).
+    let nextRoles: JobRole[] | undefined;
+    if (Array.isArray(jobRoles) && jobRoles.length > 0) {
+      nextRoles = jobRoles as JobRole[];
+    } else if (jobRole) {
+      nextRoles = [jobRole as JobRole];
+    }
+
+    if (nextRoles && !areJobRolesConsistent(nextRoles)) {
+      return NextResponse.json(
+        { success: false, error: 'Job roles cannot mix Trade Party and Logistics Chain roles.' },
+        { status: 400 }
+      );
+    }
+
     const updatedUser = {
       ...existingUser,
       ...(userType && { userType }),
-      ...(jobRole && { jobRole }),
+      ...(nextRoles && { jobRole: nextRoles[0], jobRoles: nextRoles }),
       ...(companyName && { companyName }),
       ...(kycDocumentUrl && { kycDocumentUrl }),
       kycStatus: 'SUBMITTED' as const,

@@ -6,7 +6,7 @@ import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
 import { notifyUser, notifyUsers } from '@/lib/notify';
 import { MilestoneEvent, ShipmentDocument, ShipmentStatus } from '@/types';
-import { getMariTradeEscrowClient, CancellationStage, MilestoneType as ContractMilestoneType } from '@/lib/stellar/escrow-contract';
+import { getMariTradeEscrowClient, CancellationStage, EscrowStatus, MilestoneType as ContractMilestoneType } from '@/lib/stellar/escrow-contract';
 import { dbMilestonesToContractEnums } from '@/lib/stellar/milestone-map';
 
 // ─── Network config ──────────────────────────────────────────────────────────
@@ -119,6 +119,56 @@ async function platformSignAndSubmit(xdr: string): Promise<string | null> {
   }
 
   throw new Error(`Transaction timed out after 2 minutes (hash: ${hash}). Check https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${hash}`);
+}
+
+// ─── Verify a claimed release before trusting it ─────────────────────────────
+// RELEASE_ESCROW is called by the browser AFTER it believes the on-chain
+// release() succeeded, and it's the importer's own browser that hands us the
+// txHash/evidenceUrl — so a client-supplied hash is not, on its own, proof
+// that funds actually moved. Before flipping escrowStatus to RELEASED (which
+// tells the exporter their money is on its way), we independently check two
+// things against Stellar itself, not against what the client claims:
+//   1. The given txHash corresponds to a transaction that actually succeeded.
+//   2. The escrow contract's own on-chain status for this shipment is
+//      Released — the authoritative signal, since a valid-looking but
+//      unrelated/forged hash would pass check #1 but not this one.
+// Returns an error string on failure, or null if verification passed.
+async function verifyOnChainRelease(
+  referenceCode: string,
+  txHash: string,
+): Promise<string | null> {
+  // 1. The transaction itself must have succeeded on Stellar.
+  try {
+    const server = new SorobanServer(RPC_URL);
+    const check = await server.getTransaction(txHash);
+    if (check.status !== 'SUCCESS') {
+      return `Release transaction ${txHash} is not confirmed on-chain (status: ${check.status}).`;
+    }
+  } catch (err: any) {
+    return `Could not verify release transaction ${txHash} on Stellar: ${err?.message ?? String(err)}`;
+  }
+
+  // 2. The escrow contract's own record must agree that it is Released —
+  //    this is what actually gates the exporter-facing notification, not
+  //    the transaction lookup above.
+  try {
+    const client = getMariTradeEscrowClient(
+      STELLAR_NETWORK as 'testnet' | 'mainnet',
+      PLATFORM_ADDRESS,
+    );
+    const statusTx = await client.get_status({ reference_code: referenceCode });
+    if (!statusTx.result?.isOk()) {
+      return `Could not read on-chain escrow status for ${referenceCode}.`;
+    }
+    const status = statusTx.result.unwrap();
+    if (status !== EscrowStatus.Released) {
+      return `On-chain escrow status for ${referenceCode} is ${status}, not Released — refusing to mark this shipment as released.`;
+    }
+  } catch (err: any) {
+    return `Could not verify on-chain escrow status for ${referenceCode}: ${err?.message ?? String(err)}`;
+  }
+
+  return null;
 }
 
 // ─── GET — Shipment details with all nested collections ─────────────────────
@@ -393,6 +443,12 @@ export async function POST(
           { status: 400 },
         );
       }
+      if (!txHash) {
+        return NextResponse.json(
+          { success: false, error: 'txHash is required to confirm escrow release' },
+          { status: 400 },
+        );
+      }
 
       // Escrow must currently be FUNDED — guard against double-release
       if (shipment.escrowStatus !== 'FUNDED') {
@@ -402,11 +458,37 @@ export async function POST(
         );
       }
 
+      // A real Stellar tx hash is 64 hex chars (same pattern the client uses
+      // to decide whether this shipment has a real on-chain escrow). Mock/
+      // DB-only shipments send a synthetic 'db_release_...' placeholder
+      // instead — there's no real chain record to verify in that case, so we
+      // only run on-chain verification when the hash could plausibly be real.
+      const looksLikeRealTxHash = /^[0-9a-fA-F]{64}$/.test(txHash);
+
+      if (looksLikeRealTxHash) {
+        if (!shipment.referenceCode) {
+          return NextResponse.json(
+            { success: false, error: 'Shipment has no referenceCode — cannot verify on-chain release' },
+            { status: 400 },
+          );
+        }
+
+        // Independently verify against Stellar itself before trusting the
+        // client's claim that release() succeeded — see verifyOnChainRelease().
+        const verificationError = await verifyOnChainRelease(shipment.referenceCode, txHash);
+        if (verificationError) {
+          return NextResponse.json(
+            { success: false, error: verificationError },
+            { status: 409 },
+          );
+        }
+      }
+
       const updatedShipment = {
         ...shipment,
         status:         'DELIVERED'  as const,
         escrowStatus:   'RELEASED'   as const,
-        stellarEscrowId: txHash ?? shipment.stellarEscrowId,
+        stellarEscrowId: txHash,
         updatedAt:      new Date().toISOString(),
       };
       await dbStore.saveShipment(updatedShipment);

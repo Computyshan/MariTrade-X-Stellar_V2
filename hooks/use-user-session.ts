@@ -33,7 +33,7 @@ interface UserSessionState {
   // Called once on app boot — subscribes to Supabase auth changes
   init: () => () => void;
   setCurrentUser: (user: User) => void;
-  updateUserKyc: (kycStatus: User['kycStatus'], jobRole?: JobRole, companyName?: string) => void;
+  updateUserKyc: (kycStatus: User['kycStatus'], jobRoles?: JobRole[], companyName?: string) => void;
   signOut: () => Promise<void>;
   refreshAllUsers: () => Promise<void>;
 }
@@ -70,17 +70,17 @@ export const useUserSession = create<UserSessionState>((set, get) => ({
 
   setCurrentUser: (user) => set({ currentUser: user }),
 
-  updateUserKyc: (kycStatus, jobRole, companyName) =>
+  updateUserKyc: (kycStatus, jobRoles, companyName) =>
     set((state) => {
       if (!state.currentUser) return {};
       const tradePartyRoles: JobRole[] = ['IMPORTER', 'EXPORTER'];
       const updatedUser: User = {
         ...state.currentUser,
         kycStatus,
-        ...(jobRole && { jobRole }),
+        ...(jobRoles && jobRoles.length > 0 && { jobRole: jobRoles[0], jobRoles }),
         ...(companyName && { companyName }),
         userType:
-          jobRole && tradePartyRoles.includes(jobRole)
+          jobRoles && jobRoles.length > 0 && tradePartyRoles.includes(jobRoles[0])
             ? 'TRADE_PARTY'
             : 'LOGISTICS_CHAIN',
       };
