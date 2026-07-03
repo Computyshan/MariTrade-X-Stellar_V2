@@ -93,29 +93,29 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
   // deliberately un-colorful) so an admin account never looks like either
   // self-service portal.
   const sidebarBg = isAdmin
-    ? 'linear-gradient(175deg, #0A1220 0%, var(--color-ink) 45%, var(--color-ink-soft) 160%)'
+    ? 'linear-gradient(175deg, #0A1220 0%, var(--color-ink) 40%, var(--color-amber-hover) 165%)'
     : isTradeParty
     ? 'linear-gradient(175deg, #5C0A2E 0%, #8B1646 45%, #6E1138 160%)'
     : 'linear-gradient(175deg, var(--color-ink) 0%, var(--color-ink-soft) 45%, var(--color-teal-hover) 160%)';
   const sidebarGlow = isAdmin
-    ? 'radial-gradient(ellipse at 110% 5%, rgba(129,151,198,0.22) 0%, transparent 45%), radial-gradient(ellipse at -10% 95%, rgba(129,151,198,0.10) 0%, transparent 50%)'
+    ? 'radial-gradient(ellipse at 110% 5%, rgba(254,153,0,0.22) 0%, transparent 45%), radial-gradient(ellipse at -10% 95%, rgba(254,153,0,0.10) 0%, transparent 50%)'
     : isTradeParty
     ? 'radial-gradient(ellipse at 110% 5%, rgba(254,153,0,0.22) 0%, transparent 45%), radial-gradient(ellipse at -10% 95%, rgba(254,153,0,0.10) 0%, transparent 50%)'
     : 'radial-gradient(ellipse at 110% 5%, rgba(207,226,230,0.18) 0%, transparent 45%), radial-gradient(ellipse at -10% 95%, rgba(207,226,230,0.12) 0%, transparent 50%)';
-  const avatarBg = isAdmin ? 'rgba(129,151,198,0.25)' : isTradeParty ? 'rgba(254,153,0,0.25)' : 'var(--color-ink-soft)';
-  const avatarSubColor = isAdmin ? 'rgba(129,151,198,0.75)' : isTradeParty ? 'rgba(254,153,0,0.55)' : 'rgba(255,255,255,0.4)';
+  const avatarBg = isAdmin ? 'rgba(254,153,0,0.25)' : isTradeParty ? 'rgba(254,153,0,0.25)' : 'var(--color-ink-soft)';
+  const avatarSubColor = isAdmin ? 'rgba(254,153,0,0.75)' : isTradeParty ? 'rgba(254,153,0,0.55)' : 'rgba(255,255,255,0.4)';
   const navHoverBg = isAdmin
-    ? 'linear-gradient(90deg, rgba(129,151,198,0.14) 0%, rgba(129,151,198,0.06) 100%)'
+    ? 'linear-gradient(90deg, rgba(254,153,0,0.14) 0%, rgba(254,153,0,0.06) 100%)'
     : isTradeParty
     ? 'linear-gradient(90deg, rgba(254,153,0,0.10) 0%, rgba(254,153,0,0.05) 100%)'
     : 'linear-gradient(90deg, rgba(207,226,230,0.07) 0%, rgba(129,151,198,0.10) 100%)';
   const footerBg = isAdmin
-    ? 'linear-gradient(90deg, rgba(129,151,198,0.10) 0%, rgba(129,151,198,0.05) 100%)'
+    ? 'linear-gradient(90deg, rgba(254,153,0,0.10) 0%, rgba(254,153,0,0.05) 100%)'
     : isTradeParty
     ? 'linear-gradient(90deg, rgba(254,153,0,0.08) 0%, rgba(254,153,0,0.04) 100%)'
     : 'linear-gradient(90deg, rgba(207,226,230,0.05) 0%, rgba(129,151,198,0.10) 100%)';
-  const footerBorder = isAdmin ? 'rgba(129,151,198,0.5)' : isTradeParty ? 'rgba(254,153,0,0.45)' : 'var(--theme-accent-border)';
-  const footerText = isAdmin ? 'rgba(129,151,198,0.9)' : isTradeParty ? 'rgba(254,153,0,0.85)' : 'rgba(255,255,255,0.8)';
+  const footerBorder = isAdmin ? 'rgba(254,153,0,0.5)' : isTradeParty ? 'rgba(254,153,0,0.45)' : 'var(--theme-accent-border)';
+  const footerText = isAdmin ? 'rgba(254,153,0,0.9)' : isTradeParty ? 'rgba(254,153,0,0.85)' : 'rgba(255,255,255,0.8)';
   const headerBg = isAdmin
     ? 'linear-gradient(90deg, #fffaf0 0%, var(--color-amber-light) 60%, var(--color-mist-light) 100%)'
     : isTradeParty
@@ -132,23 +132,23 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
     ? 'text-wine/70 hover:bg-wine-light'
     : 'text-ink-faint hover:bg-mist-light';
   const portalLabel = isAdmin ? 'Platform Admin Portal' : isTradeParty ? 'Trade Party Portal' : 'Logistics Chain Portal';
-  const portalLabelColor = isAdmin ? 'var(--color-steel)' : isTradeParty ? 'var(--color-amber)' : 'var(--color-teal)';
+  const portalLabelColor = isAdmin ? 'var(--color-amber)' : isTradeParty ? 'var(--color-amber)' : 'var(--color-teal)';
   const mobileHeaderBg = isAdmin
-    ? 'var(--color-ink)'
+    ? 'linear-gradient(175deg, #0A1220 0%, var(--color-ink) 50%, var(--color-amber-hover) 100%)'
     : isTradeParty
     ? 'linear-gradient(175deg, #5C0A2E 0%, #8B1646 50%, #6E1138 100%)'
     : 'var(--color-ink)';
   const mobileBadge = isAdmin
-    ? { label: 'Admin', bg: 'rgba(129,151,198,0.25)', color: 'var(--color-mist)' }
+    ? { label: 'Admin', bg: 'rgba(254,153,0,0.25)', color: 'var(--color-amber)' }
     : isTradeParty
     ? { label: 'Trade Party', bg: 'rgba(254,153,0,0.2)', color: 'var(--color-amber)' }
     : null;
   const mobileActiveBg = isAdmin
-    ? 'rgba(129,151,198,0.2)'
+    ? 'linear-gradient(90deg, rgba(254,153,0,0.18) 0%, rgba(254,153,0,0.08) 100%)'
     : isTradeParty
     ? 'linear-gradient(90deg, rgba(254,153,0,0.18) 0%, rgba(254,153,0,0.08) 100%)'
     : 'rgba(255,255,255,0.1)';
-  const mobileActiveBorder = isAdmin ? '2px solid var(--color-steel)' : isTradeParty ? '2px solid var(--color-amber)' : 'none';
+  const mobileActiveBorder = isAdmin ? '2px solid var(--color-amber)' : isTradeParty ? '2px solid var(--color-amber)' : 'none';
 
   return (
     <div data-theme={themeAttr} className="min-h-screen bg-mist-light text-ink font-sans flex">
@@ -384,7 +384,7 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
               >
                 <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={isTradeParty ? { background: 'rgba(254,153,0,0.2)' } : isAdmin ? { background: 'rgba(129,151,198,0.2)' } : { background: 'rgba(255,255,255,0.1)' }}>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={isTradeParty ? { background: 'rgba(254,153,0,0.2)' } : isAdmin ? { background: 'rgba(254,153,0,0.2)' } : { background: 'rgba(255,255,255,0.1)' }}>
                       <Ship className="w-3.5 h-3.5 text-white" />
                     </div>
                     <span className="text-sm font-bold tracking-widest text-white">MARITRADE</span>

@@ -150,10 +150,11 @@ function AdminDashboard() {
           <span className="block text-[10px] text-ink-faint uppercase font-medium tracking-widest mb-2">Total Shipments</span>
           <strong className="text-[28px] text-ink font-display font-medium leading-none">{String(total).padStart(2,'0')}</strong>
         </div>
-        <div className="bg-ink border border-ink-soft p-5 rounded-xl shadow-sm">
-          <span className="block text-[10px] text-white/40 uppercase font-medium tracking-widest mb-2">Escrow Locked</span>
-          <strong className="text-[28px] text-white font-display font-medium leading-none">{formatAsset(totalEscrow, 'USDC')}</strong>
-          <span className="block text-[10px] text-white/40 mt-1">USDC</span>
+        <div className="p-5 rounded-xl shadow-sm relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--color-ink) 0%, var(--color-ink-soft) 55%, var(--color-amber-hover) 150%)', border: '1px solid var(--color-ink-soft)' }}>
+          <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 85% 10%, rgba(254,153,0,0.22) 0%, transparent 55%)' }} />
+          <span className="block text-[10px] text-white/50 uppercase font-medium tracking-widest mb-2 relative z-10">Escrow Locked</span>
+          <strong className="text-[28px] text-white font-display font-medium leading-none relative z-10">{formatAsset(totalEscrow, 'USDC')}</strong>
+          <span className="block text-[10px] text-white/50 mt-1 relative z-10">USDC</span>
         </div>
         <div className="bg-white border border-mist p-5 rounded-xl shadow-sm">
           <span className="block text-[10px] text-ink-faint uppercase font-medium tracking-widest mb-2">Active Cargoes</span>

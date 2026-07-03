@@ -176,22 +176,22 @@ body {
    Party (wine/amber) and cool Logistics Chain (teal/steel) portals, so an
    admin never mistakes which account they're signed into. */
 [data-theme="admin"] {
-  --theme-accent:              var(--color-ink-soft);
-  --theme-accent-hover:        var(--color-ink);
+  --theme-accent:              var(--color-amber);
+  --theme-accent-hover:        var(--color-amber-hover);
   --theme-accent-light:        var(--color-amber-light);
-  --theme-accent-muted:        rgba(20, 32, 52, 0.10);
-  --theme-accent-border:       rgba(20, 32, 52, 0.35);
+  --theme-accent-muted:        rgba(254, 153, 0, 0.13);
+  --theme-accent-border:       rgba(254, 153, 0, 0.35);
   --theme-feature:             var(--color-steel);
   --theme-feature-hover:       var(--color-steel-hover);
   --theme-feature-light:       var(--color-steel-light);
   --theme-feature-muted:       rgba(129, 151, 198, 0.12);
-  --theme-sidebar-active-bg:   rgba(129, 151, 198, 0.16);
-  --theme-sidebar-active-text: var(--color-steel);
+  --theme-sidebar-active-bg:   rgba(254, 153, 0, 0.16);
+  --theme-sidebar-active-text: var(--color-amber);
   --theme-portal-name:         "Platform Admin";
 
-  --theme-dark-gradient:    linear-gradient(175deg, #0A1220 0%, var(--color-ink) 45%, var(--color-ink-soft) 160%);
-  --theme-dark-glow-1:      radial-gradient(ellipse at 110% 5%, rgba(129,151,198,0.22) 0%, transparent 45%);
-  --theme-dark-glow-2:      radial-gradient(ellipse at -10% 95%, rgba(129,151,198,0.10) 0%, transparent 50%);
+  --theme-dark-gradient:    linear-gradient(175deg, #0A1220 0%, var(--color-ink) 40%, var(--color-amber-hover) 165%);
+  --theme-dark-glow-1:      radial-gradient(ellipse at 110% 5%, rgba(254,153,0,0.22) 0%, transparent 45%);
+  --theme-dark-glow-2:      radial-gradient(ellipse at -10% 95%, rgba(254,153,0,0.10) 0%, transparent 50%);
   --theme-nav-gradient:     linear-gradient(90deg, #fffaf0 0%, var(--color-amber-light) 60%, var(--color-mist-light) 100%);
   --theme-surface-gradient: linear-gradient(160deg, #fffaf0 0%, var(--color-amber-light) 40%, var(--color-mist-light) 100%);
 }
