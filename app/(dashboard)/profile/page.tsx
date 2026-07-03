@@ -54,6 +54,10 @@ function ProfileForm({ currentUser, setCurrentUser }: ProfileFormProps) {
       { value: 'WAREHOUSE_OPERATOR', label: 'Warehouse Operator' },
       { value: 'CUSTOMS_BROKER',     label: 'Customs Broker' },
     ],
+    // Deliberately empty — admins have exactly one fixed role and never see
+    // a role picker here. Prevents `ROLE_OPTIONS[currentUser.userType].map(...)`
+    // from crashing if an ADMIN account ever opens this page.
+    ADMIN: [],
   };
   const [jobRoles, setJobRoles] = useState<JobRole[]>(getUserJobRoles(currentUser));
   const [rolesSaving, setRolesSaving] = useState(false);

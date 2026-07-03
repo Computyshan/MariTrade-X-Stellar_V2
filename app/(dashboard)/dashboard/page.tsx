@@ -42,6 +42,10 @@ import { MilestoneType, JobRole, Shipment, MilestoneEvent, ROLE_MILESTONES, MILE
 import { formatAsset, AssetCode } from '@/lib/stellar/assets';
 import { getUsdToPhpRate } from '@/lib/stellar/fx';
 
+// Legacy allowlist fallback — accounts created via scripts/create-admin.ts
+// with userType='ADMIN' are the preferred path now (see the check below);
+// this hardcoded email is kept only so any pre-existing admin account
+// created before that script existed keeps working.
 const ADMIN_EMAIL = 'tyshaunsiga123@gmail.com';
 
 const MILESTONE_BY_JOB = ROLE_MILESTONES;
@@ -381,7 +385,7 @@ export default function DashboardHome() {
     return null;
   }
 
-  if (currentUser.email === ADMIN_EMAIL) {
+  if (currentUser.userType === 'ADMIN' || currentUser.email === ADMIN_EMAIL) {
     return (
       <DashboardLayout>
         <AdminDashboard />
@@ -1104,6 +1108,10 @@ const ROLE_META: Record<JobRole, { label: string; description: string; accentBg:
   WAREHOUSE_OPERATOR: { label: 'Warehouse Operator', description: 'Cargo inspection, storage, and last-mile handoffs.', accentBg: 'bg-[color:var(--color-mist-light)]', accentText: 'text-[color:var(--color-ink-soft)]', accentBorder: 'border-[color:var(--color-mist-dark)]', badgeBg: 'bg-[color:var(--color-ink-soft)] text-white', icon: <Warehouse className="w-5 h-5" /> },
   IMPORTER: { label: 'Importer', description: '', accentBg: 'bg-mist-light', accentText: 'text-ink-faint', accentBorder: 'border-mist', badgeBg: 'bg-ink-faint text-white', icon: <Shield className="w-5 h-5" /> },
   EXPORTER: { label: 'Exporter', description: '', accentBg: 'bg-mist-light', accentText: 'text-ink-faint', accentBorder: 'border-mist', badgeBg: 'bg-ink-faint text-white', icon: <Shield className="w-5 h-5" /> },
+  // Not reachable in this UI — AdminDashboard short-circuits on ADMIN_EMAIL
+  // before any of the Logistics Chain pickers that index into ROLE_META are
+  // ever rendered. Present only to satisfy Record<JobRole, ...> exhaustiveness.
+  ADMIN: { label: 'Admin', description: '', accentBg: 'bg-mist-light', accentText: 'text-ink-faint', accentBorder: 'border-mist', badgeBg: 'bg-ink-faint text-white', icon: <Shield className="w-5 h-5" /> },
 };
 
 function LogisticsScopeBanner({ jobRoles, shipments, milestones }: { jobRoles: JobRole[]; shipments: Shipment[]; milestones: MilestoneEvent[]; }) {

@@ -37,6 +37,10 @@ const ROLE_META: Record<JobRole, { label: string; icon: React.ElementType; color
   FREIGHT_FORWARDER:  { label: 'Freight Forwarder',  icon: Ship,      color: 'text-maritime-400', bg: 'bg-maritime-50', border: 'border-maritime-200' },
   CUSTOMS_BROKER:     { label: 'Customs Broker',     icon: FileCheck, color: 'text-coral-400',    bg: 'bg-coral-50',    border: 'border-coral-200'    },
   WAREHOUSE_OPERATOR: { label: 'Warehouse Operator', icon: Package,   color: 'text-ocean-400',    bg: 'bg-ocean-50',    border: 'border-ocean-200'    },
+  // Admins never reach this page in practice (getMilestonesForUser returns []
+  // for ADMIN, so canLog is false and the Access Restricted guard below
+  // renders instead) — present only to satisfy Record<JobRole, ...>.
+  ADMIN:               { label: 'Admin',              icon: Building2, color: 'text-gray-400',     bg: 'bg-gray-50',     border: 'border-gray-200'     },
 };
 
 const PHASE_LABELS: Record<ShipmentPhase, string> = {

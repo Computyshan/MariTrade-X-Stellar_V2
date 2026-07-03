@@ -44,6 +44,10 @@ const JOB_ROLE_LABELS: Record<JobRole, string> = {
   FREIGHT_FORWARDER:   'Freight Forwarder',
   WAREHOUSE_OPERATOR:  'Warehouse Operator',
   CUSTOMS_BROKER:      'Customs Broker',
+  // Admins never appear in the logistics/exporter pickers on this page
+  // (filtered to LOGISTICS_CHAIN userType / EXPORTER role only) — present
+  // only to satisfy Record<JobRole, string> exhaustiveness.
+  ADMIN:               'Admin',
 };
 
 const MILESTONE_LABELS: Record<MilestoneType, string> = {

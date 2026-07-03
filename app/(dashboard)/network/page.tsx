@@ -64,6 +64,11 @@ const JOB_ROLE_LABELS: Record<JobRole, string> = {
   FREIGHT_FORWARDER:   'Freight Forwarder',
   WAREHOUSE_OPERATOR:  'Warehouse Operator',
   CUSTOMS_BROKER:      'Customs Broker',
+  // Admin accounts are internal staff and never appear in the B2B member
+  // directory/network (the /api/network/directory route only returns Trade
+  // Party and Logistics Chain profiles). Present only to satisfy
+  // Record<JobRole, string> exhaustiveness.
+  ADMIN:               'Admin',
 };
 
 const JOB_ROLE_ICON: Record<string, React.ReactNode> = {
