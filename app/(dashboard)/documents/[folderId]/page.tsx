@@ -411,7 +411,7 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
                 <button
                   type="submit"
                   disabled={!passwordInput.trim() || verifying}
-                  className="flex-1 bg-maritime-400 hover:bg-maritime-700 disabled:bg-maritime-100 disabled:text-maritime-300 text-white font-bold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 border-2 border-transparent bg-maritime-400 hover:bg-maritime-700 disabled:bg-white disabled:border-sand-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-white text-white font-bold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
                 >
                   {verifying
                     ? <><RefreshCw className="w-4 h-4 animate-spin" /> Verifying…</>
@@ -573,7 +573,7 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
               <button
                 onClick={handleUpload}
                 disabled={!uploadFile || uploading}
-                className="flex-1 flex items-center justify-center gap-2 bg-maritime-400 hover:bg-maritime-700 disabled:bg-maritime-100 disabled:text-maritime-300 text-white font-bold py-2.5 rounded-xl text-sm transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 border-2 border-transparent bg-maritime-400 hover:bg-maritime-700 disabled:bg-white disabled:border-sand-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-white text-white font-bold py-2.5 rounded-xl text-sm transition-colors"
               >
                 {uploading
                   ? <><RefreshCw className="w-4 h-4 animate-spin" /> Uploading…</>

@@ -1256,22 +1256,6 @@ export default function ChatNegotiationCenter() {
                 </div>
               )}
             </div>
-
-            {/* Shipment Receipt button — Trade Party threads only */}
-            {isTradePartyThread && activeThread && (
-              <div className="p-3 bg-white border-t border-mist shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowReceiptPanel(p => !p)}
-                  className="w-full text-white font-black py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 transition-all uppercase tracking-wider text-[10px] cursor-pointer active:scale-[0.98]"
-                  style={{ background: 'var(--theme-feature)' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--theme-feature-hover)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--theme-feature)'; }}
-                >
-                  <Receipt className="w-4 h-4" /> SHIPMENT RECEIPT
-                </button>
-              </div>
-            )}
           </div>
 
           {/* ── CHAT AREA ──────────────────────────────────────────────────── */}
@@ -1344,7 +1328,20 @@ export default function ChatNegotiationCenter() {
                       </div>
                     </button>
                     </div>
-                    <p className="hidden md:block text-[9px] font-mono font-bold text-ink-faint shrink-0 bg-mist-light px-2 py-1 rounded-full">ID: {activeThread?.id}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isTradePartyThread && activeThread && (
+                        <button
+                          type="button"
+                          onClick={() => setShowReceiptPanel(p => !p)}
+                          className="flex items-center gap-1.5 text-white font-black py-1.5 px-2.5 md:px-3 rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer active:scale-95 shrink-0"
+                          style={{ background: 'var(--theme-feature)' }}
+                        >
+                          <Receipt className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Shipment Receipt</span>
+                        </button>
+                      )}
+                      <p className="hidden md:block text-[9px] font-mono font-bold text-ink-faint shrink-0 bg-mist-light px-2 py-1 rounded-full">ID: {activeThread?.id}</p>
+                    </div>
                   </div>
 
                   {/* Messages */}
