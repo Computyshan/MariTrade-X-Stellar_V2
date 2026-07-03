@@ -1,13 +1,21 @@
-export type UserType = 'TRADE_PARTY' | 'LOGISTICS_CHAIN';
+export type UserType = 'TRADE_PARTY' | 'LOGISTICS_CHAIN' | 'ADMIN';
 
 /**
  * Trade Party: 2 roles — the buyers and sellers of cargo.
  * Logistics Chain: 3 roles — the operators who physically move and clear goods.
+ * Admin: 1 role — internal platform staff. NEVER exposed as a selectable option
+ * anywhere in the sign-up or onboarding UI (app/(auth)/onboarding/page.tsx builds
+ * its role checklists from hard-coded tradePartyJobs/logisticsJobs arrays only —
+ * it never enumerates this union, so ADMIN can't appear there by construction).
+ * Admin accounts are provisioned exclusively via scripts/create-admin.ts
+ * (service-role, run out-of-band by a developer/ops person on their own machine),
+ * never through /api/auth/register or /api/auth/onboarding.
  */
 export type TradePartyRole = 'IMPORTER' | 'EXPORTER';
 export type LogisticsChainRole = 'FREIGHT_FORWARDER' | 'WAREHOUSE_OPERATOR' | 'CUSTOMS_BROKER';
+export type AdminRole = 'ADMIN';
 
-export type JobRole = TradePartyRole | LogisticsChainRole;
+export type JobRole = TradePartyRole | LogisticsChainRole | AdminRole;
 
 export type KycStatus = 'PENDING' | 'SUBMITTED' | 'VERIFIED' | 'REJECTED';
 
@@ -105,6 +113,9 @@ export const ROLE_MILESTONES: Record<JobRole, MilestoneType[]> = {
   IMPORTER: [],
   EXPORTER: [],
 
+  // Admin — internal staff, not part of the shipment milestone chain
+  ADMIN: [],
+
   // ─── Logistics Chain ────────────────────────────────────────────────────
 
   FREIGHT_FORWARDER: [
@@ -181,19 +192,27 @@ export function userHasJobRole(user: Pick<User, 'jobRole' | 'jobRoles'>, role: J
  *  Returns null for an empty list — callers should treat that as invalid. */
 export function jobRoleCategory(roles: JobRole[]): UserType | null {
   const tradePartyRoles: JobRole[] = ['IMPORTER', 'EXPORTER'];
+  const adminRoles: JobRole[] = ['ADMIN'];
   if (roles.length === 0) return null;
+  if (roles.every(r => adminRoles.includes(r))) return 'ADMIN';
   return roles.every(r => tradePartyRoles.includes(r)) ? 'TRADE_PARTY' : 'LOGISTICS_CHAIN';
 }
 
-/** True if every role in the list belongs to the same category (Trade Party
- *  or Logistics Chain) — roles may never mix across categories. */
+/** True if every role in the list belongs to the same category (Trade Party,
+ *  Logistics Chain, or Admin) — roles may never mix across categories.
+ *  ADMIN is intentionally exclusive of the other two categories: this is what
+ *  keeps a self-service sign-up (register -> onboarding) from ever landing a
+ *  user on ADMIN, since the onboarding role pickers only ever submit Trade
+ *  Party or Logistics Chain roles and this check would reject a mix. */
 export function areJobRolesConsistent(roles: JobRole[]): boolean {
   if (roles.length === 0) return false;
   const tradePartyRoles: JobRole[] = ['IMPORTER', 'EXPORTER'];
   const logisticsRoles: JobRole[] = ['FREIGHT_FORWARDER', 'WAREHOUSE_OPERATOR', 'CUSTOMS_BROKER'];
+  const adminRoles: JobRole[] = ['ADMIN'];
   const allTrade = roles.every(r => tradePartyRoles.includes(r));
   const allLogistics = roles.every(r => logisticsRoles.includes(r));
-  return allTrade || allLogistics;
+  const allAdmin = roles.every(r => adminRoles.includes(r));
+  return allTrade || allLogistics || allAdmin;
 }
 
 /** Union of every milestone type the user is authorized to log, across all

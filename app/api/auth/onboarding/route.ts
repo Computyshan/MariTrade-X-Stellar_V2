@@ -18,6 +18,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
+    // ADMIN is not a self-service role. It must never be reachable through this
+    // onboarding endpoint, no matter what the client sends — admin accounts are
+    // provisioned out-of-band via scripts/create-admin.ts only.
+    if (userType === 'ADMIN' || jobRole === 'ADMIN' || (Array.isArray(jobRoles) && jobRoles.includes('ADMIN'))) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid role selection.' },
+        { status: 400 }
+      );
+    }
+
     // Basic Stellar address format check (G... + 55 base32 chars) — only
     // validated if provided, since the field is optional at onboarding time.
     if (stellarWallet !== undefined && stellarWallet !== null && String(stellarWallet).trim() !== '') {
