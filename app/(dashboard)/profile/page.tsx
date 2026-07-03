@@ -6,7 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import ExternalCredentialsSection from '@/components/ExternalCredentialsSection';
 import { useUserSession } from '@/hooks/use-user-session';
 import { authFetch } from '@/hooks/use-user-session';
-import { User, Shipment, ShipmentStatus } from '@/types';
+import { User, Shipment, ShipmentStatus, JobRole, getUserJobRoles, areJobRolesConsistent } from '@/types';
 import { 
   User as UserIcon, 
   MapPin, 
@@ -42,6 +42,65 @@ function ProfileForm({ currentUser, setCurrentUser }: ProfileFormProps) {
   const [companyName, setCompanyName] = useState(currentUser.companyName || '');
   const [bankDetails, setBankDetails] = useState(currentUser.bankDetails || '');
   const [stellarWallet, setStellarWallet] = useState(currentUser.stellarWallet || '');
+
+  // ── Job roles (stacked responsibilities) ─────────────────────────────────
+  const ROLE_OPTIONS: Record<User['userType'], { value: JobRole; label: string }[]> = {
+    TRADE_PARTY: [
+      { value: 'IMPORTER', label: 'Importer' },
+      { value: 'EXPORTER', label: 'Exporter' },
+    ],
+    LOGISTICS_CHAIN: [
+      { value: 'FREIGHT_FORWARDER',  label: 'Freight Forwarder' },
+      { value: 'WAREHOUSE_OPERATOR', label: 'Warehouse Operator' },
+      { value: 'CUSTOMS_BROKER',     label: 'Customs Broker' },
+    ],
+  };
+  const [jobRoles, setJobRoles] = useState<JobRole[]>(getUserJobRoles(currentUser));
+  const [rolesSaving, setRolesSaving] = useState(false);
+  const [rolesSaveError, setRolesSaveError] = useState('');
+  const [rolesSaveSuccess, setRolesSaveSuccess] = useState(false);
+
+  const toggleJobRole = (role: JobRole) => {
+    setRolesSaveSuccess(false);
+    setJobRoles(prev => {
+      const has = prev.includes(role);
+      if (has) {
+        // Never allow the last role to be unchecked — an account must hold at least one.
+        if (prev.length === 1) return prev;
+        return prev.filter(r => r !== role);
+      }
+      return [...prev, role];
+    });
+  };
+
+  const handleSaveRoles = async () => {
+    setRolesSaving(true);
+    setRolesSaveError('');
+    setRolesSaveSuccess(false);
+    if (!areJobRolesConsistent(jobRoles)) {
+      setRolesSaveError('Roles cannot mix Trade Party and Logistics Chain categories.');
+      setRolesSaving(false);
+      return;
+    }
+    try {
+      const res = await authFetch('/api/auth/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id, jobRoles }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setCurrentUser(json.data);
+        setRolesSaveSuccess(true);
+      } else {
+        setRolesSaveError(json.error || 'Failed to update roles.');
+      }
+    } catch {
+      setRolesSaveError('An unexpected networking error occurred. Please try again.');
+    } finally {
+      setRolesSaving(false);
+    }
+  };
 
   // Status indicators
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -294,15 +353,60 @@ function ProfileForm({ currentUser, setCurrentUser }: ProfileFormProps) {
 
           </div>
 
-          {/* Job Category Read-Only Badge */}
-          <div className="bg-mist-light border border-mist rounded-xl p-4 flex justify-between items-center flex-wrap gap-2 text-xs">
-            <div className="space-y-0.5">
-              <span className="font-extrabold text-ink-faint uppercase font-mono text-[9px] tracking-wider block">Assigned Job Category Role</span>
-              <strong className="text-ink font-bold uppercase">{currentUser?.jobRole?.replace(/_/g, ' ')}</strong>
+          {/* Job Category — editable, stackable roles */}
+          <div className="bg-mist-light border border-mist rounded-xl p-4 space-y-3 text-xs">
+            <div className="flex justify-between items-start flex-wrap gap-2">
+              <div className="space-y-0.5">
+                <span className="font-extrabold text-ink-faint uppercase font-mono text-[9px] tracking-wider block">
+                  Job Role{jobRoles.length > 1 ? 's' : ''} (stacked responsibilities)
+                </span>
+                <span className="text-[10px] text-ink-faint">
+                  Hold more than one role at once — your milestone-logging permissions cover every role checked below.
+                </span>
+              </div>
+              <span className="text-[9px] bg-mist text-ink-faint font-bold px-1.5 py-0.5 rounded uppercase font-sans">
+                {currentUser.userType.replace('_', ' ')} category
+              </span>
             </div>
-            <span className="text-[10px] text-ink-faint italic text-right md:max-w-xs leading-normal">
-              Job role is set during onboarding and requires admin review to change.
-            </span>
+
+            <div className="flex flex-wrap gap-2">
+              {ROLE_OPTIONS[currentUser.userType].map(opt => {
+                const checked = jobRoles.includes(opt.value);
+                return (
+                  <label
+                    key={opt.value}
+                    className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 cursor-pointer transition-all ${
+                      checked ? 'border-amber bg-amber-light/50 text-ink font-bold' : 'border-mist bg-white text-ink-faint hover:border-mist-dark'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-amber cursor-pointer"
+                      checked={checked}
+                      onChange={() => toggleJobRole(opt.value)}
+                    />
+                    {opt.label}
+                  </label>
+                );
+              })}
+            </div>
+
+            {rolesSaveError && <p className="text-wine font-semibold">⚠ {rolesSaveError}</p>}
+            {rolesSaveSuccess && <p className="text-teal font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Roles updated.</p>}
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] text-ink-faint italic">
+                To switch between Trade Party and Logistics Chain entirely, contact support for re-onboarding.
+              </span>
+              <button
+                type="button"
+                onClick={handleSaveRoles}
+                disabled={rolesSaving || (jobRoles.length === getUserJobRoles(currentUser).length && jobRoles.every(r => getUserJobRoles(currentUser).includes(r)))}
+                className="flex-shrink-0 flex items-center gap-1.5 bg-ink hover:bg-ink-soft text-white font-bold px-3 py-1.5 rounded-lg text-[11px] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {rolesSaving ? 'Saving…' : 'Save Roles'}
+              </button>
+            </div>
           </div>
 
         </div>

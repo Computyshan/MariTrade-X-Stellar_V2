@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
-import { ExternalCredential, ExternalCredentialType } from '@/types';
+import { ExternalCredential, ExternalCredentialType, JobRole, areJobRolesConsistent, jobRoleCategory } from '@/types';
 
 const CREDENTIAL_TYPES: ExternalCredentialType[] = ['CERTIFICATE_URL', 'CERTIFICATE_IMAGE', 'RESUME_PDF'];
 const MAX_CREDENTIALS = 12;
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { userId, fullName, fullAddress, contactNumber, companyName, bankDetails, stellarWallet, trackingTier, brandingLogoUrl, brandingPrimaryColor, brandingCompanyLabel, externalCredentials } = body;
+    const { userId, fullName, fullAddress, contactNumber, companyName, bankDetails, stellarWallet, trackingTier, brandingLogoUrl, brandingPrimaryColor, brandingCompanyLabel, externalCredentials, jobRoles } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
@@ -75,6 +75,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Job roles (stacking/un-stacking responsibilities post-onboarding) ──
+    // A user may add or drop roles here, but every role in the resulting set
+    // must stay within their existing category (Trade Party vs Logistics
+    // Chain) — switching category entirely still requires re-onboarding,
+    // since it changes escrow authorization semantics, not just labels.
+    let nextJobRoles = existingUser.jobRoles && existingUser.jobRoles.length > 0
+      ? existingUser.jobRoles
+      : [existingUser.jobRole];
+    let nextJobRole = existingUser.jobRole;
+    if (jobRoles !== undefined) {
+      if (!Array.isArray(jobRoles) || jobRoles.length === 0) {
+        return NextResponse.json({ success: false, error: 'jobRoles must be a non-empty array.' }, { status: 400 });
+      }
+      const roles = jobRoles as JobRole[];
+      if (!areJobRolesConsistent(roles)) {
+        return NextResponse.json({ success: false, error: 'Job roles cannot mix Trade Party and Logistics Chain roles.' }, { status: 400 });
+      }
+      if (jobRoleCategory(roles) !== existingUser.userType) {
+        return NextResponse.json({
+          success: false,
+          error: `Your account is registered as ${existingUser.userType.replace('_', ' ')}. To switch categories entirely, contact support for re-onboarding.`,
+        }, { status: 400 });
+      }
+      nextJobRoles = roles;
+      nextJobRole = roles[0];
+    }
+
     const updatedUser = {
       ...existingUser,
       fullName: fullName || existingUser.fullName,
@@ -88,6 +115,8 @@ export async function POST(req: NextRequest) {
       brandingPrimaryColor: brandingPrimaryColor !== undefined ? brandingPrimaryColor : existingUser.brandingPrimaryColor,
       brandingCompanyLabel: brandingCompanyLabel !== undefined ? brandingCompanyLabel : existingUser.brandingCompanyLabel,
       externalCredentials: nextCredentials,
+      jobRole: nextJobRole,
+      jobRoles: nextJobRoles,
       updatedAt: new Date().toISOString(),
     };
 
