@@ -331,7 +331,7 @@ export default function NetworkPage() {
       />
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-xs font-bold border
+        <div className={`fixed top-5 right-3 md:right-5 left-3 md:left-auto max-w-[calc(100vw-1.5rem)] md:max-w-sm z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-xs font-bold border
           ${toast.type === 'success' ? 'bg-teal-light border-teal/20 text-teal' : 'bg-wine-light border-wine/20 text-wine'}`}>
           {toast.type === 'success'
             ? <CheckCircle2 className="w-4 h-4 text-teal" />
@@ -365,7 +365,7 @@ export default function NetworkPage() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[
           { label: 'Connections',   value: trustedNetworkAll.length,    colorClass: 'text-teal',     bg: 'bg-teal-light border-teal/15' },
           { label: 'Pending',       value: pendingSent.length + pendingReceived.length, colorClass: 'text-amber', bg: 'bg-amber-light border-amber/15' },
@@ -379,12 +379,12 @@ export default function NetworkPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-mist-light border border-mist rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-mist-light border border-mist rounded-xl p-1 w-full sm:w-fit overflow-x-auto">
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0
               ${activeTab === tab.id ? 'bg-white text-ink shadow-sm' : 'text-ink-faint hover:text-ink'}`}
           >
             {tab.label}
@@ -622,7 +622,7 @@ export default function NetworkPage() {
               </h3>
               <div className="space-y-3">
                 {pendingSent.map(conn => (
-                  <div key={conn.id} className="bg-amber-light border border-amber/20 rounded-2xl p-5 flex items-center gap-4">
+                  <div key={conn.id} className="bg-amber-light border border-amber/20 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="w-10 h-10 rounded-xl bg-amber-light border border-amber/20 text-amber flex items-center justify-center font-bold text-sm flex-shrink-0">
                       {conn.otherParty?.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                     </div>

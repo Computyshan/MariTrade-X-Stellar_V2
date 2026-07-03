@@ -604,7 +604,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
           <button onClick={() => router.push('/shipments')} className="flex items-center gap-1.5 text-xs text-amber hover:text-ink font-medium cursor-pointer">
             <ChevronLeft className="w-4 h-4" /><span>Back to Shipments</span>
           </button>
-          <h1 className="text-3xl font-black text-ink tracking-tight font-sans">{shipment.referenceCode}</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-ink tracking-tight font-sans break-words">{shipment.referenceCode}</h1>
           <p className="text-xs text-ink-faint">Cargo Item: <strong className="text-ink-faint font-semibold">{shipment.description}</strong></p>
         </div>
 

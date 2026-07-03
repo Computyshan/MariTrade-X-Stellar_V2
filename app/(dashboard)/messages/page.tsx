@@ -32,6 +32,7 @@ import {
   Truck,
   Shield,
   ChevronRight,
+  ChevronLeft,
   AlertCircle,
   Plus,
   ExternalLink,
@@ -209,7 +210,7 @@ export default function ChatNegotiationCenter() {
   if (sessionLoading) {
     return (
       <DashboardLayout flush={true}>
-        <div className="flex h-screen w-full items-center justify-center">
+        <div className="flex h-full w-full items-center justify-center">
           <div className="text-center space-y-3">
             <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--theme-accent)', borderTopColor: 'transparent' }} />
             <p className="text-[11px] text-ink-faint">Loading session...</p>
@@ -222,7 +223,7 @@ export default function ChatNegotiationCenter() {
   if (!currentUser) {
     return (
       <DashboardLayout flush={true}>
-        <div className="flex h-screen w-full items-center justify-center">
+        <div className="flex h-full w-full items-center justify-center">
           <div className="text-center space-y-3">
             <p className="text-sm font-bold text-ink">Session expired</p>
             <p className="text-[11px] text-ink-faint">Please sign in again to continue.</p>
@@ -686,11 +687,11 @@ export default function ChatNegotiationCenter() {
         userId={viewProfileId}
         onClose={() => setViewProfileId(null)}
       />
-      <div className="flex flex-col h-screen w-full bg-white text-ink overflow-hidden">
+      <div className="flex flex-col h-full w-full bg-white text-ink overflow-hidden">
 
         {/* Toast */}
         {toast && (
-          <div className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-xs font-bold border
+          <div className={`fixed top-5 right-3 md:right-5 left-3 md:left-auto max-w-[calc(100vw-1.5rem)] md:max-w-sm z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-xs font-bold border
             ${toast.type === 'error'
               ? 'bg-wine-light border-wine/20 text-wine'
               : 'bg-steel-light border-steel/20 text-steel'}`}>
@@ -708,21 +709,32 @@ export default function ChatNegotiationCenter() {
         )}
 
         {/* Top Header */}
-        <header className="h-14 bg-white border-b border-mist px-4 md:px-5 flex items-center justify-between select-none shrink-0">
-          <div className="flex items-center gap-3">
-            <MessageSquare className="w-5 h-5" style={{ color: 'var(--theme-accent)', strokeWidth: 2.2 }} />
-            <span className="font-bold text-[13px] tracking-tight text-ink">
+        <header className="h-14 bg-white border-b border-mist px-3 md:px-5 flex items-center justify-between select-none shrink-0">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            {/* Back to chat list — mobile only, visible once a thread is open */}
+            {selectedThreadId && (
+              <button
+                type="button"
+                onClick={() => setSelectedThreadId('')}
+                className="md:hidden -ml-1 p-1.5 rounded-lg text-ink-faint hover:bg-mist-light shrink-0 cursor-pointer"
+                title="Back to chats"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+            <MessageSquare className="w-5 h-5 shrink-0" style={{ color: 'var(--theme-accent)', strokeWidth: 2.2 }} />
+            <span className="font-bold text-[13px] tracking-tight text-ink truncate">
               Messages &amp; Chat
             </span>
-            <div className="h-4 w-px bg-mist" />
+            <div className="hidden sm:block h-4 w-px bg-mist" />
             {/* Network size pill */}
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal bg-teal-light border border-teal/20 px-2.5 py-1 rounded-full">
+            <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-bold text-teal bg-teal-light border border-teal/20 px-2.5 py-1 rounded-full shrink-0">
               <Network className="w-3 h-3" />
               {trustedMembers.length} trusted vendor{trustedMembers.length !== 1 ? 's' : ''}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
             {/* Receipt checklist — Trade Party threads only */}
             {isTradePartyThread && activeThread && (() => {
               const isFinalized   = activeThread.status === 'RECEIPT_FINALIZED';
@@ -772,7 +784,7 @@ export default function ChatNegotiationCenter() {
                   </button>
 
                   {showChecklistPopover && (
-                    <div className="absolute right-0 mt-2.5 w-80 bg-white shadow-2xl rounded-xl border border-mist z-50 overflow-hidden">
+                    <div className="absolute right-0 mt-2.5 w-[calc(100vw-1.5rem)] max-w-80 bg-white shadow-2xl rounded-xl border border-mist z-50 overflow-hidden">
                       <div className="p-3 bg-ink flex items-center justify-between text-white">
                         <h5 className="font-bold flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
                           <ClipboardList className="w-3.5 h-3.5" /> Receipt Checklist
@@ -854,7 +866,7 @@ export default function ChatNegotiationCenter() {
               </button>
 
               {showProfilePopover && currentUser && (
-                <div className="absolute right-0 mt-2.5 w-72 bg-white shadow-2xl rounded-xl border border-mist z-50 overflow-hidden">
+                <div className="absolute right-0 mt-2.5 w-[calc(100vw-1.5rem)] max-w-72 bg-white shadow-2xl rounded-xl border border-mist z-50 overflow-hidden">
                   <div className="p-4 bg-ink flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-bold text-sm text-white shrink-0">
                       {getInitials(currentUser.fullName)}
@@ -934,10 +946,13 @@ export default function ChatNegotiationCenter() {
         </header>
 
         {/* Main layout */}
-        <div className="flex-1 flex overflow-hidden w-full">
+        <div className="flex-1 flex overflow-hidden w-full relative">
 
           {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
-          <div className="w-80 flex-shrink-0 border-r border-mist flex flex-col h-full bg-mist-light/30 overflow-hidden">
+          {/* On mobile this is the full-width "chat list" screen; it hides once a
+              thread is selected in favor of the chat screen, and a header back
+              button returns here. On md+ it's a permanent side rail. */}
+          <div className={`w-full md:w-80 md:flex-shrink-0 border-r border-mist flex-col h-full bg-mist-light/30 overflow-hidden ${selectedThreadId ? 'hidden md:flex' : 'flex'}`}>
 
             {/* Tab switcher */}
             <div className="p-3 pb-2 border-b border-mist bg-white">
@@ -1260,7 +1275,7 @@ export default function ChatNegotiationCenter() {
           </div>
 
           {/* ── CHAT AREA ──────────────────────────────────────────────────── */}
-          <div className="flex-1 flex overflow-hidden min-w-0 h-full bg-mist-light">
+          <div className={`flex-1 overflow-hidden min-w-0 h-full bg-mist-light ${selectedThreadId ? 'flex' : 'hidden md:flex'}`}>
             {activeThread ? (
               <div className="flex-1 flex h-full overflow-hidden">
 
@@ -1268,7 +1283,17 @@ export default function ChatNegotiationCenter() {
                 <div className="flex-1 flex flex-col h-full bg-white overflow-hidden min-w-0">
 
                   {/* Chat header */}
-                  <div className="h-16 border-b border-mist/70 px-5 flex items-center justify-between bg-white/95 backdrop-blur-sm shrink-0 select-none shadow-[0_1px_0_rgba(0,0,0,0.02),0_2px_10px_rgba(20,32,52,0.03)] relative z-10">
+                  <div className="h-16 border-b border-mist/70 px-3 md:px-5 flex items-center justify-between bg-white/95 backdrop-blur-sm shrink-0 select-none shadow-[0_1px_0_rgba(0,0,0,0.02),0_2px_10px_rgba(20,32,52,0.03)] relative z-10">
+                    <div className="flex items-center gap-0.5 min-w-0 flex-1">
+                    {/* Back to chat list — mobile only */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedThreadId('')}
+                      className="md:hidden -ml-1 p-1.5 rounded-lg text-ink-faint hover:bg-mist-light shrink-0 cursor-pointer"
+                      title="Back to chats"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -1318,7 +1343,8 @@ export default function ChatNegotiationCenter() {
                         </p>
                       </div>
                     </button>
-                    <p className="text-[9px] font-mono font-bold text-ink-faint shrink-0 bg-mist-light px-2 py-1 rounded-full">ID: {activeThread?.id}</p>
+                    </div>
+                    <p className="hidden md:block text-[9px] font-mono font-bold text-ink-faint shrink-0 bg-mist-light px-2 py-1 rounded-full">ID: {activeThread?.id}</p>
                   </div>
 
                   {/* Messages */}
@@ -1515,7 +1541,7 @@ export default function ChatNegotiationCenter() {
 
                 {/* Shipment Receipt panel — Trade Party only */}
                 {showReceiptPanel && isTradePartyThread && (
-                  <div className="w-80 border-l border-mist bg-white flex flex-col h-full shrink-0 overflow-y-auto">
+                  <div className="fixed inset-0 z-30 md:z-auto md:static w-full md:w-80 border-l border-mist bg-white flex flex-col h-full shrink-0 overflow-y-auto">
                     <div className="p-4 border-b border-mist bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
                       <h4 className="font-extrabold text-ink flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-mono">
                         <Receipt className="w-4 h-4" style={{ color: 'var(--theme-accent)' }} /> Shipment Receipt

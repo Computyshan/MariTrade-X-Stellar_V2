@@ -446,7 +446,7 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
               <ChevronLeft className="w-4 h-4" />
               Back to BOC Document Vault
             </button>
-            <h1 className="text-3xl font-black text-maritime-900 tracking-tight font-mono">{folder.referenceCode}</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-maritime-900 tracking-tight font-mono break-words">{folder.referenceCode}</h1>
             <p className="text-xs text-gray-500 font-semibold">{folder.folderName}</p>
           </div>
 
@@ -633,7 +633,7 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-3 bg-ocean-50/60 border-t border-ocean-100 flex items-center justify-between">
+            <div className="px-6 py-3 bg-ocean-50/60 border-t border-ocean-100 flex flex-wrap items-center justify-between gap-2">
               <span className="text-[10px] text-ocean-600 font-bold flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3" />
                 {folder.documents.length} file{folder.documents.length !== 1 ? 's' : ''} — Vault session active

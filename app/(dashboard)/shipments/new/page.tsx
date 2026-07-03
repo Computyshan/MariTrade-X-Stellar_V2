@@ -748,7 +748,7 @@ export default function NewShipmentPage() {
         >
           <ChevronLeft className="w-4 h-4" /> Back to Shipments
         </button>
-        <h1 className="text-3xl font-black text-ink tracking-tight">Book Shipping Record</h1>
+        <h1 className="text-2xl sm:text-3xl font-black text-ink tracking-tight">Book Shipping Record</h1>
         <p className="text-xs text-ink-faint">
           Initiate a Stellar multi-signature escrow contract for your incoming cargo.
         </p>

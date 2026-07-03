@@ -134,7 +134,7 @@ export default function DocumentVaultPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs shrink-0">
+        <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
           <div className="flex items-center gap-1.5 bg-white border border-mist px-3 py-1.5 rounded-lg">
             <div className={`w-2 h-2 rounded-full ${hasAccess ? 'bg-teal' : 'bg-wine'}`} />
             <span className="font-semibold text-ink-faint">

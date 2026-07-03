@@ -213,7 +213,7 @@ export default function TeamPage() {
 
         {/* ── TOAST ── */}
         {toast && (
-          <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-xs font-bold flex items-center gap-2 ${
+          <div className={`fixed top-4 right-3 md:right-4 left-3 md:left-auto max-w-[calc(100vw-1.5rem)] md:max-w-sm z-50 px-4 py-3 rounded-xl shadow-lg text-xs font-bold flex items-center gap-2 ${
             toast.type === 'success' ? 'bg-teal text-white' : 'bg-wine text-white'
           }`}>
             {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
@@ -277,7 +277,7 @@ export default function TeamPage() {
                     Create a multi-seat team account so colleagues can log in under their own credentials,
                     see the shipments your team is working on, and hand off work when someone&apos;s away.
                   </p>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <input
                       type="text"
                       placeholder="e.g. Domingo Global Forwarding"
@@ -373,7 +373,7 @@ export default function TeamPage() {
                       <h3 className="text-[11px] font-black uppercase tracking-widest text-ink-faint">Invite a Seat</h3>
                     </div>
                     <div className="p-5 space-y-4">
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                         <input
                           type="email"
                           placeholder="colleague@company.com"

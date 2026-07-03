@@ -172,7 +172,7 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
 
         {/* TOP BAR */}
         <header
-          className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0"
+          className="border-b px-4 sm:px-6 py-3 flex items-center justify-between flex-shrink-0"
           style={isTradeParty
             ? { background: 'linear-gradient(160deg, #fff0f5 0%, #fdf6f9 40%, var(--color-mist-light) 100%)', borderBottomColor: 'var(--color-mist)' }
             : { background: 'linear-gradient(90deg, #ffffff 0%, var(--color-mist-light) 60%, var(--color-mist) 100%)', borderBottomColor: 'var(--color-mist)' }
@@ -228,7 +228,7 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 8, scale: 0.97 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-10 w-80 bg-white border border-mist rounded-2xl shadow-2xl z-40 overflow-hidden"
+                      className="absolute right-0 top-10 w-[calc(100vw-2rem)] max-w-80 bg-white border border-mist rounded-2xl shadow-2xl z-40 overflow-hidden"
                     >
                       {/* Panel header */}
                       <div className="flex items-center justify-between px-4 py-3 border-b border-mist-light">
@@ -379,7 +379,7 @@ export default function DashboardLayout({ children, flush = false, tradeParty = 
           {flush ? (
             <div className="h-full w-full flex flex-col">{children}</div>
           ) : (
-            <div className="p-6 max-w-7xl mx-auto w-full space-y-6 pb-10">
+            <div className="p-4 sm:p-6 max-w-7xl mx-auto w-full space-y-6 pb-10">
               {children}
             </div>
           )}

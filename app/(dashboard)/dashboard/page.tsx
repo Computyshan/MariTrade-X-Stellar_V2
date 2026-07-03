@@ -216,14 +216,14 @@ function AdminDashboard() {
 
       {/* All shipments table */}
       <div className="bg-white border border-mist rounded-xl shadow-sm overflow-hidden">
-        <div className="px-5 py-4 flex items-center justify-between border-b border-mist-light">
+        <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between border-b border-mist-light">
           <h2 className="text-sm font-display font-medium text-ink">All Shipments</h2>
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-mist-dark absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search reference..."
-              className="bg-mist-light border border-mist pl-8 pr-3 py-1.5 rounded-lg text-[11px] outline-none focus:border-mist-dark w-44"
+              className="bg-mist-light border border-mist pl-8 pr-3 py-1.5 rounded-lg text-[11px] outline-none focus:border-mist-dark w-full sm:w-44"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -504,7 +504,7 @@ export default function DashboardHome() {
     <DashboardLayout tradeParty={currentUser.userType === 'TRADE_PARTY'}>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-[42px] font-display font-medium text-ink tracking-tight leading-tight">
+          <h1 className="text-[28px] sm:text-[42px] font-display font-medium text-ink tracking-tight leading-tight">
             Kamusta, {currentUser.fullName.split(' ')[0]}.
           </h1>
           <p className="text-[11px] text-ink-faint mt-1.5 flex items-center gap-3 font-medium tracking-wide">
@@ -596,11 +596,11 @@ export default function DashboardHome() {
               </div>
 
               <div className="rounded-xl shadow-sm overflow-hidden" style={{ border: '1.5px solid var(--color-wine)' }}>
-                <div className="px-5 py-4 flex items-center justify-between" style={{ background: 'linear-gradient(110deg, var(--color-wine) 0%, #6E1138 60%, #4A0A26 100%)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between" style={{ background: 'linear-gradient(110deg, var(--color-wine) 0%, #6E1138 60%, #4A0A26 100%)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                   <h2 className="text-sm font-display font-medium text-white">Active Shipments</h2>
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'rgba(255,255,255,0.5)' }} />
-                    <input type="text" placeholder="Search reference..." className="pl-8 pr-3 py-1.5 rounded-lg text-[11px] outline-none w-44" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', color: 'white' }} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    <input type="text" placeholder="Search reference..." className="pl-8 pr-3 py-1.5 rounded-lg text-[11px] outline-none w-full sm:w-44" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', color: 'white' }} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                   </div>
                 </div>
                 {filteredShipments.length === 0 ? (
@@ -714,7 +714,7 @@ export default function DashboardHome() {
                   <div className="flex items-center gap-3 flex-1 relative z-10">
                     <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center"><ClipboardList className="w-5 h-5 text-[color:var(--color-mist)]" /></div>
                     <div>
-                      <h2 className="text-white font-display font-medium text-[32px] tracking-tight">Log a Milestone</h2>
+                      <h2 className="text-white font-display font-medium text-[24px] sm:text-[32px] tracking-tight">Log a Milestone</h2>
                       <p className="text-white/55 text-[13px] mt-0">Every log is committed to the Stellar trade ledger and cannot be undone.</p>
                     </div>
                   </div>
@@ -833,9 +833,9 @@ export default function DashboardHome() {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display font-medium text-[30px] text-[color:var(--color-ink)] tracking-tight flex items-center gap-2"><Ship className="w-7 h-7 text-[color:var(--color-teal)]" />Assigned Shipments</h3>
-                  <div className="relative"><Search className="w-3.5 h-3.5 text-ink-faint absolute left-2.5 top-2" /><input type="text" placeholder="Search ref…" className="bg-white border border-[color:var(--color-mist-dark)] pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none focus:border-[color:var(--color-teal)] w-36" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+                  <h3 className="font-display font-medium text-[22px] sm:text-[30px] text-[color:var(--color-ink)] tracking-tight flex items-center gap-2"><Ship className="w-6 h-6 sm:w-7 sm:h-7 text-[color:var(--color-teal)]" />Assigned Shipments</h3>
+                  <div className="relative"><Search className="w-3.5 h-3.5 text-ink-faint absolute left-2.5 top-2" /><input type="text" placeholder="Search ref…" className="bg-white border border-[color:var(--color-mist-dark)] pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none focus:border-[color:var(--color-teal)] w-full sm:w-36" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
                 </div>
                 <div className="border border-[color:var(--color-mist-dark)] rounded-2xl overflow-hidden shadow-sm" style={{ background: 'linear-gradient(170deg, #ffffff 0%, var(--color-mist-light) 40%, var(--color-mist) 100%)' }}>
                   <div className="divide-y divide-[color:var(--color-mist)] max-h-[420px] overflow-y-auto">

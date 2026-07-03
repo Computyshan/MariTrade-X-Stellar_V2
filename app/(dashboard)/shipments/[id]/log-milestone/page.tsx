@@ -362,7 +362,7 @@ export default function LogMilestonePage({ params }: PageProps) {
               })}
 
               {/* Evidence mode legend */}
-              <div className="flex items-center gap-4 text-[10px] text-gray-400 pt-1">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-gray-400 pt-1">
                 <span className="flex items-center gap-1"><Hash className="w-3 h-3" /> Reference number</span>
                 <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> Document upload</span>
                 <span className="flex items-center gap-1"><Camera className="w-3 h-3" /> Photo or note</span>
