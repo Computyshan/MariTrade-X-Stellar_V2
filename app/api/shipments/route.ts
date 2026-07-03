@@ -21,8 +21,30 @@ export async function GET(req: NextRequest) {
     // accounts, any shipment a *teammate* (same firm_id) is party to. dbStore
     // uses the Supabase service-role client (bypasses RLS), so this filtering
     // has to happen here rather than relying on RLS policies alone.
+    //
+    // ADMIN accounts are never party to any shipment (they don't import,
+    // export, or get assigned), so without a bypass this endpoint would
+    // always return an empty list for them — breaking the Admin Dashboard's
+    // stat cards, dispute counter, and "All Shipments" table. Give ADMIN
+    // platform-wide visibility here, same as /api/admin/disputes already does.
     const myUserId = user!.id;
     const me = users.find(u => u.id === myUserId);
+
+    if (me?.userType === 'ADMIN') {
+      const decoratedAll = list.map(s => {
+        const importer = users.find(u => u.id === s.importerId) || null;
+        const exporter = s.exporterId ? (users.find(u => u.id === s.exporterId) || null) : null;
+        const shipmentAssignments = assignments
+          .filter(a => a.shipmentId === s.id)
+          .map(a => {
+            const assignedUser = users.find(u => u.id === a.userId) || null;
+            return { ...a, user: assignedUser };
+          });
+        return { ...s, importer, exporter, assignments: shipmentAssignments };
+      });
+      return NextResponse.json({ success: true, data: decoratedAll });
+    }
+
     const teammateIds = me?.firmId
       ? new Set(users.filter(u => u.firmId === me.firmId).map(u => u.id))
       : new Set([myUserId]);
@@ -89,6 +111,20 @@ export async function POST(req: NextRequest) {
     if (importerId !== authedUser!.id) {
       return NextResponse.json(
         { success: false, error: 'You can only create shipments where you are the importer.' },
+        { status: 403 },
+      );
+    }
+
+    // ADMIN accounts are internal platform staff, not trading parties — they
+    // have no importer/exporter role from onboarding and aren't meant to
+    // hold escrow or appear as a shipment counterparty. The check above only
+    // verifies importerId === authedUser.id, which an ADMIN account trivially
+    // satisfies by naming itself as importer. Block that here so an ADMIN
+    // account can never enter the escrow/dispute machinery as a party.
+    const callingUser = await dbStore.getUserById(authedUser!.id);
+    if (callingUser?.userType === 'ADMIN') {
+      return NextResponse.json(
+        { success: false, error: 'Admin accounts cannot create shipments.' },
         { status: 403 },
       );
     }

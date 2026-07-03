@@ -21,8 +21,10 @@ export async function GET(req: NextRequest) {
 
   const dbUser = await dbStore.getUserById(authedUser.id);
 
-  // Gate: only the platform wallet or any dev environment user
+  // Gate: the platform wallet, any app-level ADMIN account (see
+  // scripts/create-admin.ts), or any dev environment user.
   const callerIsPlatform =
+    dbUser?.userType === 'ADMIN' ||
     dbUser?.stellarWallet === PLATFORM_ADDRESS ||
     process.env.NODE_ENV === 'development';
 

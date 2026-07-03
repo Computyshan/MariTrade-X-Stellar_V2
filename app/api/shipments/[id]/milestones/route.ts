@@ -2,6 +2,57 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
 import { MilestoneEvent, MilestoneType, MILESTONE_EVIDENCE_MODE, getMilestonesForUser, getUserJobRoles } from '@/types';
+import { getMariTradeEscrowClient, CancellationStage, NetworkName } from '@/lib/stellar/escrow-contract';
+import { platformSignAndSubmit } from '@/lib/stellar/platform-signer';
+
+const STELLAR_NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as NetworkName;
+const PLATFORM_ADDRESS = process.env.NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS ?? '';
+const PLATFORM_SECRET  = process.env.PLATFORM_STELLAR_SECRET_KEY ?? '';
+
+/**
+ * Milestones that gate the on-chain cancellation_stage transition, per the
+ * contract's own advance_stage() docstring:
+ *   VESSEL_DEPARTED_ORIGIN   → IN_TRANSIT
+ *   DELIVERED_AND_SIGNED_OFF → DELIVERED
+ * Any other milestone type does not move the stage.
+ */
+const STAGE_ADVANCING_MILESTONES: Partial<Record<MilestoneType, CancellationStage>> = {
+  VESSEL_DEPARTED_ORIGIN:   CancellationStage.InTransit,
+  DELIVERED_AND_SIGNED_OFF: CancellationStage.Delivered,
+};
+
+/**
+ * Best-effort on-chain advance_stage() call. Milestone logging (the DB write)
+ * is the primary, must-succeed operation — the on-chain stage sync is
+ * secondary and must never block or fail the milestone POST if Stellar is
+ * unreachable or misconfigured. Errors are logged, not thrown.
+ */
+async function tryAdvanceOnChainStage(
+  referenceCode: string | undefined,
+  milestoneType: MilestoneType,
+): Promise<{ attempted: boolean; hash: string | null; error: string | null }> {
+  const newStage = STAGE_ADVANCING_MILESTONES[milestoneType];
+  if (!newStage) return { attempted: false, hash: null, error: null };
+  if (!referenceCode || !PLATFORM_SECRET || !PLATFORM_ADDRESS) {
+    return { attempted: false, hash: null, error: null };
+  }
+
+  try {
+    const client = getMariTradeEscrowClient(STELLAR_NETWORK, PLATFORM_ADDRESS);
+    const tx = await client.advance_stage({
+      reference_code: referenceCode,
+      platform: PLATFORM_ADDRESS,
+      new_stage: newStage,
+    });
+    const hash = await platformSignAndSubmit(tx, STELLAR_NETWORK);
+    console.log(`[milestones] ✓ advance_stage(${CancellationStage[newStage]}) confirmed for ${referenceCode}. Hash: ${hash}`);
+    return { attempted: true, hash, error: null };
+  } catch (err: any) {
+    const msg = err?.message ?? String(err);
+    console.warn(`[milestones] advance_stage(${CancellationStage[newStage]}) failed for ${referenceCode} (milestone was still logged in DB):`, msg);
+    return { attempted: true, hash: null, error: msg };
+  }
+}
 
 // Role → milestone permission comes from the canonical ROLE_MILESTONES map
 // in types/index.ts via getMilestonesForUser(), which unions the milestone
@@ -116,7 +167,17 @@ export async function POST(
       await dbStore.updatePriorityMilestoneStatus(shipment.id, type, true);
     }
 
-    return NextResponse.json({ success: true, data: milestone });
+    // Sync the on-chain cancellation_stage for milestones that gate it
+    // (VESSEL_DEPARTED_ORIGIN → IN_TRANSIT, DELIVERED_AND_SIGNED_OFF → DELIVERED).
+    // Best-effort: the milestone above is already durably saved regardless
+    // of whether this succeeds.
+    const stageSync = await tryAdvanceOnChainStage(shipment.referenceCode, type as MilestoneType);
+
+    return NextResponse.json({
+      success: true,
+      data: milestone,
+      ...(stageSync.attempted ? { onChainStageSync: { hash: stageSync.hash, error: stageSync.error } } : {}),
+    });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || 'Internal server error.' },

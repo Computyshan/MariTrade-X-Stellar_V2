@@ -114,6 +114,7 @@ export default function LogMilestonePage({ params }: PageProps) {
   const [submitting, setSubmitting]               = useState(false);
   const [success, setSuccess]                     = useState(false);
   const [error, setError]                         = useState('');
+  const [chainSyncWarning, setChainSyncWarning]   = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (loading || !currentUser) {
@@ -210,8 +211,20 @@ export default function LogMilestonePage({ params }: PageProps) {
       });
       const json = await res.json();
       if (json.success) {
+        // Surface a failed on-chain cancellation-stage sync instead of letting
+        // it disappear silently — the milestone POST is best-effort on the
+        // chain side (the DB write is the must-succeed part), but a silent
+        // failure here means the escrow's on-chain stage can drift out of
+        // sync with what the shipment timeline shows, which later confuses
+        // the cancel/dispute flow (it reads the on-chain stage directly).
+        const sync = json.data?.onChainStageSync;
+        if (sync && sync.error) {
+          setChainSyncWarning(
+            `Milestone saved, but the on-chain escrow stage did not update: ${sync.error}`
+          );
+        }
         setSuccess(true);
-        setTimeout(() => router.push(`/shipments/${shipmentId}`), 1800);
+        setTimeout(() => router.push(`/shipments/${shipmentId}`), sync?.error ? 4000 : 1800);
       } else {
         setError(json.error || 'Failed to log milestone.');
       }
@@ -265,10 +278,16 @@ export default function LogMilestonePage({ params }: PageProps) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center space-y-4">
+          <div className="text-center space-y-4 max-w-md">
             <CheckCircle2 className="w-16 h-16 text-ocean-400 mx-auto" />
             <h2 className="text-xl font-black text-maritime-900">Milestone Logged!</h2>
             <p className="text-xs text-gray-500">Redirecting to shipment record…</p>
+            {chainSyncWarning && (
+              <div className="flex items-start gap-2 bg-coral-50 border border-coral-200 text-coral-600 text-xs p-3 rounded-lg text-left">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{chainSyncWarning}</span>
+              </div>
+            )}
           </div>
         </div>
       </DashboardLayout>

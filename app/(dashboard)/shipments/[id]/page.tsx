@@ -454,12 +454,13 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     }
   };
 
-  /** Raise dispute (IN_TRANSIT path). */
+  /** Raise dispute (IN_TRANSIT path). Mirrors the cancel flow: prepare → sign → submit → confirm. */
   const handleRaiseDispute = async () => {
     if (!data) return;
 
     let importerAddress = freighter.publicKey;
     if (!importerAddress) {
+      setCancelState(s => ({ ...s, step: 'preparing', error: '' }));
       try { importerAddress = await freighter.connect(); }
       catch (err) {
         setCancelState(s => ({
@@ -470,23 +471,87 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       }
     }
 
-    setCancelState(s => ({ ...s, step: 'submitting', error: '' }));
+    setCancelState(s => ({ ...s, step: 'preparing', error: '' }));
 
     try {
+      // Step 1: prepare — get the raise_dispute() XDR (or a dbOnly fallback)
       const res = await authFetch(`/api/shipments/${data.shipment.id}/escrow-cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'raise_dispute', importerAddress }),
       });
       const json = await res.json();
-      if (json.success) {
-        setCancelState(s => ({ ...s, step: 'done' }));
-        fetchDetails();
-      } else {
+      if (!json.success) {
         setCancelState(s => ({ ...s, step: 'error', error: json.error || 'Failed to raise dispute.' }));
+        return;
       }
+
+      const { disputeXdr, dbOnly } = json.data;
+
+      if (dbOnly) {
+        setCancelState(s => ({ ...s, step: 'confirming_db' }));
+        await handleConfirmRaiseDisputeDB(data.shipment.id, undefined);
+        return;
+      }
+
+      // Step 2: sign with Freighter (importer-only — no platform co-sign needed)
+      setCancelState(s => ({ ...s, step: 'awaiting_sign' }));
+      let disputeSignedXdr: string;
+      try {
+        disputeSignedXdr = await signXdrWithFreighter(
+          disputeXdr,
+          NETWORKS[STELLAR_NETWORK].networkPassphrase,
+        );
+      } catch (signErr) {
+        const msg = signErr instanceof Error ? signErr.message : String(signErr);
+        if (msg.toLowerCase().includes('cancel') || msg.toLowerCase().includes('reject')) {
+          setCancelState(s => ({ ...s, step: 'idle', error: '' })); // user dismissed
+        } else {
+          setCancelState(s => ({ ...s, step: 'error', error: `Signing failed: ${msg}` }));
+        }
+        return;
+      }
+
+      // Step 3: submit the signed XDR
+      setCancelState(s => ({ ...s, step: 'submitting' }));
+      const submitRes = await authFetch(`/api/shipments/${data.shipment.id}/escrow-cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'submit_raise_dispute', disputeSignedXdr }),
+      });
+      const submitJson = await submitRes.json();
+      if (!submitJson.success) {
+        setCancelState(s => ({ ...s, step: 'error', error: submitJson.error || 'Submission failed.' }));
+        return;
+      }
+
+      // Step 4: confirm — sync DB + notify
+      const confirmedHash = submitJson.data.txHash;
+      await handleConfirmRaiseDisputeDB(data.shipment.id, confirmedHash);
+
     } catch (err: any) {
       setCancelState(s => ({ ...s, step: 'error', error: err?.message ?? 'Failed to raise dispute.' }));
+    }
+  };
+
+  /** Sync DB after on-chain raise_dispute is confirmed (or for DB-only). */
+  const handleConfirmRaiseDisputeDB = async (shipId: string, confirmedHash: string | undefined) => {
+    setCancelState(s => ({ ...s, step: 'confirming_db' }));
+    try {
+      const res = await authFetch(`/api/shipments/${shipId}/escrow-cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'confirm_raise_dispute', txHash: confirmedHash }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setCancelState(s => ({ ...s, step: 'done', txHash: confirmedHash ?? '' }));
+        fetchDetails();
+      } else {
+        setCancelState(s => ({ ...s, step: 'error', error: json.error || 'DB update failed.' }));
+      }
+    } catch (err: any) {
+      setCancelState(s => ({ ...s, step: 'error', error: err?.message ?? 'Failed to update shipment record.' }));
     }
   };
 

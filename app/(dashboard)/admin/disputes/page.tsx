@@ -57,6 +57,14 @@ export default function AdminDisputesPage() {
   // One resolve state per open panel (keyed by shipmentId)
   const [resolveStates, setResolveStates] = useState<Record<string, ResolveState>>({});
 
+  // Disputes that were just resolved in this session, kept pinned in the UI
+  // (with their full "Dispute Resolved" split breakdown) even after a
+  // background refetch removes them from the server's DISPUTED list —
+  // otherwise the confirmation card vanishes out from under the admin
+  // before they can read the split / copy the tx hash. Cleared only when
+  // the admin explicitly dismisses that card.
+  const [resolvedDisputes, setResolvedDisputes] = useState<Record<string, EnrichedDispute>>({});
+
   const fetchDisputes = useCallback(async () => {
     setLoading(true);
     setFetchError('');
@@ -88,6 +96,14 @@ export default function AdminDisputesPage() {
 
   const closeResolvePanel = (shipmentId: string) => {
     setResolveStates(prev => {
+      const next = { ...prev };
+      delete next[shipmentId];
+      return next;
+    });
+    // Dismissing the resolved card is also what finally lets it drop out of
+    // view — see the comment on resolvedDisputes above.
+    setResolvedDisputes(prev => {
+      if (!(shipmentId in prev)) return prev;
       const next = { ...prev };
       delete next[shipmentId];
       return next;
@@ -145,7 +161,12 @@ export default function AdminDisputesPage() {
             split: json.data.split,
           },
         }));
-        // Refresh the disputes list after a short delay so the resolved one disappears
+        // Pin this dispute locally so its resolved card stays visible and
+        // readable — the imminent refetch below will otherwise drop it from
+        // `disputes` the instant the server no longer reports it as DISPUTED.
+        setResolvedDisputes(prev => ({ ...prev, [dispute.id]: dispute }));
+        // Still refresh in the background so other admins' concurrent
+        // resolutions and new incoming disputes stay up to date.
         setTimeout(fetchDisputes, 1500);
       } else {
         setResolveStates(prev => ({
@@ -223,9 +244,15 @@ export default function AdminDisputesPage() {
       )}
 
       {/* Dispute cards */}
-      {!loading && disputes.length > 0 && (
+      {!loading && (disputes.length > 0 || Object.keys(resolvedDisputes).length > 0) && (
         <div className="space-y-6">
-          {disputes.map((dispute) => {
+          {[
+            ...disputes,
+            // Append any locally-pinned resolved disputes that the latest fetch
+            // no longer returns, so their confirmation card stays on screen
+            // until explicitly dismissed (see resolvedDisputes above).
+            ...Object.values(resolvedDisputes).filter(rd => !disputes.some(d => d.id === rd.id)),
+          ].map((dispute) => {
             const rs = resolveStates[dispute.id];
             const platformFee = rs ? Math.round((100 - rs.importerPct - rs.exporterPct) * 100) / 100 : 0;
             const importerAmt = rs ? Math.floor((dispute.totalValueUSD * rs.importerPct) / 100) : 0;

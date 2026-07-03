@@ -24,8 +24,18 @@
  *   escrowStatus → REFUNDED, status → CANCELLED. Sends notifications.
  *
  * POST { action: "raise_dispute", importerAddress }
- *   Platform calls raise_dispute() on-chain, then updates DB to DISPUTED.
- *   Sends notifications to both parties.
+ *   Builds raise_dispute() XDR for Freighter (importer-only signing — the
+ *   contract only requires importer.require_auth(), no platform co-sign).
+ *   Falls back to DB-only if Stellar is unreachable/unconfigured.
+ *   Returns { disputeXdr, dbOnly } | { dbOnly: true }
+ *
+ * POST { action: "submit_raise_dispute", disputeSignedXdr }
+ *   Receives the Freighter-signed raise_dispute XDR, submits it to Stellar,
+ *   polls for confirmation, returns { txHash }.
+ *
+ * POST { action: "confirm_raise_dispute", txHash? }
+ *   Called after raise_dispute is confirmed on-chain (or for DB-only).
+ *   Updates DB to DISPUTED. Sends notifications to both parties.
  *
  * POST { action: "resolve_dispute", importerBps, exporterBps }
  *   Platform admin only. Calls resolve_dispute() on-chain, splits funds,
@@ -33,7 +43,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Keypair, Networks, Transaction } from '@stellar/stellar-sdk';
+import { Address, Keypair, Networks, Transaction } from '@stellar/stellar-sdk';
 import { Server as SorobanServer } from '@stellar/stellar-sdk/rpc';
 import { AssembledTransaction, basicNodeSigner } from '@stellar/stellar-sdk/contract';
 import { requireAuth } from '@/lib/auth-guard';
@@ -140,7 +150,7 @@ export async function POST(
     return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { action, importerAddress, txHash, importerBps, exporterBps, cancelSignedXdr } = body;
+  const { action, importerAddress, txHash, importerBps, exporterBps, cancelSignedXdr, disputeSignedXdr } = body;
 
   const shipment = await dbStore.getShipmentById(shipmentId);
   if (!shipment) {
@@ -194,6 +204,47 @@ export async function POST(
       onChainStage    = record.cancellation_stage as CancellationStage;
       onChainStatus   = record.status as EscrowStatus;
       partialRefundBps = record.partial_refund_bps;
+
+      // ── TEMP DIAGNOSTIC ── print the raw on-chain record exactly as read,
+      // before any of it gets mapped/renamed below. This is the ground truth
+      // that cancel()'s simulation will branch on.
+      console.log('[escrow-cancel][diag] raw on-chain record:', {
+        reference_code: record.reference_code,
+        importer: record.importer,
+        exporter: record.exporter,
+        platform: record.platform,
+        status: EscrowStatus[record.status] ?? record.status,
+        cancellation_stage: CancellationStage[record.cancellation_stage] ?? record.cancellation_stage,
+        partial_refund_bps: record.partial_refund_bps,
+      });
+      console.log('[escrow-cancel][diag] request importerAddress:', importerAddress, '| env PLATFORM_ADDRESS:', PLATFORM_ADDRESS);
+
+      // Fail fast if the caller's importer/platform addresses don't match the
+      // ones baked into this escrow record at create_escrow() time. cancel()
+      // checks these with early `return Err(...)` BEFORE any require_auth()
+      // call — so on a mismatch, the later cancelTx.signAuthEntries() call
+      // below finds zero auth entries at all (none were ever requested) and
+      // throws the SDK's generic "No unsigned non-invoker auth entries"
+      // error, which is useless for debugging. Surface the real cause here
+      // instead, while the actual on-chain values are still in hand.
+      if (record.importer !== importerAddress) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `This escrow's on-chain importer (${record.importer}) does not match the connected wallet (${importerAddress}). The cancel transaction cannot be authorized.`,
+          },
+          { status: 409 },
+        );
+      }
+      if (record.platform !== PLATFORM_ADDRESS) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `This escrow's on-chain platform address (${record.platform}) does not match the server's current NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS (${PLATFORM_ADDRESS}). It was likely created with a different platform keypair — update .env.local to match, or re-create the escrow.`,
+          },
+          { status: 409 },
+        );
+      }
     } catch (err: any) {
       console.warn('[escrow-cancel] get_escrow failed, falling back to DB-only:', err.message);
       const isUnfunded = shipment.escrowStatus !== 'FUNDED';
@@ -249,7 +300,50 @@ export async function POST(
         platform: PLATFORM_ADDRESS,
       });
 
+      // ── TEMP DIAGNOSTIC ── did the cancel() simulation itself return Ok or
+      // Err? If it errored, no auth entries would ever be requested (the
+      // require_auth() calls in the PreDeparture branch are never reached),
+      // which would otherwise look identical to "simulation succeeded but
+      // needs no platform auth". This distinguishes the two cases.
+      try {
+        const simResult = (cancelTx as any).result;
+        console.log('[escrow-cancel][diag] cancel() sim isErr:', simResult?.isErr?.());
+        if (simResult?.isErr?.()) {
+          console.log('[escrow-cancel][diag] cancel() sim error value:', simResult.unwrapErr());
+        }
+        console.log('[escrow-cancel][diag] simulation.error:', (cancelTx as any).simulation?.error);
+        console.log('[escrow-cancel][diag] simulation.restorePreamble:', (cancelTx as any).simulation?.restorePreamble);
+      } catch (simDiagErr: any) {
+        console.log('[escrow-cancel][diag] sim result diagnostic failed:', simDiagErr?.message ?? simDiagErr);
+      }
+
       if (onChainStage === CancellationStage.PreDeparture) {
+        // ── TEMP DIAGNOSTIC ── log exactly what the simulation returned so we
+        // can see how many Soroban auth entries exist and for which addresses,
+        // before signAuthEntries() decides whether there's anything to sign.
+        // Safe to remove once the PRE_DEPARTURE cancel flow is confirmed working.
+        try {
+          const rawAuth = (cancelTx.built as any)?.operations?.[0]?.auth ?? [];
+          console.log(`[escrow-cancel][diag] cancel() simulation returned ${rawAuth.length} auth entr${rawAuth.length === 1 ? 'y' : 'ies'}`);
+          rawAuth.forEach((entry: any, i: number) => {
+            try {
+              const credType = entry.credentials().switch().name;
+              if (credType === 'sorobanCredentialsAddress') {
+                const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
+                const sigSet = entry.credentials().address().signature().switch().name !== 'scvVoid';
+                console.log(`[escrow-cancel][diag]   [${i}] type=Address address=${addr} alreadySigned=${sigSet}`);
+              } else {
+                console.log(`[escrow-cancel][diag]   [${i}] type=${credType} (invoker/source-account — no explicit signature needed)`);
+              }
+            } catch (introspectErr: any) {
+              console.log(`[escrow-cancel][diag]   [${i}] could not introspect entry:`, introspectErr?.message ?? introspectErr);
+            }
+          });
+          console.log('[escrow-cancel][diag] needsNonInvokerSigningBy():', cancelTx.needsNonInvokerSigningBy());
+        } catch (diagErr: any) {
+          console.log('[escrow-cancel][diag] diagnostic logging failed:', diagErr?.message ?? diagErr);
+        }
+
         // Platform must co-sign its auth entry before returning to the browser.
         // Freighter will add the importer's envelope signature (which satisfies
         // the importer's source-account auth entry automatically in Soroban).
@@ -346,7 +440,9 @@ export async function POST(
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  raise_dispute — importer escalates an IN_TRANSIT cancellation
+  //  raise_dispute — prepare the Freighter-signable raise_dispute() XDR
+  //  (importer-only signing — the contract only requires importer.require_auth(),
+  //  no platform co-sign needed, unlike PRE_DEPARTURE cancel).
   // ═══════════════════════════════════════════════════════════════════════════
   if (action === 'raise_dispute') {
     if (authedUser.id !== shipment.importerId) {
@@ -365,7 +461,70 @@ export async function POST(
       );
     }
 
-    // Update DB immediately; on-chain call is best-effort below
+    // No Stellar config or no reference code → DB-only dispute (same fallback
+    // pattern as prepare_cancel).
+    if (!PLATFORM_SECRET || !PLATFORM_ADDRESS || !shipment.referenceCode) {
+      return NextResponse.json({ success: true, data: { dbOnly: true } });
+    }
+
+    try {
+      // Build with the importer as the source account so the simulation uses
+      // their current sequence number. raise_dispute() only calls
+      // importer.require_auth() — Freighter's envelope signature alone
+      // satisfies it, so no platformSignAndSubmit / auth-entry co-sign step
+      // is needed here at all.
+      const importerClient = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
+      const disputeTx = await importerClient.raise_dispute({
+        reference_code: shipment.referenceCode,
+        importer: importerAddress,
+      });
+      const disputeXdr = disputeTx.toXDR();
+      return NextResponse.json({ success: true, data: { disputeXdr } });
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      console.error('[escrow-cancel] prepare raise_dispute build failed:', msg);
+      return NextResponse.json(
+        { success: false, error: `Failed to build dispute transaction: ${msg}` },
+        { status: 500 },
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  submit_raise_dispute — browser Freighter-signed the XDR; server submits + polls
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (action === 'submit_raise_dispute') {
+    if (authedUser.id !== shipment.importerId) {
+      return NextResponse.json({ success: false, error: 'Only the importer may raise a dispute' }, { status: 403 });
+    }
+    if (!disputeSignedXdr) {
+      return NextResponse.json({ success: false, error: 'disputeSignedXdr is required' }, { status: 400 });
+    }
+
+    try {
+      const confirmedHash = await submitSignedXdr(disputeSignedXdr);
+      return NextResponse.json({ success: true, data: { txHash: confirmedHash } });
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      const friendly =
+        msg.includes('#22') || msg.includes('NotInTransit')
+          ? 'Disputes can only be raised while the shipment is in transit.'
+          : msg.includes('#17') || msg.includes('AlreadySettled')
+          ? 'This escrow has already been settled on-chain.'
+          : msg;
+      return NextResponse.json({ success: false, error: friendly }, { status: 500 });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  confirm_raise_dispute — DB sync (called after on-chain dispute confirmed,
+  //  or for DB-only)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (action === 'confirm_raise_dispute') {
+    if (authedUser.id !== shipment.importerId) {
+      return NextResponse.json({ success: false, error: 'Only the importer may raise a dispute' }, { status: 403 });
+    }
+
     const updated = {
       ...shipment,
       status:       'DISPUTED' as const,
@@ -373,35 +532,6 @@ export async function POST(
       updatedAt:    new Date().toISOString(),
     };
     await dbStore.saveShipment(updated);
-
-    // Attempt on-chain raise_dispute via platform keypair
-    let onChainHash: string | null = null;
-    if (PLATFORM_SECRET && PLATFORM_ADDRESS && shipment.referenceCode) {
-      try {
-        // The contract requires importer.require_auth() on raise_dispute.
-        // We build the tx with PLATFORM_ADDRESS as the source but pass
-        // importerAddress as the `importer` argument. basicNodeSigner covers
-        // the auth entry for the platform, but the importer's auth entry
-        // cannot be satisfied server-side without their private key.
-        //
-        // In production the browser would sign raise_dispute via Freighter.
-        // For the sandbox/demo we attempt it from the platform account, which
-        // will fail with NotImporter if the contract checks the auth entry
-        // strictly. The DB is already updated either way.
-        const client = getMariTradeEscrowClient(STELLAR_NETWORK, importerAddress);
-        const disputeTx = await client.raise_dispute({
-          reference_code: shipment.referenceCode,
-          importer: importerAddress,
-        });
-        // Note: this will only succeed if importerAddress == PLATFORM_ADDRESS
-        // or the platform has been granted auth. In most cases this silently
-        // fails and the DB record is the source of truth.
-        onChainHash = await platformSignAndSubmit(disputeTx);
-        console.log(`[escrow-cancel] ✓ raise_dispute on-chain. Hash: ${onChainHash}`);
-      } catch (err: any) {
-        console.warn('[escrow-cancel] raise_dispute on-chain skipped (DB already updated):', err.message);
-      }
-    }
 
     await notifyUser({
       userId:   shipment.importerId,
@@ -420,21 +550,24 @@ export async function POST(
       });
     }
 
-    return NextResponse.json({ success: true, data: { shipment: updated, onChainHash } });
+    return NextResponse.json({ success: true, data: { shipment: updated, txHash: txHash ?? null } });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  resolve_dispute — platform admin splits the locked funds and closes escrow
   // ═══════════════════════════════════════════════════════════════════════════
   if (action === 'resolve_dispute') {
-    // Gate: must be the platform wallet or, in sandbox, any authenticated user.
-    // requireAuth only returns { id, email } from the JWT — not stellarWallet —
-    // so we do a quick DB lookup to get the caller's full profile.
+    // Gate: must be the platform wallet, an app-level ADMIN account, or —
+    // in sandbox — any authenticated user. requireAuth only returns
+    // { id, email } from the JWT — not stellarWallet/userType — so we do a
+    // quick DB lookup to get the caller's full profile.
     let resolvedIsPlatform = process.env.NODE_ENV === 'development';
-    if (!resolvedIsPlatform && PLATFORM_ADDRESS) {
+    if (!resolvedIsPlatform) {
       try {
         const callerProfile = await dbStore.getUserById(authedUser!.id);
-        resolvedIsPlatform = callerProfile?.stellarWallet === PLATFORM_ADDRESS;
+        resolvedIsPlatform =
+          callerProfile?.userType === 'ADMIN' ||
+          (!!PLATFORM_ADDRESS && callerProfile?.stellarWallet === PLATFORM_ADDRESS);
       } catch {
         resolvedIsPlatform = false;
       }
