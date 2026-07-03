@@ -60,6 +60,7 @@ import {
   CURRENCY_SYMBOLS,
   ShipmentReceipt,
   ShipmentScope,
+  getUserJobRoles,
 } from '@/types';
 import UserProfileModal from '@/components/UserProfileModal';
 
@@ -881,11 +882,13 @@ export default function ChatNegotiationCenter() {
                   </div>
 
                   <div className="p-3 space-y-2">
-                    {/* Role badge */}
-                    <div className="flex items-center gap-2 px-1">
-                      <span className={`text-[9px] px-2 py-0.5 font-extrabold rounded border uppercase tracking-wide ${getRoleColor(currentUser.jobRole)}`}>
-                        {JOB_ROLE_LABELS[currentUser.jobRole] ?? currentUser.jobRole.replace(/_/g, ' ')}
-                      </span>
+                    {/* Role badge(s) — one chip per stacked role */}
+                    <div className="flex items-center gap-1.5 px-1 flex-wrap">
+                      {getUserJobRoles(currentUser).map(role => (
+                        <span key={role} className={`text-[9px] px-2 py-0.5 font-extrabold rounded border uppercase tracking-wide ${getRoleColor(role)}`}>
+                          {JOB_ROLE_LABELS[role] ?? role.replace(/_/g, ' ')}
+                        </span>
+                      ))}
                       {currentUser.kycStatus === 'VERIFIED' && (
                         <span className="flex items-center gap-1 text-[9px] font-bold text-teal bg-teal-light border border-teal/20 px-2 py-0.5 rounded">
                           <ShieldCheck className="w-2.5 h-2.5" /> KYC Verified

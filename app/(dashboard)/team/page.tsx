@@ -20,7 +20,7 @@ import {
   LogOut,
   Ship,
 } from 'lucide-react';
-import { Firm, FirmInvite, User, Shipment } from '@/types';
+import { Firm, FirmInvite, User, Shipment, getUserJobRoles } from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -343,7 +343,7 @@ export default function TeamPage() {
                                   <span className="text-[9px] font-bold text-ink-faint">(you)</span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-ink-faint truncate">{member.email} · {member.jobRole.replace(/_/g, ' ')}</p>
+                              <p className="text-[11px] text-ink-faint truncate">{member.email} · {getUserJobRoles(member).map(r => r.replace(/_/g, ' ')).join(' + ')}</p>
                             </div>
                           </div>
 
@@ -464,7 +464,7 @@ export default function TeamPage() {
                     >
                       <option value="">Don&apos;t reassign — leave as-is</option>
                       {otherMembers.map(m => (
-                        <option key={m.id} value={m.id}>{m.fullName} ({m.jobRole.replace(/_/g, ' ')})</option>
+                        <option key={m.id} value={m.id}>{m.fullName} ({getUserJobRoles(m).map(r => r.replace(/_/g, ' ')).join(' + ')})</option>
                       ))}
                     </select>
                   </div>
