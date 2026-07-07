@@ -217,7 +217,7 @@ export default function LogMilestonePage({ params }: PageProps) {
         // failure here means the escrow's on-chain stage can drift out of
         // sync with what the shipment timeline shows, which later confuses
         // the cancel/dispute flow (it reads the on-chain stage directly).
-        const sync = json.data?.onChainStageSync;
+        const sync = json.onChainStageSync;
         if (sync && sync.error) {
           setChainSyncWarning(
             `Milestone saved, but the on-chain escrow stage did not update: ${sync.error}`

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, startTransition } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession } from '@/hooks/use-user-session';
 import { authFetch } from '@/hooks/use-user-session';
@@ -159,9 +159,12 @@ export default function NetworkPage() {
     setLoading(false);
   }, [fetchDirectory, fetchConnections, currentUserId]);
 
+  // Wrapped in startTransition so the initial setLoading(true) inside
+  // refresh() isn't treated as a synchronous cascading render straight
+  // out of the effect (see react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (currentUserId) refresh();
-  }, [currentUserId]);
+    if (currentUserId) startTransition(() => { refresh(); });
+  }, [currentUserId, refresh]);
 
   // Background poll every 30s
   useEffect(() => {
@@ -181,7 +184,7 @@ export default function NetworkPage() {
     if (!isMounted.current) { isMounted.current = true; return; }
     const t = setTimeout(fetchDirectory, 350);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, fetchDirectory]);
 
   const sendRequest = async (receiverId: string) => {
     if (!currentUser?.id) return;

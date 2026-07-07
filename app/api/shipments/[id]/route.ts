@@ -347,6 +347,10 @@ export async function POST(
 
       // ── STELLAR: Advance escrow stage based on the logged milestone ─────────
       // Only attempt if the shipment is already funded on-chain.
+      // Surfaced back to the caller so the UI can show a real "chain didn't
+      // sync" warning instead of a banner that never fires (see route history).
+      let onChainStageSync: { attempted: boolean; success: boolean; txHash?: string; error?: string } | null = null;
+
       if (shipment.stellarEscrowId && shipment.referenceCode && PLATFORM_ADDRESS) {
         const client = getMariTradeEscrowClient(
           STELLAR_NETWORK as 'testnet' | 'mainnet',
@@ -380,19 +384,34 @@ export async function POST(
         }
 
         if (stageAssembled) {
-          const txHash = await platformSignAndSend(stageAssembled);
-          if (txHash) {
-            console.log(
-              `[Stellar] Stage advanced for ${shipment.referenceCode}. Milestone: ${type}. Hash: ${txHash}`,
-            );
+          try {
+            const txHash = await platformSignAndSend(stageAssembled);
+            if (txHash) {
+              onChainStageSync = { attempted: true, success: true, txHash };
+              console.log(
+                `[Stellar] Stage advanced for ${shipment.referenceCode}. Milestone: ${type}. Hash: ${txHash}`,
+              );
+            } else {
+              // platformSignAndSend returns null only when the platform key isn't
+              // configured — treat as "not attempted", not a failure, so the UI
+              // doesn't warn about something that was never expected to run.
+              onChainStageSync = { attempted: false, success: false };
+            }
+          } catch (err: any) {
+            const msg = err?.message ?? String(err);
+            console.error(`[Stellar] advance_stage FAILED for ${shipment.referenceCode}:`, msg);
+            onChainStageSync = { attempted: true, success: false, error: msg };
           }
-          // Non-blocking: DB record is already updated regardless of chain result.
+          // DB record is already updated regardless of chain result — the
+          // milestone log itself always succeeds. onChainStageSync tells the
+          // caller whether the on-chain mirror kept up, so the UI can warn
+          // and offer a retry instead of silently drifting out of sync.
         }
       }
 
       return NextResponse.json({
         success: true,
-        data:    { milestone: newMilestone, shipment: updatedShipment },
+        data:    { milestone: newMilestone, shipment: updatedShipment, onChainStageSync },
       });
     }
 

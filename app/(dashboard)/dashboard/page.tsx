@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -324,7 +324,6 @@ export default function DashboardHome() {
   const [logMessage, setLogMessage]             = useState('');
   const [logEvidence, setLogEvidence]           = useState('');   // URL after upload
   const [logEvidenceRef, setLogEvidenceRef]     = useState('');   // reference number
-  const [logEvidenceMode, setLogEvidenceMode]   = useState<'REFERENCE_NUMBER' | 'DOCUMENT' | 'PHOTO_OR_NOTE'>('REFERENCE_NUMBER');
   const [logUploading, setLogUploading]         = useState(false);
   const [logUploadError, setLogUploadError]     = useState('');
   const logFileInputRef = useRef<HTMLInputElement>(null);
@@ -344,8 +343,9 @@ export default function DashboardHome() {
   const [estimating, setEstimating] = useState(false);
 
   // ── All hooks must be declared before any early return (Rules of Hooks) ────
-  // fetchData is defined here so useEffect below can reference it.
-  const fetchData = async () => {
+  // fetchData is defined here so useEffect below can reference it. Memoized
+  // with useCallback so the effect can safely list it as a dependency.
+  const fetchData = useCallback(async () => {
     if (!currentUser) return;
     try {
       setLoading(true);
@@ -361,25 +361,33 @@ export default function DashboardHome() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser]);
 
-  useEffect(() => { fetchData(); }, [currentUser]);
+  // Wrapped in startTransition so the initial setLoading(true) inside
+  // fetchData() isn't treated as a synchronous cascading render straight
+  // out of the effect (see react-hooks/set-state-in-effect).
+  useEffect(() => { startTransition(() => { fetchData(); }); }, [fetchData]);
 
-  useEffect(() => {
-    if (!currentUser) return;
+  // Job role / milestone-type picker defaults, re-derived whenever the
+  // signed-in account changes. Adjusted directly during render (React's
+  // recommended pattern for syncing to an external value) instead of in
+  // an Effect, avoiding an extra synchronous cascading render.
+  const [syncedForUserId, setSyncedForUserId] = useState<string | null>(null);
+  if (currentUser && currentUser.id !== syncedForUserId) {
+    setSyncedForUserId(currentUser.id);
     const roles = getUserJobRoles(currentUser);
     // Prefer the account's primary/display role if it's actually in the
     // stacked role list; otherwise fall back to the first stacked role.
     const primaryRole = roles.includes(currentUser.jobRole) ? currentUser.jobRole : roles[0];
-    if (!primaryRole) return;
-    setLogJobRole(primaryRole);
-    const list = MILESTONE_BY_JOB[primaryRole];
-    if (list && list.length > 0) setLogMilestoneType(list[0]);
-  }, [currentUser]);
+    if (primaryRole) {
+      setLogJobRole(primaryRole);
+      const list = MILESTONE_BY_JOB[primaryRole];
+      if (list && list.length > 0) setLogMilestoneType(list[0]);
+    }
+  }
 
-  useEffect(() => {
-    setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[logMilestoneType]);
-  }, [logMilestoneType]);
+  // Fully derived from logMilestoneType — no state or effect needed.
+  const logEvidenceMode = MILESTONE_EVIDENCE_MODE[logMilestoneType];
 
   // ── Admin: render completely separate view, no shared data fetching needed ──
   if (!currentUser) {
@@ -417,7 +425,6 @@ export default function DashboardHome() {
     setLogEvidence('');
     setLogEvidenceRef('');
     setLogUploadError('');
-    setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[type]);
     if (logFileInputRef.current) logFileInputRef.current.value = '';
   };
 
@@ -430,7 +437,6 @@ export default function DashboardHome() {
     const nextType = opts[0];
     if (nextType) {
       setLogMilestoneType(nextType);
-      setLogEvidenceMode(MILESTONE_EVIDENCE_MODE[nextType]);
     }
     setLogEvidence('');
     setLogEvidenceRef('');

@@ -89,13 +89,16 @@ export default function OnboardingPage() {
   };
 
   // Keep the manual input in sync once Freighter connects, and clear any
-  // stale format error from a previous manual paste attempt.
-  React.useEffect(() => {
-    if (freighter.publicKey) {
-      setStellarWallet(freighter.publicKey);
-      setStellarWalletError('');
-    }
-  }, [freighter.publicKey]);
+  // stale format error from a previous manual paste attempt. This adjusts
+  // state directly during render (React's recommended pattern for syncing
+  // to an external value) instead of in an Effect, which avoids an extra
+  // synchronous cascading render on every Freighter connection change.
+  const [syncedFreighterKey, setSyncedFreighterKey] = useState<string | null>(null);
+  if (freighter.publicKey && freighter.publicKey !== syncedFreighterKey) {
+    setSyncedFreighterKey(freighter.publicKey);
+    setStellarWallet(freighter.publicKey);
+    setStellarWalletError('');
+  }
 
   const isValidStellarAddress = (addr: string) => /^G[A-Z2-7]{55}$/.test(addr.trim());
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, startTransition } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import {
@@ -189,7 +189,10 @@ export default function AnalyticsPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Wrapped in startTransition so the initial setLoading(true) inside
+  // load() isn't treated as a synchronous cascading render straight out
+  // of the effect (see react-hooks/set-state-in-effect).
+  useEffect(() => { startTransition(() => { load(); }); }, [load]);
 
   const handleExportAll = () => {
     if (!data) return;

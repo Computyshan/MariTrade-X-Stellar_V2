@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, startTransition } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession, authFetch } from '@/hooks/use-user-session';
@@ -105,7 +105,7 @@ export default function ShipmentsList() {
 
   const isTradeParty = currentUser?.userType === 'TRADE_PARTY';
 
-  const loadSavedViews = async () => {
+  const loadSavedViews = useCallback(async () => {
     try {
       const res = await authFetch('/api/shipments/saved-views');
       const json = await res.json();
@@ -113,26 +113,32 @@ export default function ShipmentsList() {
     } catch {
       console.warn('Could not load saved views');
     }
-  };
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const res = await authFetch('/api/shipments');
-        const json = await res.json();
-        if (json.success) {
-          setShipments(json.data);
-        }
-      } catch {
-        console.warn('Fallback loading');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-    loadSavedViews();
   }, []);
+
+  const loadShipments = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await authFetch('/api/shipments');
+      const json = await res.json();
+      if (json.success) {
+        setShipments(json.data);
+      }
+    } catch {
+      console.warn('Fallback loading');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Wrapped in startTransition so the initial setLoading(true) inside
+  // loadShipments() isn't treated as a synchronous cascading render
+  // straight out of the effect (see react-hooks/set-state-in-effect).
+  useEffect(() => {
+    startTransition(() => {
+      loadShipments();
+      loadSavedViews();
+    });
+  }, [loadShipments, loadSavedViews]);
 
   const applySavedView = (view: SavedShipmentView) => {
     setStatusFilter(view.filters.status ?? []);

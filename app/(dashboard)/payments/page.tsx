@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, startTransition } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import {
@@ -73,7 +73,10 @@ export default function EscrowLedger() {
     }
   }, []);
 
-  useEffect(() => { fetchShipments(); }, [fetchShipments]);
+  // Wrapped in startTransition so the initial setLoading(true) inside
+  // fetchShipments() isn't treated as a synchronous cascading render
+  // straight out of the effect (see react-hooks/set-state-in-effect).
+  useEffect(() => { startTransition(() => { fetchShipments(); }); }, [fetchShipments]);
 
   // ── Query on-chain status for all funded/on-chain shipments ───────────────
   const refreshChainData = useCallback(async (list: Shipment[]) => {
@@ -142,8 +145,11 @@ export default function EscrowLedger() {
     setChainLoading(false);
   }, []);
 
+  // Wrapped in startTransition so the setChainLoading(true)/setChainMap
+  // calls inside refreshChainData() aren't treated as a synchronous
+  // cascading render straight out of the effect.
   useEffect(() => {
-    if (shipments.length > 0) refreshChainData(shipments);
+    if (shipments.length > 0) startTransition(() => { refreshChainData(shipments); });
   }, [shipments, refreshChainData]);
 
   // ── Totals — prefer on-chain data where available ─────────────────────────
