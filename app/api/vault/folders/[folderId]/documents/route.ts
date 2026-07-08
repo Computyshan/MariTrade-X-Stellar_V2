@@ -84,7 +84,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     // 6. Save document record (saveDocument handles marking older versions is_latest=false)
     const doc = await dbStore.saveDocument({
-      id: '',
+      id: `doc_${crypto.randomUUID()}`,
       shipmentId: folder.shipmentId,
       fileName: file.name,
       fileUrl: urlData.publicUrl,

@@ -731,9 +731,15 @@ export const dbStore = {
         .eq('shipment_id', doc.shipmentId)
         .eq('file_name', doc.fileName);
     }
+    // Guard against a blank/falsy id: if we sent `id: ''` verbatim it would
+    // be inserted as the literal primary key instead of falling through to
+    // the column's `'doc_' || gen_random_uuid()::text` default, so every
+    // subsequent upload with no id would collide on that same empty string.
+    const row = documentToRow(doc);
+    if (!row.id) delete row.id;
     const { data, error } = await admin
       .from('shipment_documents')
-      .insert(documentToRow(doc))
+      .insert(row)
       .select()
       .single();
     assertNoError(error, 'saveDocument');
