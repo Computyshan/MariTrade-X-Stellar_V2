@@ -2,42 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { canAccessShipmentVault } from '@/lib/server/vault-access';
 
 type Ctx = { params: Promise<{ folderId: string }> };
 
 const BUCKET = 'vault-documents';
 
-// A caller may act on a vault folder's documents only if they're a party to
-// the underlying shipment: the importer, the exporter, an assigned logistics
-// user, or a firm teammate of any of those (mirrors the scoping already used
-// in GET /api/shipments). Without this, any authenticated MariTrade user
-// could upload or delete documents in another party's BOC vault just by
-// guessing/knowing a folderId.
-async function canAccessShipmentVault(userId: string, shipmentId: string): Promise<boolean> {
-  const [shipment, me, assignments] = await Promise.all([
-    dbStore.getShipmentById(shipmentId),
-    dbStore.getUserById(userId),
-    dbStore.getAssignmentsForShipment(shipmentId),
-  ]);
-  if (!shipment || !me) return false;
-
-  const teammateFirmId = me.firmId ?? null;
-
-  const isDirectParty =
-    shipment.importerId === userId ||
-    shipment.exporterId === userId ||
-    assignments.some(a => a.userId === userId);
-  if (isDirectParty) return true;
-
-  // Firm-teammate check: is a teammate the importer/exporter/assignee?
-  if (!teammateFirmId) return false;
-  const relevantIds = [shipment.importerId, shipment.exporterId, ...assignments.map(a => a.userId)]
-    .filter((id): id is string => Boolean(id));
-  if (relevantIds.length === 0) return false;
-
-  const relevantUsers = await Promise.all(relevantIds.map(id => dbStore.getUserById(id)));
-  return relevantUsers.some(u => u?.firmId === teammateFirmId);
-}
+// canAccessShipmentVault (imported above) is the single source of truth for
+// who counts as a party to a shipment's vault — the importer, the exporter,
+// an assigned logistics user, or a firm teammate of any of those. Without
+// this, any authenticated MariTrade user could upload or delete documents in
+// another party's BOC vault just by guessing/knowing a folderId.
 
 // ─── POST /api/vault/folders/[folderId]/documents ─────────────────────────────
 // Accepts multipart/form-data with a `file` field.

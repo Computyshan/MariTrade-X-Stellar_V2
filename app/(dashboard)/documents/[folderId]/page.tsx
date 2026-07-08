@@ -27,7 +27,7 @@ import {
   Paperclip,
 } from 'lucide-react';
 import { ShipmentDocument, ShipmentScope, ShipmentStatus } from '@/types';
-import { canAccessBOCDocuments, canDownloadDocuments, canUploadDocuments } from '@/lib/permissions/documents';
+import { canAccessBOCDocuments } from '@/lib/permissions/documents';
 import { motion } from 'motion/react';
 
 // ── STATUS CONFIG ────────────────────────────────────────────────────────────
@@ -162,8 +162,13 @@ export default function VaultFolderPage({ params }: { params: Promise<PageParams
   }
 
   const hasAccess   = canAccessBOCDocuments(currentUser.jobRole);
-  const canDownload = canDownloadDocuments(currentUser.jobRole);
-  const canUpload   = canUploadDocuments(currentUser.jobRole);
+  // Download/upload are no longer role-gated — they mirror vault access.
+  // GET /api/vault/folders/[folderId] already 403s unless the caller is a
+  // party to this shipment (importer, exporter, assignee, or firm teammate
+  // of one of those), so if `folder` loaded at all, the current user is
+  // guaranteed to be an assigned party and can download/upload here.
+  const canDownload = true;
+  const canUpload   = true;
 
   // ── Upload handler ──
   async function handleUpload() {

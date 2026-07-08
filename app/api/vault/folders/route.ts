@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
+import { canAccessShipmentVault } from '@/lib/server/vault-access';
 
-// CRITICAL FIX: added authentication guard
+// The vault page is open to every job role now — each folder's password is
+// the real gate on its documents. What scopes visibility here is whether the
+// caller is actually a party to that specific shipment (importer, exporter,
+// an assigned logistics user, or a firm teammate of any of those), so people
+// only ever see folders for shipments they're assigned to.
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await requireAuth(req);
-  if (errorResponse) return errorResponse;
+  const { user, errorResponse } = await requireAuth(req);
+  if (errorResponse || !user) return errorResponse ?? NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
   try {
     // ?shipmentId= shortcut — returns just the single matching folder
     const shipmentId = req.nextUrl.searchParams.get('shipmentId');
     if (shipmentId) {
+      if (!(await canAccessShipmentVault(user.id, shipmentId))) {
+        return NextResponse.json({ success: false, error: 'You do not have access to this shipment\'s vault.' }, { status: 403 });
+      }
       const folder = await dbStore.getVaultFolderByShipmentId(shipmentId);
       if (!folder) {
         return NextResponse.json({ success: false, error: 'Vault folder not found for this shipment' }, { status: 404 });
@@ -25,7 +33,13 @@ export async function GET(req: NextRequest) {
       dbStore.getDocuments(),
     ]);
 
-    const decorated = folders.map(folder => {
+    // Only keep folders whose shipment the caller is actually a party to.
+    const accessFlags = await Promise.all(
+      folders.map(folder => canAccessShipmentVault(user.id, folder.shipmentId))
+    );
+    const visibleFolders = folders.filter((_, i) => accessFlags[i]);
+
+    const decorated = visibleFolders.map(folder => {
       const shipment = shipments.find(s => s.id === folder.shipmentId) ?? null;
       const docs = documents.filter(d => d.shipmentId === folder.shipmentId);
 

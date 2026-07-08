@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
+import { canAccessShipmentVault } from '@/lib/server/vault-access';
 
 type Ctx = { params: Promise<{ folderId: string }> };
 
@@ -8,8 +9,8 @@ type Ctx = { params: Promise<{ folderId: string }> };
 // Returns folder metadata + its shipment_documents.
 // Password is NEVER sent to the client.
 export async function GET(req: NextRequest, { params }: Ctx) {
-  const { errorResponse } = await requireAuth(req);
-  if (errorResponse) return errorResponse;
+  const { user, errorResponse } = await requireAuth(req);
+  if (errorResponse || !user) return errorResponse ?? NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
   try {
     const { folderId } = await params;
@@ -18,6 +19,15 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       return NextResponse.json(
         { success: false, error: 'Vault folder not found' },
         { status: 404 },
+      );
+    }
+
+    // Only a party to this shipment (importer, exporter, assigned logistics
+    // user, or a firm teammate of any of those) may even see this folder.
+    if (!(await canAccessShipmentVault(user.id, folder.shipmentId))) {
+      return NextResponse.json(
+        { success: false, error: 'You do not have access to this shipment\'s vault.' },
+        { status: 403 },
       );
     }
 
@@ -43,8 +53,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 // Returns { success: true } on match, { success: false } on mismatch.
 // The plaintext password is NEVER returned to the client.
 export async function POST(req: NextRequest, { params }: Ctx) {
-  const { errorResponse } = await requireAuth(req);
-  if (errorResponse) return errorResponse;
+  const { user, errorResponse } = await requireAuth(req);
+  if (errorResponse || !user) return errorResponse ?? NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
   try {
     const { folderId } = await params;
@@ -63,6 +73,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       return NextResponse.json(
         { success: false, error: 'Vault folder not found' },
         { status: 404 },
+      );
+    }
+
+    // Only a party to this shipment may attempt the vault password at all.
+    if (!(await canAccessShipmentVault(user.id, folder.shipmentId))) {
+      return NextResponse.json(
+        { success: false, error: 'You do not have access to this shipment\'s vault.' },
+        { status: 403 },
       );
     }
 

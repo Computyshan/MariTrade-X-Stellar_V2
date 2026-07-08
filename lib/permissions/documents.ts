@@ -1,30 +1,18 @@
 import { JobRole } from '../../types';
 
 /**
- * Only the Customs Broker (plus platform Admins, for support/audit purposes)
- * has read/download access to the full BOC Document Vault. Other Logistics
- * Chain roles (Freight Forwarder, Warehouse Operator) and Trade Party roles
- * (Importer, Exporter) do not.
+ * The BOC Document Vault page itself is open to every job role — a vault
+ * password already gates the actual documents inside each folder, so a
+ * role-based wall in front of the folder list is redundant.
+ *
+ * What actually scopes visibility (and, mirroring it, download/upload
+ * access) is whether the caller is a party to a *specific* shipment —
+ * importer, exporter, an assigned logistics user, or a firm teammate of any
+ * of those. That check lives server-side in
+ * `lib/server/vault-access.ts::canAccessShipmentVault`, since it needs the
+ * database. It is NOT re-exported from this file, because this file is safe
+ * to import from client ('use client') components and that one is not.
  */
-const BOC_VAULT_ROLES: ReadonlySet<JobRole> = new Set<JobRole>(['CUSTOMS_BROKER', 'ADMIN']);
-
-export function canAccessBOCDocuments(jobRole: JobRole): boolean {
-  return BOC_VAULT_ROLES.has(jobRole);
-}
-
-/**
- * Download access mirrors vault access — if you can't open the vault folder,
- * you can't download from it either.
- */
-export function canDownloadDocuments(jobRole: JobRole): boolean {
-  return BOC_VAULT_ROLES.has(jobRole);
-}
-
-/**
- * Only the Customs Broker uploads into the BOC vault (they're the one filing
- * with BOC and holding the source documents). Admins retain upload for
- * support/correction purposes.
- */
-export function canUploadDocuments(jobRole: JobRole): boolean {
-  return BOC_VAULT_ROLES.has(jobRole);
+export function canAccessBOCDocuments(_jobRole: JobRole): boolean {
+  return true;
 }

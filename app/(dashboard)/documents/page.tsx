@@ -130,7 +130,7 @@ export default function DocumentVaultPage() {
             <h1 className="text-3xl font-display font-medium text-ink tracking-tight">BOC Document Vault</h1>
           </div>
           <p className="text-sm text-ink-faint">
-            Shipment folders are visible to all authorized users. Each folder requires its vault password to access documents inside.
+            You only see folders for shipments you're assigned to. Each folder still requires its vault password to access documents inside.
           </p>
         </div>
 
@@ -190,7 +190,7 @@ export default function DocumentVaultPage() {
           <div className="bg-mist-light border border-mist rounded-xl p-3 flex items-start gap-3 text-xs text-ink-faint">
             <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--theme-accent)' }} />
             <div>
-              <strong className="font-bold">Folder Vault Security</strong> — All shipment folders below are visible to authorized users.
+              <strong className="font-bold">Folder Vault Security</strong> — Only shipments you're assigned to appear below.
               Click any folder to enter its vault password and access the documents inside.
               Folders re-lock when you leave the session.
             </div>
