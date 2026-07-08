@@ -138,26 +138,50 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  const fetchDetails = async () => {
+  const fetchDetails = async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
     try {
-      setLoading(true);
-      setErrorText('');
+      if (!silent) setLoading(true);
+      if (!silent) setErrorText('');
       const res  = await authFetch(`/api/shipments/${shipmentId}`);
       const json = await res.json();
       if (json.success && json.data) {
         setData(json.data);
-      } else {
+        if (silent) setErrorText(''); // clear any earlier error once a poll succeeds
+      } else if (!silent) {
         setErrorText(json.error || 'Failed to fetch shipment details');
       }
     } catch {
-      setErrorText('Error connecting to central tradeport ledger');
+      // Background polls fail silently — the page just keeps showing the
+      // last good data rather than flashing an error banner every 10s.
+      if (!silent) setErrorText('Error connecting to central tradeport ledger');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (shipmentId) fetchDetails();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipmentId]);
+
+  // ── Live milestone log polling ──────────────────────────────────────────
+  // Milestones can be logged by other assigned parties (forwarder, broker,
+  // warehouse operator) in their own sessions, so this page background-
+  // refreshes on an interval to pick those up without needing a manual
+  // reload. Paused while the tab is hidden to avoid pointless requests.
+  useEffect(() => {
+    if (!shipmentId) return;
+    const POLL_INTERVAL_MS = 10_000; // 10s
+    const tick = () => {
+      if (document.visibilityState === 'visible') fetchDetails({ silent: true });
+    };
+    const timer = setInterval(tick, POLL_INTERVAL_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipmentId]);
 
