@@ -1317,7 +1317,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
                     className="w-full border border-mist rounded-lg p-2.5 text-xs outline-none font-sans resize-none"
                   />
                   <p className="text-[9px] text-ink-faint">
-                    This is shown to MariTrade's arbitrators and summarized by AI alongside the milestone log — it doesn't affect the outcome on its own.
+                    This is shown to MariTrade&apos;s arbitrators and summarized by AI alongside the milestone log — it doesn&apos;t affect the outcome on its own.
                   </p>
                 </div>
 

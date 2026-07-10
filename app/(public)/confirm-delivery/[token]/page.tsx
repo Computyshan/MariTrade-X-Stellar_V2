@@ -38,11 +38,11 @@ export default function ConfirmDeliveryPage() {
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [disputeNote, setDisputeNote] = useState('');
 
-  const fetchData = async () => {
+  const fetchData = async (tok: string) => {
     try {
       setLoading(true);
       setErrorText('');
-      const res = await fetch(`/api/recipient-confirm/${token}`);
+      const res = await fetch(`/api/recipient-confirm/${tok}`);
       const json = await res.json();
       if (json.success) {
         setData(json.data);
@@ -57,8 +57,15 @@ export default function ConfirmDeliveryPage() {
   };
 
   useEffect(() => {
-    if (token) fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!token) return;
+    // Deferred via setTimeout(0) rather than called inline: fetchData's first
+    // setState call (setLoading(true)) happens synchronously in its own
+    // function body up to the first `await`, and calling it directly from
+    // the effect body would run that synchronous part inside the effect's
+    // own call stack (the react-hooks/set-state-in-effect trigger). Pushing
+    // it onto a new task moves that synchronous prefix out of the effect.
+    const timer = setTimeout(() => fetchData(token), 0);
+    return () => clearTimeout(timer);
   }, [token]);
 
   const submit = async (action: 'CONFIRM' | 'DISPUTE') => {
@@ -76,7 +83,7 @@ export default function ConfirmDeliveryPage() {
       });
       const json = await res.json();
       if (json.success) {
-        await fetchData();
+        await fetchData(token);
       } else {
         setErrorText(json.error || 'Something went wrong.');
       }

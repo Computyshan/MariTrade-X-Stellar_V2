@@ -1191,6 +1191,7 @@ export const dbStore = {
       .select()
       .single();
     assertNoError(error, 'saveNotification');
+    if (!data) throw new Error('saveNotification: upsert returned no row.');
     return {
       id:        data.id,
       userId:    data.user_id,
@@ -1628,6 +1629,7 @@ export const dbStore = {
       .select('id')
       .single();
     assertNoError(error, 'createSignatureOtpChallenge');
+    if (!data) throw new Error('createSignatureOtpChallenge: insert returned no row.');
     return { id: data.id };
   },
 
