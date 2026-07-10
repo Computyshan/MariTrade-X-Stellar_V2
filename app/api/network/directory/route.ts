@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
 import { getUserJobRoles } from '@/types';
+import { computeScorecardsForUsers } from '@/lib/reputation';
 
 // CRITICAL FIX: authenticate every request
 export async function GET(req: NextRequest) {
@@ -13,9 +14,12 @@ export async function GET(req: NextRequest) {
     const requesterId = searchParams.get('requesterId') || '';
     const search = (searchParams.get('search') || '').toLowerCase();
 
-    const [users, allConnections] = await Promise.all([
+    const [users, allConnections, shipments, assignments, milestones] = await Promise.all([
       dbStore.getUsers(),
       requesterId ? dbStore.getConnectionRequestsForUser(requesterId) : Promise.resolve([]),
+      dbStore.getShipments(),
+      dbStore.getAssignments(),
+      dbStore.getAllMilestones(),
     ]);
 
     const members = users.filter(
@@ -28,6 +32,10 @@ export async function GET(req: NextRequest) {
           getUserJobRoles(u).some(r => r.toLowerCase().includes(search)))
     );
 
+    // Batch-computed in one pass over shared tables — avoids N scorecard
+    // queries for a directory page that can list dozens of members at once.
+    const scorecards = computeScorecardsForUsers(members, { shipments, assignments, milestones });
+
     const decorated = members.map(m => {
       const conn = allConnections.find(
         c =>
@@ -39,6 +47,7 @@ export async function GET(req: NextRequest) {
         connectionId: conn?.id ?? null,
         connectionStatus: conn?.status ?? null,
         isSender: conn ? conn.requesterId === requesterId : false,
+        scorecard: scorecards.get(m.id) ?? null,
       };
     });
 

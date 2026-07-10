@@ -36,9 +36,12 @@ import {
   FileText,
   ExternalLink,
   Sparkles,
+  TrendingUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { authFetch } from '@/hooks/use-user-session';
 import { ExternalCredential, ExternalCredentialType } from '@/types';
+import { AnyScorecard, PERFORMANCE_BADGE_LABELS, PerformanceBadgeTier } from '@/lib/reputation';
 
 // ─── Public profile shape (mirrors server-side PublicProfile) ─────────────────
 
@@ -57,6 +60,7 @@ export interface PublicProfile {
   updatedAt: string;
   externalCredentials?: ExternalCredential[];
   preVerified?: boolean;
+  scorecard?: AnyScorecard | null;
   // bankDetails  — intentionally absent (stripped server-side)
   // stellarWallet — intentionally absent (stripped server-side)
 }
@@ -108,6 +112,93 @@ const CREDENTIAL_TYPE_META: Record<ExternalCredentialType, { label: string; icon
   CERTIFICATE_IMAGE: { label: 'Image',  icon: <ImageIcon className="w-3.5 h-3.5" /> },
   RESUME_PDF:        { label: 'Résumé', icon: <FileText className="w-3.5 h-3.5" /> },
 };
+
+const BADGE_TIER_STYLE: Record<PerformanceBadgeTier, string> = {
+  GOLD:   'bg-amber-light text-amber border-amber/25',
+  SILVER: 'bg-mist text-ink-faint border-mist-dark',
+  BRONZE: 'bg-steel-light text-steel border-steel/20',
+};
+
+function StatTile({ label, value, tone }: { label: string; value: string; tone?: 'wine' | 'teal' }) {
+  return (
+    <div className="bg-mist-light rounded-lg px-3 py-2.5">
+      <p className="text-[9px] text-ink-faint uppercase font-mono tracking-wider font-bold">{label}</p>
+      <p className={`text-sm font-bold mt-0.5 ${tone === 'wine' ? 'text-wine' : tone === 'teal' ? 'text-teal' : 'text-ink'}`}>{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Phase 1 (Reputation & Marketplace Pressure) scorecard panel — shown on
+ * any member's public profile so counterparties can see a computed track
+ * record, not just a self-reported one. Renders nothing until there's at
+ * least one scoreable shipment, so brand-new accounts don't show a wall of
+ * empty stats.
+ */
+function ScorecardPanel({ scorecard }: { scorecard?: AnyScorecard | null }) {
+  if (!scorecard) return null;
+
+  if (scorecard.kind === 'LOGISTICS_CHAIN') {
+    const s = scorecard.scorecard;
+    if (s.shipmentsHandled === 0) return null;
+    return (
+      <div className="px-5 py-4 border-t border-mist space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-3.5 h-3.5" style={{ color: 'var(--color-teal)' }} />
+            <p className="text-[9px] text-ink-faint uppercase font-mono tracking-wider font-bold">Performance Track Record</p>
+          </div>
+          {s.badgeTier && (
+            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${BADGE_TIER_STYLE[s.badgeTier]}`}>
+              <Award className="w-3 h-3" /> {PERFORMANCE_BADGE_LABELS[s.badgeTier]}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <StatTile label="Shipments Handled" value={String(s.shipmentsHandled)} />
+          <StatTile label="Completed" value={String(s.shipmentsCompleted)} />
+          <StatTile label="On-Time Delivery" value={s.onTimeDeliveryRate !== null ? `${s.onTimeDeliveryRate}%` : '—'} tone="teal" />
+          <StatTile label="Dispute Rate" value={s.disputeRate !== null ? `${s.disputeRate}%` : '—'} tone={s.disputeRate ? 'wine' : undefined} />
+          {s.avgCustomsClearanceHours !== null && (
+            <StatTile label="Avg. Clearance Time" value={`${s.avgCustomsClearanceHours} hrs`} />
+          )}
+          <StatTile label="Evidence Completeness" value={s.evidenceCompletenessRate !== null ? `${s.evidenceCompletenessRate}%` : '—'} />
+        </div>
+        <p className="text-[9px] text-ink-faint/70 leading-relaxed flex items-start gap-1.5">
+          <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+          Computed from in-platform milestone and escrow history — not self-reported.
+        </p>
+      </div>
+    );
+  }
+
+  const s = scorecard.scorecard;
+  if (s.shipmentsInvolved === 0) return null;
+  return (
+    <div className="px-5 py-4 border-t border-mist space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="w-3.5 h-3.5" style={{ color: 'var(--color-teal)' }} />
+          <p className="text-[9px] text-ink-faint uppercase font-mono tracking-wider font-bold">Reliability Score</p>
+        </div>
+        {s.badgeTier && (
+          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${BADGE_TIER_STYLE[s.badgeTier]}`}>
+            <Award className="w-3 h-3" /> {PERFORMANCE_BADGE_LABELS[s.badgeTier]}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <StatTile label="Shipments Involved" value={String(s.shipmentsInvolved)} />
+        <StatTile label="Funding Completion" value={s.fundingCompletionRate !== null ? `${s.fundingCompletionRate}%` : '—'} tone="teal" />
+        <StatTile label="Dispute Rate" value={s.disputeInvolvementRate !== null ? `${s.disputeInvolvementRate}%` : '—'} tone={s.disputeInvolvementRate ? 'wine' : undefined} />
+      </div>
+      <p className="text-[9px] text-ink-faint/70 leading-relaxed flex items-start gap-1.5">
+        <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+        Computed from in-platform shipment and escrow history — not self-reported.
+      </p>
+    </div>
+  );
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -366,6 +457,8 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
                       </div>
                     </div>
                   </div>
+
+                  <ScorecardPanel scorecard={profile.scorecard} />
 
                   {/* External Credentials */}
                   {(profile.externalCredentials?.length ?? 0) > 0 && (

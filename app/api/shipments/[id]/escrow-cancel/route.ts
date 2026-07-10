@@ -150,7 +150,7 @@ export async function POST(
     return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { action, importerAddress, txHash, importerBps, exporterBps, cancelSignedXdr, disputeSignedXdr } = body;
+  const { action, importerAddress, txHash, importerBps, exporterBps, cancelSignedXdr, disputeSignedXdr, disputeReason } = body;
 
   const shipment = await dbStore.getShipmentById(shipmentId);
   if (!shipment) {
@@ -525,11 +525,16 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Only the importer may raise a dispute' }, { status: 403 });
     }
 
+    // Captures the importer's stated reason + timestamp so the AI
+    // dispute-evidence summarizer (lib/gemini summarizeDisputeEvidence) has
+    // something to work with on the Admin Dispute Panel.
     const updated = {
       ...shipment,
-      status:       'DISPUTED' as const,
-      escrowStatus: 'DISPUTED' as any,
-      updatedAt:    new Date().toISOString(),
+      status:          'DISPUTED' as const,
+      escrowStatus:    'DISPUTED' as any,
+      disputeReason:   typeof disputeReason === 'string' && disputeReason.trim() ? disputeReason.trim() : shipment.disputeReason,
+      disputeRaisedAt: new Date().toISOString(),
+      updatedAt:       new Date().toISOString(),
     };
     await dbStore.saveShipment(updated);
 

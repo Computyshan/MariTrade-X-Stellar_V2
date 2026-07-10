@@ -30,6 +30,9 @@
  *   escrow_asset       ↔ escrowAsset
  *   stellar_escrow_id  ↔ stellarEscrowId
  *   estimated_arrival  ↔ estimatedArrival
+ *   dispute_reason     ↔ disputeReason
+ *   dispute_raised_at  ↔ disputeRaisedAt
+ *   freight_cost_usd   ↔ freightCostUSD
  *   shipment_id        ↔ shipmentId
  *   user_id            ↔ userId
  *   assigned_at        ↔ assignedAt
@@ -73,6 +76,11 @@ import {
   SavedShipmentView,
   Firm,
   FirmInvite,
+  IoTDevice,
+  IoTSensorReading,
+  DeliverySignature,
+  RecipientConfirmation,
+  RecipientConfirmationStatus,
 } from '../types';
 
 // ─── Row → TypeScript mappers ─────────────────────────────────────────────────
@@ -150,6 +158,9 @@ function rowToShipment(row: any): Shipment {
     escrowAsset: (row.escrow_asset ?? 'USDC') as 'USDC' | 'PPHP',
     stellarEscrowId: row.stellar_escrow_id ?? undefined,
     estimatedArrival: row.estimated_arrival ?? undefined,
+    disputeReason: row.dispute_reason ?? undefined,
+    disputeRaisedAt: row.dispute_raised_at ?? undefined,
+    freightCostUSD: row.freight_cost_usd != null ? Number(row.freight_cost_usd) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -172,6 +183,9 @@ function shipmentToRow(s: Shipment): any {
     escrow_asset: s.escrowAsset ?? 'USDC',
     stellar_escrow_id: s.stellarEscrowId ?? null,
     estimated_arrival: s.estimatedArrival ?? null,
+    dispute_reason: s.disputeReason ?? null,
+    dispute_raised_at: s.disputeRaisedAt ?? null,
+    freight_cost_usd: s.freightCostUSD ?? null,
     created_at: s.createdAt,
     updated_at: s.updatedAt,
   };
@@ -224,6 +238,7 @@ function rowToMilestoneEvent(row: any): MilestoneEvent {
     evidenceRef: row.evidence_ref ?? undefined,
     occurredAt: row.occurred_at,
     verified: row.verified,
+    aisVerification: row.ais_verification ?? undefined,
   };
 }
 
@@ -238,6 +253,64 @@ function milestoneEventToRow(me: MilestoneEvent): any {
     evidence_ref: me.evidenceRef ?? null,
     occurred_at: me.occurredAt,
     verified: me.verified,
+    ais_verification: me.aisVerification ?? null,
+  };
+}
+
+function rowToIoTDevice(row: any): IoTDevice {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    deviceId: row.device_id,
+    label: row.label ?? undefined,
+    registeredById: row.registered_by_id,
+    createdAt: row.created_at,
+  };
+}
+
+function rowToIoTReading(row: any): IoTSensorReading {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    milestoneEventId: row.milestone_event_id ?? undefined,
+    deviceId: row.device_id,
+    readingType: row.reading_type,
+    value: Number(row.value),
+    unit: row.unit,
+    latitude: row.latitude != null ? Number(row.latitude) : undefined,
+    longitude: row.longitude != null ? Number(row.longitude) : undefined,
+    recordedAt: row.recorded_at,
+    createdAt: row.created_at,
+  };
+}
+
+function rowToDeliverySignature(row: any): DeliverySignature {
+  return {
+    id: row.id,
+    milestoneEventId: row.milestone_event_id,
+    shipmentId: row.shipment_id,
+    signerName: row.signer_name,
+    signerRelation: row.signer_relation,
+    signatureImageDataUrl: row.signature_image_data_url,
+    otpVerified: row.otp_verified,
+    otpVerifiedContactMasked: row.otp_verified_contact_masked ?? undefined,
+    signedAt: row.signed_at,
+  };
+}
+
+function rowToRecipientConfirmation(row: any): RecipientConfirmation {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    milestoneEventId: row.milestone_event_id ?? undefined,
+    consigneeContact: row.consignee_contact,
+    consigneeName: row.consignee_name ?? undefined,
+    status: row.status,
+    confirmationToken: row.confirmation_token,
+    requestedById: row.requested_by_id,
+    requestedAt: row.requested_at,
+    respondedAt: row.responded_at ?? undefined,
+    disputeNote: row.dispute_note ?? undefined,
   };
 }
 
@@ -342,6 +415,7 @@ function rowToConnection(row: any): ConnectionRequest {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     favoritedBy: row.favorited_by ?? [],
+    preferredBy: row.preferred_by ?? [],
   };
 }
 
@@ -354,6 +428,7 @@ function connectionToRow(c: ConnectionRequest): any {
     created_at: c.createdAt,
     updated_at: c.updatedAt,
     favorited_by: c.favoritedBy ?? [],
+    preferred_by: c.preferredBy ?? [],
   };
 }
 
@@ -1050,6 +1125,31 @@ export const dbStore = {
     return rowToConnection(data);
   },
 
+  /** Toggle whether `userId` has flagged connection `connId` as a
+   *  "Preferred Partner" (Phase 1 marketplace-pressure feature). Same
+   *  mechanics as toggleConnectionFavorite — either party may technically
+   *  call this, but the API route restricts it to the Trade Party side of
+   *  an ACCEPTED connection with a Logistics Chain counterparty. */
+  toggleConnectionPreferred: async (connId: string, userId: string): Promise<ConnectionRequest> => {
+    const admin = getSupabaseAdmin();
+    const conn = await dbStore.getConnectionRequestById(connId);
+    if (!conn) throw new Error('Connection not found');
+    if (conn.requesterId !== userId && conn.receiverId !== userId) {
+      throw new Error('Not authorised to mark this connection as preferred');
+    }
+    const current = conn.preferredBy ?? [];
+    const isPreferred = current.includes(userId);
+    const nextPreferredBy = isPreferred ? current.filter(id => id !== userId) : [...current, userId];
+    const { data, error } = await admin
+      .from('connection_requests')
+      .update({ preferred_by: nextPreferredBy })
+      .eq('id', connId)
+      .select()
+      .single();
+    assertNoError(error, 'toggleConnectionPreferred');
+    return rowToConnection(data);
+  },
+
   // ── Notifications ─────────────────────────────────────────────────────────
 
   getNotificationsForUser: async (userId: string): Promise<AppNotification[]> => {
@@ -1289,5 +1389,275 @@ export const dbStore = {
       .eq('shipment_id', shipmentId)
       .eq('user_id', fromUserId);
     assertNoError(error, 'reassignShipmentAssignment:update');
+  },
+
+  // ── Phase 3: IoT Devices & Sensor Readings ──────────────────────
+
+  getIoTDevicesForShipment: async (shipmentId: string): Promise<IoTDevice[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('iot_devices')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('created_at', { ascending: false });
+    assertNoError(error, 'getIoTDevicesForShipment');
+    return (data ?? []).map(rowToIoTDevice);
+  },
+
+  /** Looks up a device by its public device_id and verifies the secret.
+   *  Returns undefined if the device doesn't exist or the secret is wrong —
+   *  callers should treat both cases identically (401), never leaking which. */
+  getIoTDeviceByIdAndSecret: async (deviceId: string, deviceSecret: string): Promise<IoTDevice | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('iot_devices')
+      .select('*')
+      .eq('device_id', deviceId)
+      .eq('device_secret', deviceSecret)
+      .maybeSingle();
+    assertNoError(error, 'getIoTDeviceByIdAndSecret');
+    return data ? rowToIoTDevice(data) : undefined;
+  },
+
+  saveIoTDevice: async (device: IoTDevice & { deviceSecret: string }): Promise<IoTDevice> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('iot_devices')
+      .insert({
+        id: device.id,
+        shipment_id: device.shipmentId,
+        device_id: device.deviceId,
+        device_secret: device.deviceSecret,
+        label: device.label ?? null,
+        registered_by_id: device.registeredById,
+        created_at: device.createdAt,
+      })
+      .select()
+      .single();
+    assertNoError(error, 'saveIoTDevice');
+    return rowToIoTDevice(data);
+  },
+
+  getIoTReadingsForShipment: async (shipmentId: string, limit = 200): Promise<IoTSensorReading[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('iot_sensor_readings')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('recorded_at', { ascending: false })
+      .limit(limit);
+    assertNoError(error, 'getIoTReadingsForShipment');
+    return (data ?? []).map(rowToIoTReading);
+  },
+
+  getIoTReadingsForMilestone: async (milestoneEventId: string): Promise<IoTSensorReading[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('iot_sensor_readings')
+      .select('*')
+      .eq('milestone_event_id', milestoneEventId)
+      .order('recorded_at');
+    assertNoError(error, 'getIoTReadingsForMilestone');
+    return (data ?? []).map(rowToIoTReading);
+  },
+
+  saveIoTReading: async (reading: IoTSensorReading): Promise<IoTSensorReading> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      shipment_id: reading.shipmentId,
+      milestone_event_id: reading.milestoneEventId ?? null,
+      device_id: reading.deviceId,
+      reading_type: reading.readingType,
+      value: reading.value,
+      unit: reading.unit,
+      latitude: reading.latitude ?? null,
+      longitude: reading.longitude ?? null,
+      recorded_at: reading.recordedAt,
+    };
+    if (reading.id) row.id = reading.id;
+    const { data, error } = await admin
+      .from('iot_sensor_readings')
+      .insert(row)
+      .select()
+      .single();
+    assertNoError(error, 'saveIoTReading');
+    return rowToIoTReading(data);
+  },
+
+  /** Best-effort backfill: attach any unlinked readings for this shipment,
+   *  within the given time window, to the milestone that was just logged. */
+  linkIoTReadingsToMilestone: async (
+    shipmentId: string,
+    milestoneEventId: string,
+    windowStart: string,
+    windowEnd: string,
+  ): Promise<number> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('iot_sensor_readings')
+      .update({ milestone_event_id: milestoneEventId })
+      .eq('shipment_id', shipmentId)
+      .is('milestone_event_id', null)
+      .gte('recorded_at', windowStart)
+      .lte('recorded_at', windowEnd)
+      .select('id');
+    assertNoError(error, 'linkIoTReadingsToMilestone');
+    return (data ?? []).length;
+  },
+
+  // ── Phase 3: Delivery Signatures ───────────────────────────────
+
+  getDeliverySignatureForMilestone: async (milestoneEventId: string): Promise<DeliverySignature | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('delivery_signatures')
+      .select('*')
+      .eq('milestone_event_id', milestoneEventId)
+      .maybeSingle();
+    assertNoError(error, 'getDeliverySignatureForMilestone');
+    return data ? rowToDeliverySignature(data) : undefined;
+  },
+
+  saveDeliverySignature: async (sig: DeliverySignature): Promise<DeliverySignature> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      milestone_event_id: sig.milestoneEventId,
+      shipment_id: sig.shipmentId,
+      signer_name: sig.signerName,
+      signer_relation: sig.signerRelation,
+      signature_image_data_url: sig.signatureImageDataUrl,
+      otp_verified: sig.otpVerified,
+      otp_verified_contact_masked: sig.otpVerifiedContactMasked ?? null,
+      signed_at: sig.signedAt,
+    };
+    if (sig.id) row.id = sig.id;
+    const { data, error } = await admin
+      .from('delivery_signatures')
+      .upsert(row, { onConflict: 'milestone_event_id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveDeliverySignature');
+    return rowToDeliverySignature(data);
+  },
+
+  // ── Phase 3: Recipient-side Confirmation ─────────────────────────────
+
+  getRecipientConfirmationsForShipment: async (shipmentId: string): Promise<RecipientConfirmation[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('recipient_confirmations')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('requested_at', { ascending: false });
+    assertNoError(error, 'getRecipientConfirmationsForShipment');
+    return (data ?? []).map(rowToRecipientConfirmation);
+  },
+
+  getRecipientConfirmationByToken: async (token: string): Promise<RecipientConfirmation | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('recipient_confirmations')
+      .select('*')
+      .eq('confirmation_token', token)
+      .maybeSingle();
+    assertNoError(error, 'getRecipientConfirmationByToken');
+    return data ? rowToRecipientConfirmation(data) : undefined;
+  },
+
+  saveRecipientConfirmation: async (rc: RecipientConfirmation): Promise<RecipientConfirmation> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      shipment_id: rc.shipmentId,
+      milestone_event_id: rc.milestoneEventId ?? null,
+      consignee_contact: rc.consigneeContact,
+      consignee_name: rc.consigneeName ?? null,
+      status: rc.status,
+      confirmation_token: rc.confirmationToken,
+      requested_by_id: rc.requestedById,
+      requested_at: rc.requestedAt,
+      responded_at: rc.respondedAt ?? null,
+      dispute_note: rc.disputeNote ?? null,
+    };
+    if (rc.id) row.id = rc.id;
+    const { data, error } = await admin
+      .from('recipient_confirmations')
+      .upsert(row, { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveRecipientConfirmation');
+    return rowToRecipientConfirmation(data);
+  },
+
+  updateRecipientConfirmationStatus: async (
+    token: string,
+    status: RecipientConfirmationStatus,
+    disputeNote?: string,
+  ): Promise<RecipientConfirmation> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('recipient_confirmations')
+      .update({
+        status,
+        responded_at: new Date().toISOString(),
+        dispute_note: disputeNote ?? null,
+      })
+      .eq('confirmation_token', token)
+      .select()
+      .single();
+    assertNoError(error, 'updateRecipientConfirmationStatus');
+    return rowToRecipientConfirmation(data);
+  },
+
+  // ── Phase 3: Signature OTP Challenges ──────────────────────────
+
+  createSignatureOtpChallenge: async (params: {
+    shipmentId: string;
+    contact: string;
+    otpCode: string;
+    expiresAt: string;
+  }): Promise<{ id: string }> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('signature_otp_challenges')
+      .insert({
+        shipment_id: params.shipmentId,
+        contact: params.contact,
+        otp_code: params.otpCode,
+        expires_at: params.expiresAt,
+      })
+      .select('id')
+      .single();
+    assertNoError(error, 'createSignatureOtpChallenge');
+    return { id: data.id };
+  },
+
+  /** Verifies the most recent unexpired, unverified OTP challenge for this
+   *  shipment+contact. On success marks it verified so it can't be reused. */
+  verifySignatureOtpChallenge: async (
+    shipmentId: string,
+    contact: string,
+    otpCode: string,
+  ): Promise<boolean> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('signature_otp_challenges')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .eq('contact', contact)
+      .eq('otp_code', otpCode)
+      .eq('verified', false)
+      .gte('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    assertNoError(error, 'verifySignatureOtpChallenge:lookup');
+    if (!data) return false;
+
+    const { error: updateErr } = await admin
+      .from('signature_otp_challenges')
+      .update({ verified: true })
+      .eq('id', data.id);
+    assertNoError(updateErr, 'verifySignatureOtpChallenge:mark');
+    return true;
   },
 };

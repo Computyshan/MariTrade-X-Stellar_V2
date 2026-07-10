@@ -14,7 +14,7 @@ import {
   Wallet, RefreshCw, FileText, AlertTriangle, Plus, Calendar,
   Building2, Package, Weight, Search, ToggleLeft, ToggleRight,
   DollarSign, Hash, FolderLock, Key, Eye, EyeOff, Copy, CheckCircle2,
-  Shuffle, ShieldCheck, FolderOpen, ExternalLink, Receipt, Sparkles, MessageSquare,
+  Shuffle, ShieldCheck, FolderOpen, ExternalLink, Receipt, Sparkles, MessageSquare, Bot, Wand2,
 } from 'lucide-react';
 import { ShipmentScope, MilestoneType, JobRole, PHASE_MILESTONE_SEQUENCE, ShipmentPhase, ShipmentReceipt, CURRENCY_SYMBOLS, ROLE_MILESTONES, getUserJobRoles, getMilestonesForUser } from '@/types';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
@@ -279,6 +279,12 @@ export default function NewShipmentPage() {
   const [oracleLoading,    setOracleLoading]    = useState(false);
   const hsRef = useRef<HTMLDivElement>(null);
 
+  // ── Phase 2 · AI HS CODE ASSISTANT ───────────────────────────────────────────
+  const [hsAiLoading,      setHsAiLoading]      = useState(false);
+  const [hsAiSuggestions,  setHsAiSuggestions]  = useState<{ code: string; description: string; confidence: string }[]>([]);
+  const [hsAiNote,         setHsAiNote]         = useState('');
+  const [hsAiOpen,         setHsAiOpen]         = useState(false);
+
   // ── Step 1 · PHYSICAL SPECIFICATIONS ──────────────────────────────────────
   const [isDangerousGoods, setIsDangerousGoods] = useState(false);
   const [packageCount,     setPackageCount]     = useState('');
@@ -307,6 +313,12 @@ export default function NewShipmentPage() {
   const [logisticsSearch,    setLogisticsSearch]    = useState('');
   const [trustedNetworkIds,  setTrustedNetworkIds]  = useState<string[]>([]);
   const [networkLoading,     setNetworkLoading]     = useState(false);
+
+  // ── Step 3 · Phase 2 AI MILESTONE RECOMMENDER ────────────────────────────────
+  const [milestoneAiLoading,     setMilestoneAiLoading]     = useState(false);
+  const [milestoneAiReasoning,   setMilestoneAiReasoning]   = useState('');
+  const [milestoneAiApplied,     setMilestoneAiApplied]     = useState(false);
+  const [milestoneAiRecommended, setMilestoneAiRecommended] = useState<MilestoneType[] | null>(null);
 
   // ── Step 4 · ESCROW ─────────────────────────────────────────────────────────
   const [assetCode,    setAssetCode]    = useState<AssetCode>('USDC');
@@ -532,6 +544,83 @@ export default function NewShipmentPage() {
     setAssignedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const toggleMilestone = (m: MilestoneType) =>
     setPriorityMilestones(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
+
+  // ── Phase 2 · AI HS Code Classification Assistant ─────────────────────────
+  const handleHsAiSuggest = async () => {
+    if (!description.trim()) { setErrorText('Add a cargo description first so the AI has something to classify.'); return; }
+    setHsAiLoading(true);
+    setHsAiOpen(true);
+    setHsAiNote('');
+    try {
+      const res = await authFetch('/api/gemini/hs-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cargoDescription: description, isDangerousGoods }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setHsAiSuggestions(json.data.suggestions || []);
+        setHsAiNote(json.data.note || '');
+      } else {
+        setHsAiNote(json.error || 'AI classification failed.');
+        setHsAiSuggestions([]);
+      }
+    } catch {
+      setHsAiNote('Network error reaching the AI classifier.');
+      setHsAiSuggestions([]);
+    } finally {
+      setHsAiLoading(false);
+    }
+  };
+  // AI-suggested, human-confirmed: the suggestion only fills the field when
+  // the person explicitly clicks a suggestion — never applied automatically.
+  const applyHsAiSuggestion = (code: string) => {
+    setHsCode(code);
+    setHsSearch(code);
+    setHsAiOpen(false);
+  };
+
+  // ── Phase 2 · AI Milestone-Requirement Recommender ───────────────────────
+  const handleMilestoneAiSuggest = async () => {
+    setMilestoneAiLoading(true);
+    setMilestoneAiApplied(false);
+    setMilestoneAiReasoning('');
+    setMilestoneAiRecommended(null);
+    try {
+      const res = await authFetch('/api/gemini/milestone-recommendation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cargoDescription: description,
+          hsCode,
+          isDangerousGoods,
+          shipmentScope,
+          originCountry,
+          destinationPort,
+          totalValueUSD: totalValueUSD ? Number(totalValueUSD) : undefined,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        // Suggestion surfaced, not applied — the person still clicks "Apply"
+        // below before it touches priorityMilestones.
+        setMilestoneAiReasoning(json.data.reasoning || '');
+        setMilestoneAiRecommended(json.data.recommended || []);
+      } else {
+        setMilestoneAiReasoning(json.error || 'AI recommendation failed.');
+      }
+    } catch {
+      setMilestoneAiReasoning('Network error reaching the AI recommender.');
+    } finally {
+      setMilestoneAiLoading(false);
+    }
+  };
+  const applyMilestoneAiSuggestion = () => {
+    if (milestoneAiRecommended && milestoneAiRecommended.length > 0) {
+      setPriorityMilestones(milestoneAiRecommended);
+      setMilestoneAiApplied(true);
+    }
+  };
 
   const validate = (): boolean => {
     setErrorText('');
@@ -1028,9 +1117,49 @@ export default function NewShipmentPage() {
                 {!oracleLoading && !oracleRate && <span className="text-[11px] text-ink-faint">{invoiceValue && Number(invoiceValue) > 0 ? 'Rate unavailable.' : 'Enter an invoice value to see live conversion rate.'}</span>}
               </div>
               <div className="mt-5 space-y-1" ref={hsRef}>
-                <label className="block text-xs font-bold text-ink-faint flex items-center gap-1.5">
-                  <Hash className="w-3.5 h-3.5 text-amber" /> HS Code / Tariff Code <span className="text-[10px] font-normal text-ink-faint">(6–10 digits)</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-ink-faint flex items-center gap-1.5">
+                    <Hash className="w-3.5 h-3.5 text-amber" /> HS Code / Tariff Code <span className="text-[10px] font-normal text-ink-faint">(6–10 digits)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleHsAiSuggest}
+                    disabled={hsAiLoading}
+                    className="flex items-center gap-1 text-[10px] font-black text-steel hover:text-ink bg-teal-light border border-steel-light px-2 py-1 rounded-lg transition-all disabled:opacity-60"
+                  >
+                    {hsAiLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Bot className="w-3 h-3" />}
+                    {hsAiLoading ? 'Classifying…' : 'Suggest with AI'}
+                  </button>
+                </div>
+                {hsAiOpen && (
+                  <div className="bg-steel-light/30 border border-steel-light rounded-xl p-3 space-y-2">
+                    {hsAiLoading ? (
+                      <p className="text-[11px] text-ink-faint italic">Asking the AI classifier…</p>
+                    ) : hsAiSuggestions.length > 0 ? (
+                      <>
+                        <p className="text-[10px] font-black text-steel-hover uppercase tracking-wide flex items-center gap-1"><Wand2 className="w-3 h-3" /> AI Suggestions — verify before applying</p>
+                        <div className="space-y-1.5">
+                          {hsAiSuggestions.map((s, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => applyHsAiSuggestion(s.code)}
+                              className="w-full flex items-center gap-3 bg-white hover:bg-teal-light border border-mist rounded-lg px-3 py-2 text-left transition-all"
+                            >
+                              <span className="font-sans text-xs font-black text-steel flex-shrink-0">{s.code}</span>
+                              <span className="text-[11px] text-ink-faint flex-1 truncate">{s.description}</span>
+                              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase flex-shrink-0 ${s.confidence === 'HIGH' ? 'bg-teal-light text-teal' : s.confidence === 'MEDIUM' ? 'bg-amber-light text-amber' : 'bg-mist text-ink-faint'}`}>{s.confidence}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[9px] text-ink-faint">AI-suggested — click one to apply, or keep searching manually below.</p>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-ink-faint">{hsAiNote || 'No suggestions returned.'}</p>
+                    )}
+                    <button type="button" onClick={() => setHsAiOpen(false)} className="text-[10px] text-ink-faint hover:text-ink underline">Dismiss</button>
+                  </div>
+                )}
                 <div className="relative">
                   <Search className="w-4 h-4 text-ink-faint absolute left-2.5 top-2.5" />
                   <input type="text" placeholder="Type code or keyword…" className="w-full border border-mist rounded-lg pl-8 pr-2.5 py-2 text-xs font-sans outline-none focus:border-amber"
@@ -1498,6 +1627,43 @@ export default function NewShipmentPage() {
                 <Lock className="w-5 h-5 text-amber" /> Priority Milestones for Escrow Release
               </h3>
               <p className="text-xs text-ink-faint">The <strong>Release Funds</strong> button stays locked until <strong>all</strong> selected milestones are confirmed.</p>
+
+              {/* Phase 2 · AI Milestone-Requirement Recommender */}
+              <div className="bg-teal-light/40 border border-steel-light rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-black text-steel-hover uppercase tracking-wide flex items-center gap-1"><Bot className="w-3.5 h-3.5" /> AI Recommendation</p>
+                  <button
+                    type="button"
+                    onClick={handleMilestoneAiSuggest}
+                    disabled={milestoneAiLoading || !description.trim()}
+                    className="flex items-center gap-1 text-[10px] font-black text-steel hover:text-ink bg-white border border-steel-light px-2 py-1 rounded-lg transition-all disabled:opacity-50"
+                  >
+                    {milestoneAiLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                    {milestoneAiLoading ? 'Thinking…' : 'Suggest for this cargo'}
+                  </button>
+                </div>
+                {milestoneAiReasoning && (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-ink-soft leading-relaxed">{milestoneAiReasoning}</p>
+                    {milestoneAiRecommended && milestoneAiRecommended.length > 0 && !milestoneAiApplied && (
+                      <button
+                        type="button"
+                        onClick={applyMilestoneAiSuggestion}
+                        className="flex items-center gap-1.5 bg-steel hover:bg-teal text-white text-[10px] font-black px-3 py-1.5 rounded-lg transition-all"
+                      >
+                        <Check className="w-3 h-3" /> Apply {milestoneAiRecommended.length} Suggested Milestones
+                      </button>
+                    )}
+                    {milestoneAiApplied && (
+                      <p className="text-[10px] text-steel font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Applied — feel free to adjust the checklist below.</p>
+                    )}
+                  </div>
+                )}
+                {!milestoneAiReasoning && (
+                  <p className="text-[10px] text-ink-faint">Get a starting checklist based on this cargo’s description, value, and route — you can still edit it below.</p>
+                )}
+              </div>
+
               <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
                 {(Object.keys(PHASE_MILESTONE_SEQUENCE) as ShipmentPhase[]).map(phase => (
                   <div key={phase}>

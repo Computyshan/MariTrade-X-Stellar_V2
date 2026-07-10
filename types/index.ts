@@ -398,6 +398,18 @@ export interface Shipment {
   escrowAsset?: 'USDC' | 'PPHP';
   stellarEscrowId?: string;
   estimatedArrival?: string;
+  /** Why the importer raised a dispute (captured at confirm_raise_dispute time)
+   *  — feeds the AI dispute-evidence summarizer shown to the arbitrator on
+   *  the Admin Dispute Panel. Undefined for shipments that were never disputed. */
+  disputeReason?: string;
+  /** When the dispute was raised — undefined if never disputed. */
+  disputeRaisedAt?: string;
+  /** The negotiated/quoted freight (shipping) cost — distinct from
+   *  totalValueUSD, which is the cargo/invoice value. Set by the assigned
+   *  Freight Forwarder after booking, and used as the historical sample for
+   *  the AI rate-benchmarking feature on future shipments over the same
+   *  route. Undefined until a Freight Forwarder records it. */
+  freightCostUSD?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -494,6 +506,101 @@ export const MILESTONE_EVIDENCE_REF_LABEL: Record<MilestoneType, string> = {
   FAILED_DELIVERY_ATTEMPT:         '', // photo or note
 };
 
+// ─── Phase 3 — Independently-Verifiable Evidence ───────────────────────────
+// Corroborating data sources that reduce reliance on self-reported evidence.
+// Every mechanism here degrades gracefully to the manual flow above
+// (reference number / document / photo) if the integration or a feed is
+// unavailable — it never blocks a milestone from being logged.
+
+// ── IoT sensor ingestion (shock/humidity/GPS tags) ─────────────────────────
+export type IoTReadingType = 'TEMPERATURE' | 'HUMIDITY' | 'SHOCK' | 'GPS' | 'DOOR_OPEN';
+
+export interface IoTSensorReading {
+  id: string;
+  shipmentId: string;
+  /** The milestone this reading corroborates, once one has been logged that
+   *  falls within the reading's time window. Undefined for readings that
+   *  arrived before any matching milestone was logged (still stored — the
+   *  milestone route backfills the link when it later matches). */
+  milestoneEventId?: string;
+  deviceId: string;
+  readingType: IoTReadingType;
+  value: number;
+  unit: string;
+  latitude?: number;
+  longitude?: number;
+  recordedAt: string;
+  createdAt: string;
+}
+
+/** A container/cargo sensor device registered against a shipment, so its
+ *  webhook posts can be authenticated and attributed. */
+export interface IoTDevice {
+  id: string;
+  shipmentId: string;
+  deviceId: string;
+  label?: string;
+  registeredById: string;
+  createdAt: string;
+}
+
+// ── Vessel-tracking (AIS) cross-check ───────────────────────────────────────
+export type AisVerificationStatus = 'VERIFIED' | 'MISMATCH' | 'UNVERIFIABLE';
+
+export interface AisVerificationResult {
+  status: AisVerificationStatus;
+  vesselName?: string;
+  imoNumber?: string;
+  /** What the logistics user claimed (the reference number they typed in). */
+  claimedReference?: string;
+  /** What the public AIS feed reported, if reachable. */
+  aisObservedAt?: string;
+  source: string;      // e.g. 'AISHub', 'unconfigured'
+  checkedAt: string;
+  note?: string;        // human-readable reason for MISMATCH/UNVERIFIABLE
+}
+
+// ── Digital signature capture at delivery ───────────────────────────────────
+export type SignerRelation = 'CONSIGNEE' | 'AUTHORIZED_REPRESENTATIVE' | 'OTHER';
+
+export interface DeliverySignature {
+  id: string;
+  milestoneEventId: string;
+  shipmentId: string;
+  signerName: string;
+  signerRelation: SignerRelation;
+  /** Base64 PNG data URL captured from the in-app signature pad. */
+  signatureImageDataUrl: string;
+  /** True once the signer verified an OTP sent to their phone/email — ties
+   *  the signature to the recipient's identity rather than just a pad tap. */
+  otpVerified: boolean;
+  /** Masked contact the OTP was sent to, e.g. "+63 9** *** **21". */
+  otpVerifiedContactMasked?: string;
+  signedAt: string;
+}
+
+// ── Recipient-side confirmation flow ─────────────────────────────────────────
+export type RecipientConfirmationStatus = 'PENDING' | 'CONFIRMED' | 'DISPUTED' | 'EXPIRED';
+
+export interface RecipientConfirmation {
+  id: string;
+  shipmentId: string;
+  /** Linked once ARRIVED_AT_DELIVERY_ADDRESS is logged and this request
+   *  corroborates it. */
+  milestoneEventId?: string;
+  /** Phone or email the confirmation link/OTP was sent to. */
+  consigneeContact: string;
+  consigneeName?: string;
+  status: RecipientConfirmationStatus;
+  /** Opaque token used in the public /confirm-delivery/[token] link — never
+   *  the row id, so it can be rotated/invalidated independently. */
+  confirmationToken: string;
+  requestedById: string;
+  requestedAt: string;
+  respondedAt?: string;
+  disputeNote?: string;
+}
+
 export interface MilestoneEvent {
   id: string;
   shipmentId: string;
@@ -504,6 +611,10 @@ export interface MilestoneEvent {
   evidenceRef?: string;  // reference number — required for REFERENCE_NUMBER
   occurredAt: string;
   verified: boolean;
+  /** VESSEL_DEPARTED_ORIGIN only — best-effort public AIS cross-check result.
+   *  Undefined for every other milestone type, and undefined here too if the
+   *  check was never attempted (e.g. AIS integration not configured). */
+  aisVerification?: AisVerificationResult;
 }
 
 export interface ShipmentDocument {
@@ -599,6 +710,12 @@ export interface ConnectionRequest {
   /** User ids who have starred this connection as a favorite/saved counterparty.
    *  Personal per-user, not shared — check `favoritedBy.includes(currentUserId)`. */
   favoritedBy?: string[];
+  /** User ids (Trade Party side) who have flagged this connection as a
+   *  "Preferred Partner" — powers the assignment fast-track. Personal
+   *  per-user, same shape as `favoritedBy`. Only meaningful when the
+   *  flagging user is a Trade Party and the other party is Logistics
+   *  Chain, but the field itself doesn't enforce that — callers do. */
+  preferredBy?: string[];
 }
 
 // ─── BOC Document Vault ──────────────────────────────────────────────────────

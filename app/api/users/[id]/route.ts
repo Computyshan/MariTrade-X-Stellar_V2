@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbStore } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-guard';
 import { ExternalCredential } from '@/types';
+import { computeScorecardForUser, AnyScorecard } from '@/lib/reputation';
 
 // Public profile fields — sensitive payment details are always stripped.
 // bankDetails and stellarWallet are private to the account holder only.
@@ -21,6 +22,10 @@ type PublicProfile = {
   externalCredentials: ExternalCredential[];
   /** True once the user has at least one external credential on file. */
   preVerified: boolean;
+  /** Phase 1 performance scorecard — Logistics Chain scorecard or Trade
+   *  Party reliability score depending on role. null if the account has no
+   *  scoreable role (e.g. still mid-onboarding). */
+  scorecard: AnyScorecard | null;
 };
 
 export async function GET(
@@ -40,6 +45,13 @@ export async function GET(
 
     const externalCredentials = user.externalCredentials ?? [];
 
+    const [shipments, assignments, milestones] = await Promise.all([
+      dbStore.getShipments(),
+      dbStore.getAssignments(),
+      dbStore.getAllMilestones(),
+    ]);
+    const scorecard = computeScorecardForUser(user, { shipments, assignments, milestones });
+
     // Strip sensitive financial fields before returning to any caller
     const publicProfile: PublicProfile = {
       id:            user.id,
@@ -56,6 +68,7 @@ export async function GET(
       updatedAt:     user.updatedAt,
       externalCredentials,
       preVerified: externalCredentials.length > 0,
+      scorecard,
       // bankDetails  — intentionally omitted
       // stellarWallet — intentionally omitted
     };

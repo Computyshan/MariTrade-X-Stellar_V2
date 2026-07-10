@@ -28,9 +28,12 @@ import {
   Eye,
   Star,
   Sparkles,
+  Award,
+  Crown,
 } from 'lucide-react';
 import { JobRole, User, getUserJobRoles } from '@/types';
 import UserProfileModal from '@/components/UserProfileModal';
+import { AnyScorecard, PERFORMANCE_BADGE_LABELS, PerformanceBadgeTier } from '@/lib/reputation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,6 +43,7 @@ interface MemberEntry extends User {
   connectionId: string | null;
   connectionStatus: ConnectionStatus;
   isSender: boolean;
+  scorecard: AnyScorecard | null;
 }
 
 interface ConnectionEntry {
@@ -52,6 +56,7 @@ interface ConnectionEntry {
   direction: 'SENT' | 'RECEIVED';
   otherParty: User | null;
   favoritedBy?: string[];
+  preferredBy?: string[];
 }
 
 type Tab = 'directory' | 'pending' | 'network';
@@ -107,6 +112,59 @@ function RoleBadges({ user }: { user: Pick<User, 'jobRole' | 'jobRoles'> }) {
         <RoleBadge key={role} role={role} />
       ))}
     </>
+  );
+}
+
+const BADGE_TIER_STYLE: Record<PerformanceBadgeTier, string> = {
+  GOLD:   'bg-amber-light text-amber border-amber/25',
+  SILVER: 'bg-mist text-ink-faint border-mist-dark',
+  BRONZE: 'bg-steel-light text-steel border-steel/20',
+};
+
+/** Compact Phase 1 scorecard summary — a badge-tier chip (if the member has
+ *  earned one) plus the single headline stat most relevant to their side of
+ *  the marketplace (on-time % for Logistics Chain, funding % for Trade
+ *  Party). Renders nothing if there isn't a scoreable track record yet, so
+ *  brand-new members don't show a wall of "—" placeholders. */
+function ScorecardSummary({ scorecard }: { scorecard: AnyScorecard | null }) {
+  if (!scorecard) return null;
+
+  if (scorecard.kind === 'LOGISTICS_CHAIN') {
+    const s = scorecard.scorecard;
+    if (s.shipmentsHandled === 0) return null;
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {s.badgeTier && (
+          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${BADGE_TIER_STYLE[s.badgeTier]}`}>
+            <Award className="w-3 h-3" /> {PERFORMANCE_BADGE_LABELS[s.badgeTier]}
+          </span>
+        )}
+        {s.onTimeDeliveryRate !== null && (
+          <span className="text-[10px] text-ink-faint font-semibold">{s.onTimeDeliveryRate}% on-time</span>
+        )}
+        {s.disputeRate !== null && s.disputeRate > 0 && (
+          <span className="text-[10px] text-wine font-semibold">{s.disputeRate}% disputes</span>
+        )}
+      </div>
+    );
+  }
+
+  const s = scorecard.scorecard;
+  if (s.shipmentsInvolved === 0) return null;
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {s.badgeTier && (
+        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${BADGE_TIER_STYLE[s.badgeTier]}`}>
+          <Award className="w-3 h-3" /> {PERFORMANCE_BADGE_LABELS[s.badgeTier]}
+        </span>
+      )}
+      {s.fundingCompletionRate !== null && (
+        <span className="text-[10px] text-ink-faint font-semibold">{s.fundingCompletionRate}% funded on time</span>
+      )}
+      {s.disputeInvolvementRate !== null && s.disputeInvolvementRate > 0 && (
+        <span className="text-[10px] text-wine font-semibold">{s.disputeInvolvementRate}% disputes</span>
+      )}
+    </div>
   );
 }
 
@@ -274,6 +332,38 @@ export default function NetworkPage() {
     }
   };
 
+  const togglePreferred = async (connId: string) => {
+    if (!currentUser?.id) return;
+    // Optimistic toggle
+    setConnections(prev =>
+      prev.map(c => {
+        if (c.id !== connId) return c;
+        const current = c.preferredBy ?? [];
+        const isPreferred = current.includes(currentUser.id);
+        return {
+          ...c,
+          preferredBy: isPreferred ? current.filter(id => id !== currentUser.id) : [...current, currentUser.id],
+        };
+      })
+    );
+    try {
+      const res = await authFetch(`/api/network/connections/${connId}/preferred`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorId: currentUser.id }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        showToast('error', json.error || 'Could not update preferred partner.');
+        await fetchConnections(); // re-sync on failure
+      } else {
+        showToast('success', 'Preferred partner updated.');
+      }
+    } catch {
+      await fetchConnections();
+    }
+  };
+
   const removeConnection = async (connId: string, memberId: string, mode: 'cancel' | 'remove') => {
     if (!currentUser?.id || !connId) return;
     // Optimistically clear local state immediately
@@ -308,9 +398,13 @@ export default function NetworkPage() {
 
   const pendingReceived = connections.filter(c => c.direction === 'RECEIVED' && c.status === 'PENDING');
   const pendingSent     = connections.filter(c => c.direction === 'SENT'     && c.status === 'PENDING');
+  const canMarkPreferred = currentUser?.userType === 'TRADE_PARTY';
   const trustedNetworkAll = connections
     .filter(c => c.status === 'ACCEPTED')
     .sort((a, b) => {
+      const aPreferred = canMarkPreferred && (a.preferredBy ?? []).includes(currentUserId ?? '');
+      const bPreferred = canMarkPreferred && (b.preferredBy ?? []).includes(currentUserId ?? '');
+      if (aPreferred !== bPreferred) return aPreferred ? -1 : 1;
       const aFav = (a.favoritedBy ?? []).includes(currentUserId ?? '');
       const bFav = (b.favoritedBy ?? []).includes(currentUserId ?? '');
       if (aFav !== bFav) return aFav ? -1 : 1;
@@ -482,6 +576,7 @@ export default function NetworkPage() {
                           </span>
                         )}
                       </div>
+                      <ScorecardSummary scorecard={member.scorecard} />
                       {member.fullAddress && (
                         <p className="text-[10px] text-ink-faint">{member.fullAddress}</p>
                       )}
@@ -720,13 +815,25 @@ export default function NetworkPage() {
               const member = conn.otherParty;
               if (!member) return null;
               const isFavorited = (conn.favoritedBy ?? []).includes(currentUserId ?? '');
+              const isPreferred = (conn.preferredBy ?? []).includes(currentUserId ?? '');
+              const showPreferredToggle = canMarkPreferred && member.userType === 'LOGISTICS_CHAIN';
               return (
-              <div key={conn.id} className={`bg-white border rounded-2xl p-5 flex flex-col gap-4 shadow-sm ${isFavorited ? 'border-amber/30 ring-1 ring-amber/15' : 'border-mist'}`}>
+              <div key={conn.id} className={`bg-white border rounded-2xl p-5 flex flex-col gap-4 shadow-sm ${isPreferred ? 'border-teal/30 ring-1 ring-teal/15' : isFavorited ? 'border-amber/30 ring-1 ring-amber/15' : 'border-mist'}`}>
               <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal uppercase tracking-wider">
               <CheckCircle2 className="w-3.5 h-3.5" /> MariNet Member
               </div>
               <div className="flex items-center gap-1.5">
+              {showPreferredToggle && (
+                <button
+                  onClick={() => togglePreferred(conn.id)}
+                  title={isPreferred ? 'Remove Preferred Partner flag' : 'Mark as Preferred Partner'}
+                  className={`flex items-center justify-center w-7 h-7 rounded-lg border transition-all cursor-pointer
+                    ${isPreferred ? 'bg-teal-light border-teal/30 text-teal' : 'border-mist text-ink-faint hover:text-teal hover:border-teal/30'}`}
+                >
+                  <Crown className={`w-3.5 h-3.5 ${isPreferred ? 'fill-teal' : ''}`} />
+                </button>
+              )}
               <button
                 onClick={() => toggleFavorite(conn.id)}
                 title={isFavorited ? 'Remove from favorites' : 'Save as favorite'}
@@ -764,6 +871,11 @@ export default function NetworkPage() {
                     </div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <RoleBadges user={member} />
+                          {isPreferred && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-light text-teal border border-teal/20">
+                              <Crown className="w-3 h-3" /> Preferred Partner
+                            </span>
+                          )}
                           {(member.externalCredentials?.length ?? 0) > 0 && (
                             <span
                               className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"

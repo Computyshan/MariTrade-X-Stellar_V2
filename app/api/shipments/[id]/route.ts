@@ -756,12 +756,19 @@ export async function POST(
     }
 
     // ── 9. FILE DISPUTE ─────────────────────────────────────────────────────
+    // Captures the importer's stated reason + timestamp so the AI
+    // dispute-evidence summarizer (lib/gemini summarizeDisputeEvidence) has
+    // something to work with on the Admin Dispute Panel — previously this
+    // action flipped status/escrowStatus but discarded the reason entirely.
     if (action === 'FILE_DISPUTE') {
+      const { disputeReason } = body;
       const updated = {
         ...shipment,
-        status:       'DISPUTED' as const,
-        escrowStatus: 'DISPUTED' as const,
-        updatedAt:    new Date().toISOString(),
+        status:          'DISPUTED' as const,
+        escrowStatus:    'DISPUTED' as const,
+        disputeReason:   typeof disputeReason === 'string' && disputeReason.trim() ? disputeReason.trim() : shipment.disputeReason,
+        disputeRaisedAt: new Date().toISOString(),
+        updatedAt:       new Date().toISOString(),
       };
       await dbStore.saveShipment(updated);
       return NextResponse.json({ success: true, data: updated });

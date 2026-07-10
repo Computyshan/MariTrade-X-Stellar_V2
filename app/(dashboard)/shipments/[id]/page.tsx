@@ -32,8 +32,10 @@ import {
   ShieldAlert,
   Link2,
   Copy,
+  Bot,
+  TrendingUp,
 } from 'lucide-react';
-import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE, MILESTONE_EVIDENCE_MODE } from '@/types';
+import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE, MILESTONE_EVIDENCE_MODE, userHasJobRole } from '@/types';
 import { formatAsset } from '@/lib/stellar/assets';
 import { getUsdToPhpRate } from '@/lib/stellar/fx';
 import { canAccessBOCDocuments } from '@/lib/permissions/documents';
@@ -119,6 +121,27 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelState, setCancelState] = useState<CancelState>(CANCEL_INITIAL);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Importer's stated reason for a dispute — feeds the AI dispute-evidence
+  // summarizer shown on the Admin Dispute Panel.
+  const [disputeReasonInput, setDisputeReasonInput] = useState('');
+
+  // ── Phase 2 · AI Delay-Risk Prediction (Logistics Chain only) ───────────
+  const [delayRisk, setDelayRisk] = useState<{
+    riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+    reasoning: string;
+    recommendedActions: string[];
+    historicalStats: { sampleSize: number; holdRate: number | null; disputeRate: number | null; avgClearanceHours: number | null };
+  } | null>(null);
+  const [delayRiskLoading, setDelayRiskLoading] = useState(false);
+
+  // ── Phase 2 · AI Rate Benchmarking (Freight Forwarders only) ──────────
+  const [rateBenchmark, setRateBenchmark] = useState<{
+    suggestedFloorUSD: number | null;
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+    reasoning: string;
+    stats: { sampleSize: number; avgFreightCostUSD: number | null; minFreightCostUSD: number | null; maxFreightCostUSD: number | null };
+  } | null>(null);
+  const [rateBenchmarkLoading, setRateBenchmarkLoading] = useState(false);
 
   const handleCopyTrackingLink = async () => {
     if (!shipment) return;
@@ -164,6 +187,49 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     if (shipmentId) fetchDetails();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipmentId]);
+
+  // ── Phase 2 · AI Delay-Risk Prediction ─────────────────────────────────
+  // Logistics Chain-only heads-up: combines platform-wide historical stats
+  // for this route with a Gemini read on the cargo. Fetched once the
+  // shipment loads, not gated behind a button, since this is meant to
+  // surface risk proactively rather than wait for someone to ask.
+  useEffect(() => {
+    if (!data?.shipment || currentUser?.userType !== 'LOGISTICS_CHAIN') return;
+    setDelayRiskLoading(true);
+    authFetch('/api/gemini/delay-risk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shipmentId: data.shipment.id }),
+    })
+      .then(r => r.json())
+      .then(json => { if (json.success) setDelayRisk(json.data); })
+      .catch(() => {})
+      .finally(() => setDelayRiskLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.shipment?.id, currentUser?.userType]);
+
+  // ── Phase 2 · AI Rate Benchmarking ───────────────────────────
+  // Freight-Forwarder-only heads-up: combines platform-wide historical
+  // freight-cost stats for this route with Gemini's general market read, so
+  // a forwarder has a data-backed floor before negotiating with a carrier.
+  // Scoped to FREIGHT_FORWARDER specifically (not all Logistics Chain roles)
+  // since rate negotiation is that role's job, unlike delay-risk which is
+  // useful to brokers and warehouse operators too.
+  useEffect(() => {
+    if (!data?.shipment || !currentUser) return;
+    if (!userHasJobRole(currentUser, 'FREIGHT_FORWARDER')) return;
+    setRateBenchmarkLoading(true);
+    authFetch('/api/gemini/rate-benchmark', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shipmentId: data.shipment.id, cargoType: data.shipment.description }),
+    })
+      .then(r => r.json())
+      .then(json => { if (json.success) setRateBenchmark(json.data); })
+      .catch(() => {})
+      .finally(() => setRateBenchmarkLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.shipment?.id, currentUser?.jobRole, currentUser?.jobRoles]);
 
   // ── Live milestone log polling ──────────────────────────────────────────
   // Milestones can be logged by other assigned parties (forwarder, broker,
@@ -363,6 +429,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
   const openCancelModal = () => {
     setCancelState(CANCEL_INITIAL);
+    setDisputeReasonInput('');
     setCancelOpen(true);
   };
 
@@ -565,7 +632,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       const res = await authFetch(`/api/shipments/${shipId}/escrow-cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'confirm_raise_dispute', txHash: confirmedHash }),
+        body: JSON.stringify({ action: 'confirm_raise_dispute', txHash: confirmedHash, disputeReason: disputeReasonInput }),
       });
       const json = await res.json();
       if (json.success) {
@@ -763,6 +830,80 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
           {stellarError}
           <button onClick={() => setStellarError('')} className="ml-auto text-wine hover:text-wine/70">✕</button>
+        </div>
+      )}
+
+      {/* Phase 2 · AI Delay-Risk Prediction — Logistics Chain only */}
+      {currentUser.userType === 'LOGISTICS_CHAIN' && (delayRiskLoading || delayRisk) && (
+        <div className={`border rounded-xl p-4 flex items-start gap-3 ${
+          delayRisk?.riskLevel === 'HIGH' ? 'bg-wine-light border-wine/20' :
+          delayRisk?.riskLevel === 'MEDIUM' ? 'bg-amber-light border-amber/30' :
+          'bg-teal-light border-steel-light'
+        }`}>
+          <Bot className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+            delayRisk?.riskLevel === 'HIGH' ? 'text-wine' : delayRisk?.riskLevel === 'MEDIUM' ? 'text-amber' : 'text-steel'
+          }`} />
+          <div className="space-y-1.5 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-ink-soft flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" /> AI Delay-Risk Prediction
+              </p>
+              {delayRisk && (
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide ${
+                  delayRisk.riskLevel === 'HIGH' ? 'bg-wine text-white' : delayRisk.riskLevel === 'MEDIUM' ? 'bg-amber text-white' : 'bg-teal text-ink'
+                }`}>{delayRisk.riskLevel} RISK</span>
+              )}
+            </div>
+            {delayRiskLoading ? (
+              <p className="text-xs text-ink-faint italic flex items-center gap-1.5"><RefreshCw className="w-3 h-3 animate-spin" /> Checking route history and customs risk…</p>
+            ) : delayRisk ? (
+              <>
+                <p className="text-xs text-ink-faint leading-relaxed">{delayRisk.reasoning}</p>
+                {delayRisk.recommendedActions.length > 0 && (
+                  <ul className="text-[11px] text-ink-faint space-y-0.5 pl-4 list-disc">
+                    {delayRisk.recommendedActions.map((a, i) => <li key={i}>{a}</li>)}
+                  </ul>
+                )}
+                <p className="text-[9px] text-ink-faint/70">
+                  Based on {delayRisk.historicalStats.sampleSize} prior MariTrade shipment{delayRisk.historicalStats.sampleSize === 1 ? '' : 's'} on this exact route.
+                </p>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Phase 2 · AI Rate Benchmarking — Freight Forwarders only */}
+      {currentUser && userHasJobRole(currentUser, 'FREIGHT_FORWARDER') && (rateBenchmarkLoading || rateBenchmark) && (
+        <div className="border rounded-xl p-4 flex items-start gap-3 bg-steel-light border-steel-light">
+          <Bot className="w-5 h-5 flex-shrink-0 mt-0.5 text-steel" />
+          <div className="space-y-1.5 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-ink-soft flex items-center gap-1.5">
+                <Coins className="w-3.5 h-3.5" /> AI Rate Benchmark
+              </p>
+              {rateBenchmark && (
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide bg-steel text-white">
+                  {rateBenchmark.confidence} CONFIDENCE
+                </span>
+              )}
+            </div>
+            {rateBenchmarkLoading ? (
+              <p className="text-xs text-ink-faint italic flex items-center gap-1.5"><RefreshCw className="w-3 h-3 animate-spin" /> Checking route freight history and market rates…</p>
+            ) : rateBenchmark ? (
+              <>
+                {rateBenchmark.suggestedFloorUSD != null && (
+                  <p className="text-lg font-black text-ink font-sans">
+                    ${rateBenchmark.suggestedFloorUSD.toLocaleString()} <span className="text-xs font-bold text-ink-faint">suggested negotiating floor</span>
+                  </p>
+                )}
+                <p className="text-xs text-ink-faint leading-relaxed">{rateBenchmark.reasoning}</p>
+                <p className="text-[9px] text-ink-faint/70">
+                  Based on {rateBenchmark.stats.sampleSize} prior MariTrade shipment{rateBenchmark.stats.sampleSize === 1 ? '' : 's'} with a recorded freight cost on this exact route.
+                </p>
+              </>
+            ) : null}
+          </div>
         </div>
       )}
 
@@ -1163,6 +1304,22 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
                     <span className="font-sans text-[10px] text-ink truncate">{freighter.publicKey}</span>
                   </div>
                 )}
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-ink-faint uppercase tracking-wide">
+                    Reason for dispute (optional, but helps arbitration)
+                  </label>
+                  <textarea
+                    value={disputeReasonInput}
+                    onChange={e => setDisputeReasonInput(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Cargo arrived with visible water damage on 3 pallets; photos attached to Delivered milestone."
+                    className="w-full border border-mist rounded-lg p-2.5 text-xs outline-none font-sans resize-none"
+                  />
+                  <p className="text-[9px] text-ink-faint">
+                    This is shown to MariTrade's arbitrators and summarized by AI alongside the milestone log — it doesn't affect the outcome on its own.
+                  </p>
+                </div>
 
                 <div className="flex gap-2 justify-end pt-2">
                   <button onClick={() => setCancelOpen(false)} className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold text-xs">

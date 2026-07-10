@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth-guard';
 import { MilestoneEvent, MilestoneType, MILESTONE_EVIDENCE_MODE, getMilestonesForUser, getUserJobRoles } from '@/types';
 import { getMariTradeEscrowClient, CancellationStage, NetworkName } from '@/lib/stellar/escrow-contract';
 import { platformSignAndSubmit } from '@/lib/stellar/platform-signer';
+import { crossCheckVesselDeparture } from '@/lib/verification/ais-tracking';
 
 const STELLAR_NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as NetworkName;
 const PLATFORM_ADDRESS = process.env.NEXT_PUBLIC_PLATFORM_STELLAR_ADDRESS ?? '';
@@ -158,7 +159,33 @@ export async function POST(
       verified: false,
     };
 
+    // Phase 3 — vessel-tracking cross-check. Best-effort and non-blocking:
+    // the milestone above is saved either way, this only attaches
+    // corroborating (or contradicting) evidence to it.
+    if (type === 'VESSEL_DEPARTED_ORIGIN') {
+      try {
+        milestone.aisVerification = await crossCheckVesselDeparture({
+          claimedReference: evidenceRef ?? '',
+          occurredAt: milestone.occurredAt,
+        });
+      } catch (err) {
+        console.warn('[milestones] AIS cross-check threw unexpectedly, continuing without it:', err);
+      }
+    }
+
     await dbStore.saveMilestone(milestone);
+
+    // Phase 3 — IoT sensor ingestion: attach any sensor readings that
+    // arrived in a ±6h window around this milestone and haven't been linked
+    // to a milestone yet. Best-effort — never blocks the milestone save above.
+    try {
+      const occurredMs = new Date(milestone.occurredAt).getTime();
+      const windowStart = new Date(occurredMs - 6 * 60 * 60 * 1000).toISOString();
+      const windowEnd = new Date(occurredMs + 6 * 60 * 60 * 1000).toISOString();
+      await dbStore.linkIoTReadingsToMilestone(shipment.id, milestone.id, windowStart, windowEnd);
+    } catch (err) {
+      console.warn('[milestones] IoT reading backfill failed (non-blocking):', err);
+    }
 
     // Auto-complete any matching priority milestone
     const priorityMilestones = await dbStore.getPriorityMilestones(shipment.id);
