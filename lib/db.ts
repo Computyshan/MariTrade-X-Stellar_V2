@@ -82,6 +82,7 @@ import {
   RecipientConfirmation,
   RecipientConfirmationStatus,
   AisVesselPosition,
+  ShipmentDelayAlert,
 } from '../types';
 
 // ─── Row → TypeScript mappers ─────────────────────────────────────────────────
@@ -1740,5 +1741,86 @@ export const dbStore = {
       .not('status', 'in', '(DELIVERED,CANCELLED,DISPUTED)');
     assertNoError(error, 'getWatchedVesselMmsis');
     return Array.from(new Set((data ?? []).map((r: any) => r.vessel_mmsi as string).filter(Boolean)));
+  },
+
+  // ── Phase 4: Proactive, externally-triggered nudges ────────────────
+  // Backs app/api/cron/delay-monitor — polls lib/delay-signals.ts per
+  // active shipment and fans out via lib/notify.ts.
+
+  /** Every shipment that hasn't reached a terminal state yet — same
+   *  "active" definition as getWatchedVesselMmsis, so the delay-monitor
+   *  cron and the AIS worker agree on what counts as "in flight." */
+  getActiveShipmentsForDelayMonitoring: async (): Promise<Shipment[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('shipments')
+      .select('*')
+      .not('status', 'in', '(DELIVERED,CANCELLED,DISPUTED)');
+    assertNoError(error, 'getActiveShipmentsForDelayMonitoring');
+    return (data ?? []).map(rowToShipment);
+  },
+
+  /** Most recent alert for this shipment+source, if any — used to decide
+   *  whether a freshly-detected signal is actually new or just the same
+   *  ongoing condition the cron already alerted on last run. Callers apply
+   *  their own cooldown window against `detectedAt`. */
+  getRecentDelayAlert: async (
+    shipmentId: string,
+    source: 'PORT_CONGESTION' | 'CUSTOMS_BACKLOG',
+  ): Promise<ShipmentDelayAlert | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('shipment_delay_alerts')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .eq('source', source)
+      .order('detected_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    assertNoError(error, 'getRecentDelayAlert');
+    if (!data) return undefined;
+    return {
+      id: data.id,
+      shipmentId: data.shipment_id,
+      source: data.source,
+      severity: data.severity,
+      summary: data.summary,
+      detail: data.detail ?? undefined,
+      detectedAt: data.detected_at,
+      notifiedLogisticsAt: data.notified_logistics_at ?? undefined,
+      notifiedImporterAt: data.notified_importer_at ?? undefined,
+    };
+  },
+
+  saveDelayAlert: async (alert: Omit<ShipmentDelayAlert, 'id'> & { id?: string }): Promise<ShipmentDelayAlert> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      shipment_id: alert.shipmentId,
+      source: alert.source,
+      severity: alert.severity,
+      summary: alert.summary,
+      detail: alert.detail ?? null,
+      detected_at: alert.detectedAt,
+      notified_logistics_at: alert.notifiedLogisticsAt ?? null,
+      notified_importer_at: alert.notifiedImporterAt ?? null,
+    };
+    if (alert.id) row.id = alert.id;
+    const { data, error } = await admin
+      .from('shipment_delay_alerts')
+      .insert(row)
+      .select()
+      .single();
+    assertNoError(error, 'saveDelayAlert');
+    return {
+      id: data.id,
+      shipmentId: data.shipment_id,
+      source: data.source,
+      severity: data.severity,
+      summary: data.summary,
+      detail: data.detail ?? undefined,
+      detectedAt: data.detected_at,
+      notifiedLogisticsAt: data.notified_logistics_at ?? undefined,
+      notifiedImporterAt: data.notified_importer_at ?? undefined,
+    };
   },
 };

@@ -50,6 +50,7 @@ import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contrac
 import { signXdrWithFreighter } from '@/lib/stellar/freighter';
 import PphpWalletPanel from '@/components/PphpWalletPanel';
 import VesselPositionCard from '@/components/VesselPositionCard';
+import IoTReadingsPanel from '@/components/IoTReadingsPanel';
 import SignaturePad, { SignaturePadHandle } from '@/components/SignaturePad';
 
 type PageParams = { id: string };
@@ -59,6 +60,28 @@ interface ShipmentDetailProps {
 }
 
 const STELLAR_NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as 'testnet' | 'mainnet';
+
+// ─── Phase 4 · ETA countdown formatting ──────────────────────────────────
+type EtaCountdown = { label: string; overdue: boolean };
+
+function formatEtaCountdown(estimatedArrival: string, nowMs: number): EtaCountdown {
+  const targetMs = new Date(estimatedArrival).getTime();
+  const diffMs = targetMs - nowMs;
+  const overdue = diffMs < 0;
+  const abs = Math.abs(diffMs);
+  const days = Math.floor(abs / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((abs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  const minutes = Math.floor((abs % (60 * 60 * 1000)) / (60 * 1000));
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (days > 0 || hours > 0) parts.push(`${hours}h`);
+  if (days === 0) parts.push(`${minutes}m`);
+  const duration = parts.join(' ');
+  return {
+    label: overdue ? `${duration} past ETA` : `${duration} until ETA`,
+    overdue,
+  };
+}
 
 // ─── Cancel modal state ──────────────────────────────────────────────────────
 type CancelStep =
@@ -130,6 +153,20 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelState, setCancelState] = useState<CancelState>(CANCEL_INITIAL);
   const [linkCopied, setLinkCopied] = useState(false);
+
+  // ── Phase 4 · SLA / ETA countdown surfacing ─────────────────────
+  // NOTE: this counts down to `shipment.estimatedArrival`, the only real
+  // deadline field on the schema today — the plan doc's "SLA countdown"
+  // language ties to a per-milestone bonus deadline from the Phase 2/5
+  // escrow-incentive work, which hasn't been built (no such field exists
+  // yet). Labeling this as an ETA countdown rather than an "SLA deadline"
+  // is deliberate — it shows real data instead of implying a guarantee
+  // nothing in the system currently enforces.
+  const [etaTick, setEtaTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setEtaTick(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   // Importer's stated reason for a dispute — feeds the AI dispute-evidence
   // summarizer shown on the Admin Dispute Panel.
   const [disputeReasonInput, setDisputeReasonInput] = useState('');
@@ -921,6 +958,11 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
   const isImporter = currentUser.id === shipment.importerId;
 
+  // Mirrors the /api/shipments/[id]/iot-devices POST authorization check —
+  // only an assigned logistics chain member or the importer may register a
+  // sensor tag against this shipment.
+  const canRegisterIoTDevice = isImporter || assignments.some((a: any) => a.userId === currentUser.id);
+
   // Stage label for the cancel banner — uses the shipment's actual escrow asset
   const escrowAsset = (shipment.escrowAsset ?? 'USDC') as 'USDC' | 'PPHP';
   const cancelStageLabel: Record<string, string> = {
@@ -939,6 +981,19 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
           </button>
           <h1 className="text-2xl sm:text-3xl font-black text-ink tracking-tight font-sans break-words">{shipment.referenceCode}</h1>
           <p className="text-xs text-ink-faint">Cargo Item: <strong className="text-ink-faint font-semibold">{shipment.description}</strong></p>
+          {/* Phase 4 · SLA/ETA countdown surfacing — live, not a static list */}
+          {shipment.estimatedArrival && !['DELIVERED', 'CANCELLED'].includes(shipment.status) && (() => {
+            const eta = formatEtaCountdown(shipment.estimatedArrival, etaTick);
+            return (
+              <p className={`text-[10px] font-bold flex items-center gap-1 ${eta.overdue ? 'text-wine' : 'text-steel'}`}>
+                <Clock className="w-3 h-3" />
+                {eta.label}
+                <span className="text-ink-faint font-normal">
+                  · ETA {new Date(shipment.estimatedArrival).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </p>
+            );
+          })()}
         </div>
 
         <div className="flex flex-wrap gap-2 text-xs">
@@ -1207,6 +1262,13 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
               </div>
             )}
           </div>
+
+          {/* Phase 3 · IoT sensor readings (temperature/humidity/shock/GPS/door) */}
+          <IoTReadingsPanel
+            shipmentId={shipment.id}
+            currentUserId={currentUser.id}
+            canRegisterDevice={canRegisterIoTDevice}
+          />
 
           {/* Phase 3 · Recipient-side confirmation flow */}
           {(isImporter || currentUser.userType === 'LOGISTICS_CHAIN') && (

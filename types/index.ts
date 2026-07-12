@@ -776,7 +776,10 @@ export type NotificationType =
   | 'FIRM_INVITE'            // You were invited to join a team/firm
   | 'FIRM_INVITE_ACCEPTED'   // Someone accepted your firm invite
   | 'FIRM_MEMBER_REMOVED'    // You were removed from a firm
-  | 'SHIPMENT_REASSIGNED';   // A shipment assignment was reassigned to you
+  | 'SHIPMENT_REASSIGNED'    // A shipment assignment was reassigned to you
+  // ─── Phase 4 · Proactive, externally-triggered nudges ───
+  | 'PORT_CONGESTION_ALERT'      // Logistics Chain: an external signal suggests delay risk ahead of arrival
+  | 'PROACTIVE_DELAY_DISCLOSURE'; // Trade Party: the importer is told about the same risk, independently of logistics logging anything
 
 export interface AppNotification {
   id: string;
@@ -787,6 +790,31 @@ export interface AppNotification {
   linkHref?: string;           // Optional deep-link inside the app
   isRead: boolean;
   createdAt: string;
+}
+
+// ─── Phase 4 · Proactive, externally-triggered nudges ─────────────────────
+// A detected external delay signal (port congestion, customs backlog, etc.)
+// for an active shipment, raised by the app/api/cron/delay-monitor cron job.
+// Stored primarily so the same signal isn't re-notified every cron tick —
+// see lib/delay-signals.ts for the provider interface and
+// lib/db.ts#getRecentDelayAlert for the dedupe window this backs.
+export type DelaySignalSource = 'PORT_CONGESTION' | 'CUSTOMS_BACKLOG';
+export type DelayAlertSeverity = 'ADVISORY' | 'WARNING';
+
+export interface ShipmentDelayAlert {
+  id: string;
+  shipmentId: string;
+  source: DelaySignalSource;
+  severity: DelayAlertSeverity;
+  /** Short human-readable line, e.g. "Port of Manila reporting elevated dwell times". */
+  summary: string;
+  /** Raw detail from the provider, if any — shown to logistics users, not the importer. */
+  detail?: string;
+  detectedAt: string;
+  /** Set once the assigned logistics users have been notified for this alert. */
+  notifiedLogisticsAt?: string;
+  /** Set once the importer has been notified for this alert (proactive disclosure). */
+  notifiedImporterAt?: string;
 }
 
 // ─── Saved Shipment List Views ─────────────────────────────────────────────
