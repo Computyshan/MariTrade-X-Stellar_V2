@@ -410,6 +410,12 @@ export interface Shipment {
    *  the AI rate-benchmarking feature on future shipments over the same
    *  route. Undefined until a Freight Forwarder records it. */
   freightCostUSD?: number;
+  /** Vessel identity for the AIS cross-check on VESSEL_DEPARTED_ORIGIN — set
+   *  once a Freight Forwarder knows/books the vessel (captured alongside the
+   *  SPACE_ON_VESSEL_SECURED milestone). MMSI, not IMO, since that's the key
+   *  aisstream.io position reports are indexed by. Undefined until set. */
+  vesselMmsi?: string;
+  vesselName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -558,6 +564,22 @@ export interface AisVerificationResult {
   source: string;      // e.g. 'AISHub', 'unconfigured'
   checkedAt: string;
   note?: string;        // human-readable reason for MISMATCH/UNVERIFIABLE
+}
+
+/** A cached last-known position for one vessel (by MMSI), kept fresh by the
+ *  standalone scripts/ais-worker.ts process consuming aisstream.io's
+ *  WebSocket feed. The app only ever reads this — never calls aisstream.io
+ *  directly, since that's a push API with no request/response endpoint. */
+export interface AisVesselPosition {
+  mmsi: string;
+  shipName?: string;
+  imoNumber?: string;
+  latitude?: number;
+  longitude?: number;
+  sogKnots?: number;
+  navStatus?: string;
+  receivedAt: string;
+  updatedAt: string;
 }
 
 // ── Digital signature capture at delivery ───────────────────────────────────

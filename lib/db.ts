@@ -81,6 +81,7 @@ import {
   DeliverySignature,
   RecipientConfirmation,
   RecipientConfirmationStatus,
+  AisVesselPosition,
 } from '../types';
 
 // ─── Row → TypeScript mappers ─────────────────────────────────────────────────
@@ -161,6 +162,8 @@ function rowToShipment(row: any): Shipment {
     disputeReason: row.dispute_reason ?? undefined,
     disputeRaisedAt: row.dispute_raised_at ?? undefined,
     freightCostUSD: row.freight_cost_usd != null ? Number(row.freight_cost_usd) : undefined,
+    vesselMmsi: row.vessel_mmsi ?? undefined,
+    vesselName: row.vessel_name ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -186,6 +189,8 @@ function shipmentToRow(s: Shipment): any {
     dispute_reason: s.disputeReason ?? null,
     dispute_raised_at: s.disputeRaisedAt ?? null,
     freight_cost_usd: s.freightCostUSD ?? null,
+    vessel_mmsi: s.vesselMmsi ?? null,
+    vessel_name: s.vesselName ?? null,
     created_at: s.createdAt,
     updated_at: s.updatedAt,
   };
@@ -1661,5 +1666,79 @@ export const dbStore = {
       .eq('id', data.id);
     assertNoError(updateErr, 'verifySignatureOtpChallenge:mark');
     return true;
+  },
+
+  // ── Phase 3: AIS vessel position cache ────────────────────
+  // Written only by the standalone scripts/ais-worker.ts process consuming
+  // aisstream.io's WebSocket feed. Read here by
+  // lib/verification/ais-tracking.ts — the Next.js app never talks to
+  // aisstream.io directly, since it's a push API with no per-request
+  // "give me this vessel's position" endpoint a serverless function could call.
+
+  getLatestAisPosition: async (mmsi: string): Promise<AisVesselPosition | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('ais_vessel_positions')
+      .select('*')
+      .eq('mmsi', mmsi)
+      .maybeSingle();
+    assertNoError(error, 'getLatestAisPosition');
+    if (!data) return undefined;
+    return {
+      mmsi: data.mmsi,
+      shipName: data.ship_name ?? undefined,
+      imoNumber: data.imo_number ?? undefined,
+      latitude: data.latitude != null ? Number(data.latitude) : undefined,
+      longitude: data.longitude != null ? Number(data.longitude) : undefined,
+      sogKnots: data.sog_knots != null ? Number(data.sog_knots) : undefined,
+      navStatus: data.nav_status ?? undefined,
+      receivedAt: data.received_at,
+      updatedAt: data.updated_at,
+    };
+  },
+
+  /** Upsert the latest cached position for one MMSI. Called by
+   *  scripts/ais-worker.ts on every PositionReport it receives for a
+   *  watched vessel — never called from any API route. */
+  upsertAisPosition: async (pos: {
+    mmsi: string;
+    shipName?: string;
+    imoNumber?: string;
+    latitude?: number;
+    longitude?: number;
+    sogKnots?: number;
+    navStatus?: string;
+    receivedAt: string;
+  }): Promise<void> => {
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
+      .from('ais_vessel_positions')
+      .upsert({
+        mmsi: pos.mmsi,
+        ship_name: pos.shipName ?? null,
+        imo_number: pos.imoNumber ?? null,
+        latitude: pos.latitude ?? null,
+        longitude: pos.longitude ?? null,
+        sog_knots: pos.sogKnots ?? null,
+        nav_status: pos.navStatus ?? null,
+        received_at: pos.receivedAt,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'mmsi' });
+    assertNoError(error, 'upsertAisPosition');
+  },
+
+  /** MMSIs the worker should subscribe to right now — every shipment with a
+   *  vessel assigned that hasn't reached a terminal state yet. Re-polled by
+   *  the worker periodically so newly-booked vessels get picked up without
+   *  a restart. */
+  getWatchedVesselMmsis: async (): Promise<string[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('shipments')
+      .select('vessel_mmsi')
+      .not('vessel_mmsi', 'is', null)
+      .not('status', 'in', '(DELIVERED,CANCELLED,DISPUTED)');
+    assertNoError(error, 'getWatchedVesselMmsis');
+    return Array.from(new Set((data ?? []).map((r: any) => r.vessel_mmsi as string).filter(Boolean)));
   },
 };

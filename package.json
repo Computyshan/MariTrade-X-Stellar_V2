@@ -10,7 +10,8 @@
     "clean": "next clean",
     "mint-pphp": "npx tsx scripts/mint-pphp.ts",
     "setup-pphp-trustline": "npx tsx scripts/setup-pphp-trustline.ts",
-    "setup-platform-usdc-trustline": "npx tsx scripts/setup-platform-usdc-trustline.ts"
+    "setup-platform-usdc-trustline": "npx tsx scripts/setup-platform-usdc-trustline.ts",
+    "ais-worker": "npx tsx scripts/ais-worker.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -31,6 +32,7 @@
     "react-dom": "^19.2.1",
     "react-hook-form": "^7.80.0",
     "tailwind-merge": "^3.3.1",
+    "ws": "^8.18.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
@@ -40,6 +42,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.5.13",
     "dotenv": "^17.4.2",
     "eslint": "9.39.1",
     "eslint-config-next": "16.0.8",

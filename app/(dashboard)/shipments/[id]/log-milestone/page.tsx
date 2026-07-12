@@ -16,6 +16,8 @@ import {
   Hash,
   FileText,
   Camera,
+  Radar,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   MilestoneType,
@@ -27,6 +29,12 @@ import {
   getUserJobRoles,
   getMilestonesForUser,
 } from '@/types';
+import {
+  mmsiValidationError,
+  guessFlagState,
+  checkVesselTrackingStatus,
+  VesselTrackingStatus,
+} from '@/lib/vessel-tracking';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Role accent colors are drawn from the app's actual design system
@@ -113,6 +121,16 @@ export default function LogMilestonePage({ params }: PageProps) {
   const [description, setDescription]             = useState('');
   const [evidenceUrl, setEvidenceUrl]             = useState('');
   const [evidenceRef, setEvidenceRef]             = useState('');
+  // Phase 3 — optional vessel identity, captured alongside
+  // SPACE_ON_VESSEL_SECURED once the Freight Forwarder knows the vessel.
+  // Powers the AIS cross-check on the later VESSEL_DEPARTED_ORIGIN milestone.
+  const [vesselMmsi, setVesselMmsi]               = useState('');
+  const [vesselName, setVesselName]               = useState('');
+  // Inline MMSI validation + optional "already tracked?" lookup — entirely
+  // client-side format checking, plus a best-effort server round-trip that
+  // only ever confirms a cached AIS position (see lib/vessel-tracking.ts).
+  const [vesselTrackingStatus, setVesselTrackingStatus] = useState<VesselTrackingStatus | null>(null);
+  const [checkingVessel, setCheckingVessel]        = useState(false);
   const [uploading, setUploading]                 = useState(false);
   const [uploadError, setUploadError]             = useState('');
   const [submitting, setSubmitting]               = useState(false);
@@ -153,9 +171,31 @@ export default function LogMilestonePage({ params }: PageProps) {
     setSelectedMilestone(m);
     setEvidenceUrl('');
     setEvidenceRef('');
+    setVesselMmsi('');
+    setVesselName('');
+    setVesselTrackingStatus(null);
     setUploadError('');
     setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // ── Vessel MMSI field — re-validated on every keystroke (offline, cheap),
+  // tracking status cleared so a stale lookup from a previous MMSI never
+  // lingers on screen next to a number that's since changed. ─────────────
+  const handleVesselMmsiChange = (value: string) => {
+    setVesselMmsi(value);
+    setVesselTrackingStatus(null);
+  };
+
+  const handleCheckVesselTracking = async () => {
+    if (mmsiValidationError(vesselMmsi)) return;
+    setCheckingVessel(true);
+    try {
+      const status = await checkVesselTrackingStatus(vesselMmsi, authFetch);
+      setVesselTrackingStatus(status);
+    } finally {
+      setCheckingVessel(false);
+    }
   };
 
   // ── File upload (DOCUMENT + PHOTO_OR_NOTE modes) ──────────────────────────
@@ -197,6 +237,10 @@ export default function LogMilestonePage({ params }: PageProps) {
     if (evidenceMode === 'PHOTO_OR_NOTE' && !evidenceUrl && !description.trim()) {
       setError('Please upload a photo or add a written description.'); return;
     }
+    if (selectedMilestone === 'SPACE_ON_VESSEL_SECURED') {
+      const mmsiError = mmsiValidationError(vesselMmsi);
+      if (mmsiError) { setError(mmsiError); return; }
+    }
 
     setError('');
     setSubmitting(true);
@@ -211,6 +255,8 @@ export default function LogMilestonePage({ params }: PageProps) {
           evidenceUrl: evidenceUrl || undefined,
           evidenceRef: evidenceRef.trim() || undefined,
           occurredAt:  new Date().toISOString(),
+          vesselMmsi:  vesselMmsi.trim() || undefined,
+          vesselName:  vesselName.trim() || undefined,
         }),
       });
       const json = await res.json();
@@ -242,6 +288,7 @@ export default function LogMilestonePage({ params }: PageProps) {
   // ── Is the submit button ready? ───────────────────────────────────────────
   const isReady = (() => {
     if (!selectedMilestone) return false;
+    if (selectedMilestone === 'SPACE_ON_VESSEL_SECURED' && mmsiValidationError(vesselMmsi)) return false;
     if (evidenceMode === 'REFERENCE_NUMBER') return evidenceRef.trim().length > 0;
     if (evidenceMode === 'DOCUMENT')         return evidenceUrl.length > 0;
     if (evidenceMode === 'PHOTO_OR_NOTE')    return evidenceUrl.length > 0 || description.trim().length > 0;
@@ -518,6 +565,78 @@ export default function LogMilestonePage({ params }: PageProps) {
                   className="hidden"
                   onChange={handleFileUpload}
                 />
+              </div>
+            )}
+
+            {/* ── Phase 3 · Optional vessel identity (AIS cross-check setup) ─── */}
+            {selectedMilestone === 'SPACE_ON_VESSEL_SECURED' && (
+              <div className="space-y-3 border-t border-mist-light pt-5">
+                <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                  Vessel Identity <span className="text-ink-faint font-normal normal-case">— optional, enables AIS verification later</span>
+                </label>
+                <p className="text-[10px] text-ink-faint leading-relaxed">
+                  If you know the vessel&apos;s MMSI, MariTrade can cross-check a live AIS feed against the
+                  &quot;Vessel Departed Origin&quot; milestone later, instead of relying only on the self-reported reference number.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-ink-faint">Vessel MMSI</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="e.g. 368207620"
+                        maxLength={9}
+                        className={`w-full border rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-teal
+                          ${vesselMmsi && mmsiValidationError(vesselMmsi) ? 'border-wine/40 bg-wine-light/40' : 'border-mist'}`}
+                        value={vesselMmsi}
+                        onChange={e => handleVesselMmsiChange(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCheckVesselTracking}
+                        disabled={!vesselMmsi || !!mmsiValidationError(vesselMmsi) || checkingVessel}
+                        title="Check if MariTrade already has a live AIS position for this vessel"
+                        className="shrink-0 flex items-center gap-1 border border-mist hover:border-teal disabled:opacity-40 disabled:cursor-not-allowed text-ink-faint hover:text-teal font-bold text-[10px] px-2.5 rounded-lg transition-colors"
+                      >
+                        {checkingVessel
+                          ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                          : <Radar className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {vesselMmsi && mmsiValidationError(vesselMmsi) ? (
+                      <p className="text-[10px] text-wine font-semibold">{mmsiValidationError(vesselMmsi)}</p>
+                    ) : vesselMmsi && guessFlagState(vesselMmsi) ? (
+                      <p className="text-[10px] text-ink-faint">Flag (best guess): {guessFlagState(vesselMmsi)}</p>
+                    ) : null}
+                    {vesselTrackingStatus && (
+                      <div className="text-[10px] pt-0.5">
+                        {vesselTrackingStatus.state === 'tracked' && (
+                          <p className="flex items-center gap-1 text-teal font-semibold">
+                            <ShieldCheck className="w-3 h-3" />
+                            Already tracked{vesselTrackingStatus.position.shipName ? ` — ${vesselTrackingStatus.position.shipName}` : ''}, last seen {new Date(vesselTrackingStatus.position.receivedAt).toLocaleString()}.
+                          </p>
+                        )}
+                        {vesselTrackingStatus.state === 'not_yet_tracked' && (
+                          <p className="text-ink-faint">No AIS position observed yet — normal for a first-time MMSI. It&apos;ll start being watched once you save this milestone.</p>
+                        )}
+                        {vesselTrackingStatus.state === 'invalid_mmsi' && (
+                          <p className="text-wine font-semibold">That MMSI isn&apos;t formatted like a ship station.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-ink-faint">Vessel Name (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Maersk Tokyo Express"
+                      className="w-full border border-mist rounded-lg px-3 py-2 text-xs outline-none focus:border-teal"
+                      value={vesselName}
+                      onChange={e => setVesselName(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 

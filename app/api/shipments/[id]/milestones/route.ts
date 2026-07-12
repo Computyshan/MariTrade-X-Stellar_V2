@@ -90,7 +90,7 @@ export async function POST(
   try {
     const { id: shipmentId } = await params;
     const body = await req.json();
-    const { loggedById, type, description, evidenceUrl, evidenceRef, occurredAt } = body;
+    const { loggedById, type, description, evidenceUrl, evidenceRef, occurredAt, vesselMmsi, vesselName } = body;
 
     // Validate required fields — at least one evidence field must be present
     if (!loggedById || !type) {
@@ -159,12 +159,32 @@ export async function POST(
       verified: false,
     };
 
+    // Phase 3 — vessel identity capture. Optional, typed by the Freight
+    // Forwarder alongside SPACE_ON_VESSEL_SECURED once the vessel is known.
+    // Saved onto the shipment (not the milestone) since it's a durable fact
+    // about the shipment, and it's what powers the AIS cross-check on the
+    // later VESSEL_DEPARTED_ORIGIN milestone below. Non-blocking: a failure
+    // here never stops the milestone itself from being logged.
+    if (type === 'SPACE_ON_VESSEL_SECURED' && (vesselMmsi?.trim() || vesselName?.trim())) {
+      try {
+        await dbStore.saveShipment({
+          ...shipment,
+          vesselMmsi: vesselMmsi?.trim() || shipment.vesselMmsi,
+          vesselName: vesselName?.trim() || shipment.vesselName,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('[milestones] Failed to save vessel identity onto shipment, continuing:', err);
+      }
+    }
+
     // Phase 3 — vessel-tracking cross-check. Best-effort and non-blocking:
     // the milestone above is saved either way, this only attaches
     // corroborating (or contradicting) evidence to it.
     if (type === 'VESSEL_DEPARTED_ORIGIN') {
       try {
         milestone.aisVerification = await crossCheckVesselDeparture({
+          vesselMmsi: vesselMmsi?.trim() || shipment.vesselMmsi,
           claimedReference: evidenceRef ?? '',
           occurredAt: milestone.occurredAt,
         });

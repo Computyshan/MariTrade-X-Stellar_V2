@@ -34,14 +34,23 @@ import {
   Copy,
   Bot,
   TrendingUp,
+  PenTool,
+  UserCheck,
+  Send,
+  ShieldCheck,
 } from 'lucide-react';
-import { Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE, MILESTONE_EVIDENCE_MODE, userHasJobRole } from '@/types';
+import {
+  Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE, MILESTONE_EVIDENCE_MODE, userHasJobRole,
+  DeliverySignature, SignerRelation, RecipientConfirmation,
+} from '@/types';
 import { formatAsset } from '@/lib/stellar/assets';
 import { getUsdToPhpRate } from '@/lib/stellar/fx';
 import { canAccessBOCDocuments } from '@/lib/permissions/documents';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
 import { signXdrWithFreighter } from '@/lib/stellar/freighter';
 import PphpWalletPanel from '@/components/PphpWalletPanel';
+import VesselPositionCard from '@/components/VesselPositionCard';
+import SignaturePad, { SignaturePadHandle } from '@/components/SignaturePad';
 
 type PageParams = { id: string };
 
@@ -143,6 +152,29 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   } | null>(null);
   const [rateBenchmarkLoading, setRateBenchmarkLoading] = useState(false);
 
+  // ── Phase 3 · Digital signature capture at delivery ─────────────────────
+  const [deliverySignature, setDeliverySignature] = useState<DeliverySignature | null>(null);
+  const [signatureOpen, setSignatureOpen] = useState(false);
+  const [signerName, setSignerName] = useState('');
+  const [signerRelation, setSignerRelation] = useState<SignerRelation>('CONSIGNEE');
+  const [signerContact, setSignerContact] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpExpiresAt, setOtpExpiresAt] = useState('');
+  const [signatureSubmitting, setSignatureSubmitting] = useState(false);
+  const [signatureError, setSignatureError] = useState('');
+  const signaturePadRef = useRef<SignaturePadHandle>(null);
+
+  // ── Phase 3 · Recipient-side confirmation flow ───────────────────────────
+  const [recipientConfirmations, setRecipientConfirmations] = useState<RecipientConfirmation[]>([]);
+  const [recipientConfirmOpen, setRecipientConfirmOpen] = useState(false);
+  const [consigneeContact, setConsigneeContact] = useState('');
+  const [consigneeName, setConsigneeName] = useState('');
+  const [rcSubmitting, setRcSubmitting] = useState(false);
+  const [rcError, setRcError] = useState('');
+  const [rcJustSentUrl, setRcJustSentUrl] = useState('');
+
   const handleCopyTrackingLink = async () => {
     if (!shipment) return;
     const url = `${window.location.origin}/track/${shipment.referenceCode}`;
@@ -230,6 +262,27 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       .finally(() => setRateBenchmarkLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.shipment?.id, currentUser?.jobRole, currentUser?.jobRoles]);
+
+  // ── Phase 3 · Load existing delivery signature (if DELIVERED_AND_SIGNED_OFF
+  // has already been logged) ──────────────────────────────────────────────
+  useEffect(() => {
+    const deliveredMilestone = data?.milestones?.find(m => m.type === 'DELIVERED_AND_SIGNED_OFF');
+    if (!deliveredMilestone) { setDeliverySignature(null); return; }
+    authFetch(`/api/shipments/${shipmentId}/delivery-signature?milestoneEventId=${deliveredMilestone.id}`)
+      .then(r => r.json())
+      .then(json => { if (json.success) setDeliverySignature(json.data ?? null); })
+      .catch(() => {});
+  }, [data?.milestones, shipmentId]);
+
+  // ── Phase 3 · Load recipient confirmation requests for this shipment ────
+  useEffect(() => {
+    if (!data?.shipment) return;
+    authFetch(`/api/shipments/${shipmentId}/recipient-confirmation`)
+      .then(r => r.json())
+      .then(json => { if (json.success) setRecipientConfirmations(json.data ?? []); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.shipment?.id, shipmentId]);
 
   // ── Live milestone log polling ──────────────────────────────────────────
   // Milestones can be logged by other assigned parties (forwarder, broker,
@@ -692,6 +745,130 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     }
   };
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PHASE 3 · DIGITAL SIGNATURE CAPTURE AT DELIVERY
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const openSignatureModal = () => {
+    setSignerName('');
+    setSignerRelation('CONSIGNEE');
+    setSignerContact('');
+    setOtpCode('');
+    setOtpSent(false);
+    setOtpExpiresAt('');
+    setSignatureError('');
+    signaturePadRef.current?.clear();
+    setSignatureOpen(true);
+  };
+
+  const handleSendSignatureOtp = async () => {
+    if (!data || !currentUser || !signerContact.trim()) return;
+    setOtpSending(true);
+    setSignatureError('');
+    try {
+      const res = await authFetch(`/api/shipments/${data.shipment.id}/delivery-signature/otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedById: currentUser.id, contact: signerContact.trim() }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setOtpSent(true);
+        setOtpExpiresAt(json.data.expiresAt);
+      } else {
+        setSignatureError(json.error || 'Failed to send verification code.');
+      }
+    } catch {
+      setSignatureError('Network error — please try again.');
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const handleSubmitSignature = async () => {
+    if (!data || !currentUser) return;
+    const deliveredMilestone = data.milestones.find(m => m.type === 'DELIVERED_AND_SIGNED_OFF');
+    if (!deliveredMilestone) {
+      setSignatureError('Log the "Delivered and Signed Off" milestone first, then capture the signature.');
+      return;
+    }
+    if (!signerName.trim()) { setSignatureError('Enter the signer\'s name.'); return; }
+    const dataUrl = signaturePadRef.current?.getDataUrl();
+    if (!dataUrl) { setSignatureError('Please capture a signature before submitting.'); return; }
+
+    setSignatureSubmitting(true);
+    setSignatureError('');
+    try {
+      const res = await authFetch(`/api/shipments/${data.shipment.id}/delivery-signature`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loggedById: currentUser.id,
+          milestoneEventId: deliveredMilestone.id,
+          signerName: signerName.trim(),
+          signerRelation,
+          signatureImageDataUrl: dataUrl,
+          contact: signerContact.trim() || undefined,
+          otpCode: otpCode.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setDeliverySignature(json.data);
+        setSignatureOpen(false);
+      } else {
+        setSignatureError(json.error || 'Failed to save signature.');
+      }
+    } catch {
+      setSignatureError('Network error — please try again.');
+    } finally {
+      setSignatureSubmitting(false);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PHASE 3 · RECIPIENT-SIDE CONFIRMATION FLOW
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const openRecipientConfirmModal = () => {
+    setConsigneeContact('');
+    setConsigneeName('');
+    setRcError('');
+    setRcJustSentUrl('');
+    setRecipientConfirmOpen(true);
+  };
+
+  const handleRequestRecipientConfirmation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data || !currentUser || !consigneeContact.trim()) return;
+    setRcSubmitting(true);
+    setRcError('');
+    try {
+      const res = await authFetch(`/api/shipments/${data.shipment.id}/recipient-confirmation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestedById: currentUser.id,
+          consigneeContact: consigneeContact.trim(),
+          consigneeName: consigneeName.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setRecipientConfirmations(prev => [json.data, ...prev]);
+        setRcJustSentUrl(json.data.confirmUrl || '');
+        setConsigneeContact('');
+        setConsigneeName('');
+      } else {
+        setRcError(json.error || 'Failed to send confirmation request.');
+      }
+    } catch {
+      setRcError('Network error — please try again.');
+    } finally {
+      setRcSubmitting(false);
+    }
+  };
+
   // ── Render guards ────────────────────────────────────────────────────────
   if (sessionLoading || !currentUser) {
     return (
@@ -912,6 +1089,12 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
         {/* Milestone Timeline */}
         <div className="lg:col-span-3 space-y-6">
+          {/* Phase 3 · Live Vessel Position — only once a Freight Forwarder
+              has captured the vessel MMSI (alongside SPACE_ON_VESSEL_SECURED) */}
+          {shipment.vesselMmsi && (
+            <VesselPositionCard mmsi={shipment.vesselMmsi} vesselName={shipment.vesselName} />
+          )}
+
           <div className="bg-white border border-mist p-6 rounded-2xl shadow-sm space-y-6">
             <h3 className="font-extrabold text-sm text-ink tracking-tight flex items-center gap-2">
               <Ship className="w-5 h-5 text-amber" /><span>Milestone Tracking &amp; Signoffs</span>
@@ -963,6 +1146,20 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
                         <span className="text-[10px] text-ink-faint font-sans">{new Date(me.occurredAt).toLocaleString()}</span>
                       </div>
                       <p className="text-ink-faint leading-normal pl-1">{me.description || 'No custom notes logged.'}</p>
+                      {me.aisVerification && (
+                        <div className={`flex items-start gap-1.5 pl-1 text-[10px] rounded-lg px-2 py-1.5 border ${
+                          me.aisVerification.status === 'VERIFIED' ? 'bg-teal-light border-steel-light text-steel' :
+                          me.aisVerification.status === 'MISMATCH' ? 'bg-wine-light border-wine/20 text-wine' :
+                          'bg-mist-light border-mist text-ink-faint'
+                        }`}>
+                          <ShieldAlert className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                          <span>
+                            <strong className="font-black uppercase tracking-wide">AIS {me.aisVerification.status}</strong>
+                            {me.aisVerification.vesselName && <> — {me.aisVerification.vesselName}</>}
+                            {me.aisVerification.note && <span className="block text-[9px] mt-0.5 opacity-80">{me.aisVerification.note}</span>}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 pt-1 text-[10px] pl-1 text-ink-faint font-medium">
                         <span>Logged by user ID: <strong className="text-ink-faint">{me.loggedById}</strong></span>
                         <span>•</span>
@@ -976,12 +1173,89 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
                           </span>
                         ) : null}
                       </div>
+
+                      {/* Phase 3 · Digital signature capture at delivery */}
+                      {me.type === 'DELIVERED_AND_SIGNED_OFF' && (
+                        <div className="pl-1 pt-1.5">
+                          {deliverySignature && deliverySignature.milestoneEventId === me.id ? (
+                            <div className="flex items-start gap-2 text-[10px] rounded-lg px-2 py-1.5 border bg-teal-light border-steel-light text-steel">
+                              <ShieldCheck className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                              <span>
+                                <strong className="font-black uppercase tracking-wide">SIGNATURE ON FILE</strong>
+                                {' — '}{deliverySignature.signerName} ({deliverySignature.signerRelation.replace(/_/g, ' ').toLowerCase()})
+                                {deliverySignature.otpVerified && (
+                                  <span className="block text-[9px] mt-0.5 opacity-80">
+                                    Identity verified via OTP{deliverySignature.otpVerifiedContactMasked ? ` to ${deliverySignature.otpVerifiedContactMasked}` : ''}.
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          ) : currentUser.userType === 'LOGISTICS_CHAIN' ? (
+                            <button
+                              type="button"
+                              onClick={openSignatureModal}
+                              className="flex items-center gap-1.5 text-[10px] font-bold text-steel hover:text-teal border border-steel-light hover:border-teal-light bg-steel-light/40 hover:bg-teal-light px-2.5 py-1.5 rounded-lg transition-all"
+                            >
+                              <PenTool className="w-3 h-3" /> Capture Delivery Signature
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
+
+          {/* Phase 3 · Recipient-side confirmation flow */}
+          {(isImporter || currentUser.userType === 'LOGISTICS_CHAIN') && (
+            <div className="bg-white border border-mist p-6 rounded-2xl shadow-sm space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-extrabold text-sm text-ink tracking-tight flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-amber" /><span>Recipient-Side Delivery Confirmation</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={openRecipientConfirmModal}
+                  className="bg-amber-light hover:bg-ink border border-amber/30 text-ink hover:text-white font-bold text-[10px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" /> Request Confirmation
+                </button>
+              </div>
+              <p className="text-[10px] text-ink-faint leading-relaxed">
+                Send the named consignee a one-time link to confirm (or dispute) receipt independently —
+                so proof of arrival isn&apos;t solely supplied by the logistics side.
+              </p>
+
+              {recipientConfirmations.length === 0 ? (
+                <div className="text-center py-6 text-ink-faint text-[10px] font-sans">NO CONFIRMATION REQUESTS SENT YET.</div>
+              ) : (
+                <div className="space-y-2">
+                  {recipientConfirmations.map(rc => {
+                    const statusStyle: Record<string, string> = {
+                      PENDING:   'bg-amber-light text-amber border-amber-light',
+                      CONFIRMED: 'bg-teal-light text-teal border-steel-light',
+                      DISPUTED:  'bg-wine-light text-wine border-wine/20',
+                      EXPIRED:   'bg-mist-light text-ink-faint border-mist',
+                    };
+                    return (
+                      <div key={rc.id} className="flex items-center justify-between gap-2 text-[11px] border border-mist rounded-lg px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="font-bold text-ink truncate">{rc.consigneeName || rc.consigneeContact}</p>
+                          <p className="text-[10px] text-ink-faint truncate">{rc.consigneeContact} · requested {new Date(rc.requestedAt).toLocaleDateString()}</p>
+                          {rc.disputeNote && <p className="text-[10px] text-wine mt-0.5">&ldquo;{rc.disputeNote}&rdquo;</p>}
+                        </div>
+                        <span className={`shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide border ${statusStyle[rc.status] ?? statusStyle.PENDING}`}>
+                          {rc.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Escrow Ledger Column */}
@@ -1574,6 +1848,174 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 3 · Delivery Signature Modal */}
+      {signatureOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-mist rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-steel-light rounded-xl flex items-center justify-center shrink-0">
+                <PenTool className="w-5 h-5 text-steel" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-ink">Capture Delivery Signature</h3>
+                <p className="text-[10px] text-ink-faint font-sans uppercase">{shipment.referenceCode}</p>
+              </div>
+              <button
+                onClick={() => setSignatureOpen(false)}
+                className="ml-auto text-ink-faint hover:text-ink text-lg leading-none"
+                disabled={signatureSubmitting}
+              >✕</button>
+            </div>
+
+            {signatureError && (
+              <div className="bg-wine-light border border-wine/20 text-wine text-xs p-2.5 rounded-lg flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />{signatureError}
+              </div>
+            )}
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Signer Name <span className="text-wine">*</span></label>
+                  <input type="text" value={signerName} onChange={e => setSignerName(e.target.value)}
+                    placeholder="Full name of the person signing"
+                    className="w-full border border-mist rounded-lg p-2 text-xs outline-none focus:border-teal" />
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Relation to Consignee</label>
+                  <select value={signerRelation} onChange={e => setSignerRelation(e.target.value as SignerRelation)}
+                    className="w-full border border-mist rounded-lg p-2 text-xs outline-none focus:border-teal bg-white">
+                    <option value="CONSIGNEE">Consignee</option>
+                    <option value="AUTHORIZED_REPRESENTATIVE">Authorized Representative</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 border-t border-mist-light pt-3">
+                <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">
+                  Identity Verification <span className="text-ink-faint font-normal normal-case">— optional but recommended</span>
+                </label>
+                <p className="text-[10px] text-ink-faint leading-relaxed">
+                  Send a one-time code to the signer&apos;s own phone or email to tie this signature to their verified identity.
+                </p>
+                <div className="flex gap-1.5">
+                  <input type="text" value={signerContact} onChange={e => { setSignerContact(e.target.value); setOtpSent(false); }}
+                    placeholder="Phone or email"
+                    className="w-full border border-mist rounded-lg p-2 text-xs outline-none focus:border-teal" />
+                  <button type="button" onClick={handleSendSignatureOtp}
+                    disabled={!signerContact.trim() || otpSending}
+                    className="shrink-0 flex items-center gap-1 border border-mist hover:border-teal disabled:opacity-40 disabled:cursor-not-allowed text-ink-faint hover:text-teal font-bold text-[10px] px-3 rounded-lg transition-colors">
+                    {otpSending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Send Code'}
+                  </button>
+                </div>
+                {otpSent && (
+                  <div className="space-y-1 pt-1">
+                    <p className="text-[10px] text-teal font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Code sent — valid until {new Date(otpExpiresAt).toLocaleTimeString()}.
+                    </p>
+                    <input type="text" value={otpCode} onChange={e => setOtpCode(e.target.value)}
+                      placeholder="6-digit code" maxLength={6} inputMode="numeric"
+                      className="w-full border border-mist rounded-lg p-2 text-xs font-mono outline-none focus:border-teal" />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5 border-t border-mist-light pt-3">
+                <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Signature <span className="text-wine">*</span></label>
+                <SignaturePad ref={signaturePadRef} height={150} />
+                <button type="button" onClick={() => signaturePadRef.current?.clear()}
+                  className="text-[10px] text-ink-faint hover:text-wine font-bold">Clear</button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2 text-xs">
+              <button type="button" className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold"
+                onClick={() => setSignatureOpen(false)} disabled={signatureSubmitting}>
+                Cancel
+              </button>
+              <button type="button" onClick={handleSubmitSignature} disabled={signatureSubmitting}
+                className="px-4 py-1.5 bg-steel hover:bg-teal text-white rounded-lg font-black disabled:opacity-50 flex items-center gap-1.5">
+                {signatureSubmitting ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving…</> : <><PenTool className="w-3.5 h-3.5" /> Save Signature</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 3 · Recipient Confirmation Request Modal */}
+      {recipientConfirmOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-mist rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-light rounded-xl flex items-center justify-center shrink-0">
+                <UserCheck className="w-5 h-5 text-amber" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-ink">Request Delivery Confirmation</h3>
+                <p className="text-[10px] text-ink-faint font-sans uppercase">{shipment.referenceCode}</p>
+              </div>
+              <button
+                onClick={() => setRecipientConfirmOpen(false)}
+                className="ml-auto text-ink-faint hover:text-ink text-lg leading-none"
+                disabled={rcSubmitting}
+              >✕</button>
+            </div>
+
+            {rcError && (
+              <div className="bg-wine-light border border-wine/20 text-wine text-xs p-2.5 rounded-lg flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />{rcError}
+              </div>
+            )}
+
+            {rcJustSentUrl ? (
+              <div className="space-y-3">
+                <div className="bg-teal-light border border-steel-light text-steel p-3 rounded-lg text-xs flex items-start gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>Confirmation request sent. No SMS/email provider is configured yet — share this link with the consignee directly:</span>
+                </div>
+                <div className="flex items-center gap-2 bg-mist-light border border-mist rounded-lg px-3 py-2">
+                  <span className="font-mono text-[10px] text-ink truncate flex-1">{rcJustSentUrl}</span>
+                  <button type="button" onClick={() => navigator.clipboard?.writeText(rcJustSentUrl)}
+                    className="shrink-0 text-ink-faint hover:text-teal"><Copy className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <button onClick={() => setRecipientConfirmOpen(false)} className="px-4 py-2 bg-amber hover:bg-ink text-white rounded-lg font-bold text-xs transition-all">Done</button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleRequestRecipientConfirmation} className="space-y-4 text-xs">
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Consignee Contact <span className="text-wine">*</span></label>
+                  <input type="text" required value={consigneeContact} onChange={e => setConsigneeContact(e.target.value)}
+                    placeholder="Phone or email"
+                    className="w-full border border-mist rounded-lg p-2.5 text-xs outline-none focus:border-teal" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Consignee Name</label>
+                  <input type="text" value={consigneeName} onChange={e => setConsigneeName(e.target.value)}
+                    placeholder="Optional"
+                    className="w-full border border-mist rounded-lg p-2.5 text-xs outline-none focus:border-teal" />
+                </div>
+                <p className="text-[10px] text-ink-faint leading-relaxed">
+                  A one-time link will be generated for the consignee to confirm or dispute receipt independently of the logistics chain.
+                </p>
+                <div className="flex gap-2 justify-end pt-2">
+                  <button type="button" className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold"
+                    onClick={() => setRecipientConfirmOpen(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={rcSubmitting || !consigneeContact.trim()}
+                    className="px-4 py-1.5 bg-amber hover:bg-ink text-white rounded-lg font-black disabled:opacity-50 flex items-center gap-1.5">
+                    {rcSubmitting ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <><Send className="w-3.5 h-3.5" /> Send Request</>}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
