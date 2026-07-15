@@ -83,6 +83,12 @@ import {
   RecipientConfirmationStatus,
   AisVesselPosition,
   ShipmentDelayAlert,
+  BocEntryFiling,
+  BocFilingStatus,
+  CarrierBookingRequest,
+  PortGateEvent,
+  DutyPreFundingAuthorization,
+  TradeFinanceLink,
 } from '../types';
 
 // ─── Row → TypeScript mappers ─────────────────────────────────────────────────
@@ -245,6 +251,7 @@ function rowToMilestoneEvent(row: any): MilestoneEvent {
     occurredAt: row.occurred_at,
     verified: row.verified,
     aisVerification: row.ais_verification ?? undefined,
+    evidenceSource: row.evidence_source ?? undefined,
   };
 }
 
@@ -260,6 +267,7 @@ function milestoneEventToRow(me: MilestoneEvent): any {
     occurred_at: me.occurredAt,
     verified: me.verified,
     ais_verification: me.aisVerification ?? null,
+    evidence_source: me.evidenceSource ?? null,
   };
 }
 
@@ -599,6 +607,93 @@ function firmInviteToRow(inv: FirmInvite): any {
 }
 
 // ─── Helper: throw on Supabase error ─────────────────────────────────────────
+
+function rowToBocFiling(row: any): BocEntryFiling {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    filedByUserId: row.filed_by_user_id,
+    status: row.status,
+    entrySeriesNumber: row.entry_series_number ?? undefined,
+    dutiesAssessedUSD: row.duties_assessed_usd != null ? Number(row.duties_assessed_usd) : undefined,
+    officialReceiptNumber: row.official_receipt_number ?? undefined,
+    submittedAt: row.submitted_at ?? undefined,
+    confirmedAt: row.confirmed_at ?? undefined,
+    rejectedReason: row.rejected_reason ?? undefined,
+    rawResponse: row.raw_response ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function rowToCarrierBooking(row: any): CarrierBookingRequest {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    requestedByUserId: row.requested_by_user_id,
+    carrierCode: row.carrier_code,
+    containerType: row.container_type ?? undefined,
+    status: row.status,
+    bookingReference: row.booking_reference ?? undefined,
+    vesselName: row.vessel_name ?? undefined,
+    voyageNumber: row.voyage_number ?? undefined,
+    requestedAt: row.requested_at,
+    confirmedAt: row.confirmed_at ?? undefined,
+    failureReason: row.failure_reason ?? undefined,
+    rawResponse: row.raw_response ?? undefined,
+  };
+}
+
+function rowToPortGateEvent(row: any): PortGateEvent {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    terminalCode: row.terminal_code,
+    eventType: row.event_type,
+    containerNumber: row.container_number,
+    occurredAt: row.occurred_at,
+    receivedAt: row.received_at,
+    matchedMilestoneEventId: row.matched_milestone_event_id ?? undefined,
+    rawPayload: row.raw_payload ?? undefined,
+  };
+}
+
+function rowToDutyPreFunding(row: any): DutyPreFundingAuthorization {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    importerId: row.importer_id,
+    estimatedDutyAmountUSD: Number(row.estimated_duty_amount_usd),
+    status: row.status,
+    authorizedAt: row.authorized_at ?? undefined,
+    capturedAt: row.captured_at ?? undefined,
+    capturedByUserId: row.captured_by_user_id ?? undefined,
+    capturedAmountUSD: row.captured_amount_usd != null ? Number(row.captured_amount_usd) : undefined,
+    cancelledAt: row.cancelled_at ?? undefined,
+    provider: row.provider,
+    rawReference: row.raw_reference ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function rowToTradeFinanceLink(row: any): TradeFinanceLink {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    importerId: row.importer_id,
+    instrumentType: row.instrument_type,
+    providerName: row.provider_name,
+    referenceNumber: row.reference_number,
+    faceValueUSD: Number(row.face_value_usd),
+    status: row.status,
+    escrowStatusAtLink: row.escrow_status_at_link,
+    linkedByUserId: row.linked_by_user_id,
+    linkedAt: row.linked_at,
+    lastSyncedAt: row.last_synced_at ?? undefined,
+    notes: row.notes ?? undefined,
+  };
+}
 
 function assertNoError(error: any, context: string) {
   if (error) {
@@ -1822,5 +1917,217 @@ export const dbStore = {
       notifiedLogisticsAt: data.notified_logistics_at ?? undefined,
       notifiedImporterAt: data.notified_importer_at ?? undefined,
     };
+  },
+
+  // ── Phase 5: BOC e2m / customs EDI filings ────────────────────
+
+  getBocFilingForShipment: async (shipmentId: string): Promise<BocEntryFiling | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('boc_entry_filings')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    assertNoError(error, 'getBocFilingForShipment');
+    return data ? rowToBocFiling(data) : undefined;
+  },
+
+  saveBocFiling: async (filing: Partial<BocEntryFiling> & { id?: string; shipmentId: string; filedByUserId: string; status: BocFilingStatus }): Promise<BocEntryFiling> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      shipment_id: filing.shipmentId,
+      filed_by_user_id: filing.filedByUserId,
+      status: filing.status,
+      entry_series_number: filing.entrySeriesNumber ?? null,
+      duties_assessed_usd: filing.dutiesAssessedUSD ?? null,
+      official_receipt_number: filing.officialReceiptNumber ?? null,
+      submitted_at: filing.submittedAt ?? null,
+      confirmed_at: filing.confirmedAt ?? null,
+      rejected_reason: filing.rejectedReason ?? null,
+      raw_response: filing.rawResponse ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    if (filing.id) row.id = filing.id;
+    const { data, error } = await admin
+      .from('boc_entry_filings')
+      .upsert(row, { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveBocFiling');
+    return rowToBocFiling(data);
+  },
+
+  // ── Phase 5: Carrier booking API requests ────────────────────────
+
+  getCarrierBookingsForShipment: async (shipmentId: string): Promise<CarrierBookingRequest[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('carrier_booking_requests')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('requested_at', { ascending: false });
+    assertNoError(error, 'getCarrierBookingsForShipment');
+    return (data ?? []).map(rowToCarrierBooking);
+  },
+
+  saveCarrierBooking: async (booking: Partial<CarrierBookingRequest> & { id?: string; shipmentId: string; requestedByUserId: string; carrierCode: string }): Promise<CarrierBookingRequest> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      shipment_id: booking.shipmentId,
+      requested_by_user_id: booking.requestedByUserId,
+      carrier_code: booking.carrierCode,
+      container_type: booking.containerType ?? null,
+      status: booking.status ?? 'NOT_REQUESTED',
+      booking_reference: booking.bookingReference ?? null,
+      vessel_name: booking.vesselName ?? null,
+      voyage_number: booking.voyageNumber ?? null,
+      requested_at: booking.requestedAt ?? new Date().toISOString(),
+      confirmed_at: booking.confirmedAt ?? null,
+      failure_reason: booking.failureReason ?? null,
+      raw_response: booking.rawResponse ?? null,
+    };
+    if (booking.id) row.id = booking.id;
+    const { data, error } = await admin
+      .from('carrier_booking_requests')
+      .upsert(row, { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveCarrierBooking');
+    return rowToCarrierBooking(data);
+  },
+
+  // ── Phase 5: Port/terminal gate webhook events ──────────────────────
+
+  getPortGateEventsForShipment: async (shipmentId: string): Promise<PortGateEvent[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('port_gate_events')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('occurred_at', { ascending: false });
+    assertNoError(error, 'getPortGateEventsForShipment');
+    return (data ?? []).map(rowToPortGateEvent);
+  },
+
+  savePortGateEvent: async (event: Omit<PortGateEvent, 'id'> & { id?: string }): Promise<PortGateEvent> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      shipment_id: event.shipmentId,
+      terminal_code: event.terminalCode,
+      event_type: event.eventType,
+      container_number: event.containerNumber,
+      occurred_at: event.occurredAt,
+      received_at: event.receivedAt,
+      matched_milestone_event_id: event.matchedMilestoneEventId ?? null,
+      raw_payload: event.rawPayload ?? null,
+    };
+    if (event.id) row.id = event.id;
+    const { data, error } = await admin
+      .from('port_gate_events')
+      .insert(row)
+      .select()
+      .single();
+    assertNoError(error, 'savePortGateEvent');
+    return rowToPortGateEvent(data);
+  },
+
+  markPortGateEventMatched: async (eventId: string, milestoneEventId: string): Promise<void> => {
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
+      .from('port_gate_events')
+      .update({ matched_milestone_event_id: milestoneEventId })
+      .eq('id', eventId);
+    assertNoError(error, 'markPortGateEventMatched');
+  },
+
+  // ── Phase 5: Bank/wallet duty pre-funding ──────────────────────────
+
+  getDutyPreFundingForShipment: async (shipmentId: string): Promise<DutyPreFundingAuthorization | undefined> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('duty_prefunding_authorizations')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    assertNoError(error, 'getDutyPreFundingForShipment');
+    return data ? rowToDutyPreFunding(data) : undefined;
+  },
+
+  saveDutyPreFunding: async (auth: Partial<DutyPreFundingAuthorization> & { id?: string; shipmentId: string; importerId: string; estimatedDutyAmountUSD: number }): Promise<DutyPreFundingAuthorization> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      shipment_id: auth.shipmentId,
+      importer_id: auth.importerId,
+      estimated_duty_amount_usd: auth.estimatedDutyAmountUSD,
+      status: auth.status ?? 'NOT_REQUESTED',
+      authorized_at: auth.authorizedAt ?? null,
+      captured_at: auth.capturedAt ?? null,
+      captured_by_user_id: auth.capturedByUserId ?? null,
+      captured_amount_usd: auth.capturedAmountUSD ?? null,
+      cancelled_at: auth.cancelledAt ?? null,
+      provider: auth.provider ?? 'MARITRADE_WALLET',
+      raw_reference: auth.rawReference ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    if (auth.id) row.id = auth.id;
+    const { data, error } = await admin
+      .from('duty_prefunding_authorizations')
+      .upsert(row, { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveDutyPreFunding');
+    return rowToDutyPreFunding(data);
+  },
+
+  // ── Phase 5: Trade finance (LC / invoice financing) links ────────────────
+
+  getTradeFinanceLinksForShipment: async (shipmentId: string): Promise<TradeFinanceLink[]> => {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from('trade_finance_links')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+      .order('linked_at', { ascending: false });
+    assertNoError(error, 'getTradeFinanceLinksForShipment');
+    return (data ?? []).map(rowToTradeFinanceLink);
+  },
+
+  saveTradeFinanceLink: async (link: Omit<TradeFinanceLink, 'id'> & { id?: string }): Promise<TradeFinanceLink> => {
+    const admin = getSupabaseAdmin();
+    const row: any = {
+      shipment_id: link.shipmentId,
+      importer_id: link.importerId,
+      instrument_type: link.instrumentType,
+      provider_name: link.providerName,
+      reference_number: link.referenceNumber,
+      face_value_usd: link.faceValueUSD,
+      status: link.status,
+      escrow_status_at_link: link.escrowStatusAtLink,
+      linked_by_user_id: link.linkedByUserId,
+      linked_at: link.linkedAt,
+      last_synced_at: link.lastSyncedAt ?? null,
+      notes: link.notes ?? null,
+    };
+    if (link.id) row.id = link.id;
+    const { data, error } = await admin
+      .from('trade_finance_links')
+      .upsert(row, { onConflict: 'id' })
+      .select()
+      .single();
+    assertNoError(error, 'saveTradeFinanceLink');
+    return rowToTradeFinanceLink(data);
+  },
+
+  updateTradeFinanceLinkStatus: async (id: string, status: TradeFinanceLink['status']): Promise<void> => {
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
+      .from('trade_finance_links')
+      .update({ status, last_synced_at: new Date().toISOString() })
+      .eq('id', id);
+    assertNoError(error, 'updateTradeFinanceLinkStatus');
   },
 };

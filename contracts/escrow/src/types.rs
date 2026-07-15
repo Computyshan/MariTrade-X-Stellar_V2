@@ -98,6 +98,51 @@ pub enum MilestoneType {
     IncomingCargoStored = 27,
 }
 
+// ─── Milestone Bonus (Phase 5 — Escrow-as-Incentive) ──────────────────────────
+
+/// A per-milestone bonus incentive, configured by the importer at escrow
+/// creation. Paid out to the confirming logistics user, on top of the base
+/// escrow amount, if the milestone is confirmed within `sla_ledgers` of the
+/// escrow being funded (speed-based partial release bonus).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MilestoneBonus {
+    /// Which milestone this bonus is tied to. Must be one of the escrow's
+    /// `required_milestones`.
+    pub milestone_type: MilestoneType,
+    /// USDC bonus amount in strobes, paid in addition to the base amount.
+    pub bonus_amount: i128,
+    /// Ledger window measured from `funded_at_ledger` within which the
+    /// milestone must be confirmed for the bonus to be paid.
+    pub sla_ledgers: u32,
+    /// Whether this bonus has already been paid out. Always `false` when
+    /// supplied to `create_escrow` — the contract owns this flag afterward.
+    pub paid: bool,
+}
+
+// ─── Performance Bond (Phase 5 — Escrow-as-Incentive) ─────────────────────────
+
+/// An optional performance bond staked by the assigned logistics user on
+/// high-value shipments. Redeemed back to the logistics user on clean
+/// delivery (successful `release`), or forfeited to the importer if the
+/// platform confirms damage / a dispute loss (via `forfeit_bond`).
+///
+/// `bond_amount == 0` means no bond is required for this shipment — all
+/// bond entrypoints become no-ops guarded by `BondNotRequired`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PerformanceBond {
+    /// The logistics user who must stake this bond. Ignored when
+    /// `bond_amount == 0`.
+    pub logistics_user: Address,
+    /// USDC bond amount in strobes. Zero means no bond is required.
+    pub bond_amount: i128,
+    /// Whether the logistics user has deposited the bond.
+    pub staked: bool,
+    /// Terminal flag — true once the bond has been redeemed or forfeited.
+    pub resolved: bool,
+}
+
 // ─── Milestone Confirmation ────────────────────────────────────────────────────
 
 /// On-chain record of a confirmed milestone.
@@ -149,6 +194,17 @@ pub struct EscrowRecord {
     pub required_milestones: Vec<MilestoneType>,
     /// Milestones that have been confirmed by the logistics chain.
     pub confirmed_milestones: Vec<MilestoneConfirmation>,
+
+    // ── Escrow-as-incentive (Phase 5) ────────────────────────
+    /// Optional per-milestone speed bonuses, configured at creation.
+    pub milestone_bonuses: Vec<MilestoneBonus>,
+    /// USDC (strobes) still held for unpaid bonuses. Pulled into the vault
+    /// alongside `amount` at `fund()` time; whatever remains unclaimed at
+    /// `release()` (bonuses whose SLA was missed) is returned to the importer.
+    pub bonus_reserve_remaining: i128,
+    /// Optional performance bond required from the assigned logistics user.
+    /// `performance_bond.bond_amount == 0` means no bond is required.
+    pub performance_bond: PerformanceBond,
 
     // ── Status ────────────────────────────────────────────────
     pub status: EscrowStatus,

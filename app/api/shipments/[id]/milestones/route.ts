@@ -193,7 +193,40 @@ export async function POST(
       }
     }
 
+    // Phase 5 — port/terminal gate webhook auto-population. If a matching
+    // unmatched PortGateEvent already arrived for this container/gate
+    // direction, mark this milestone SYSTEM_VERIFIED and link the two
+    // records before the single insert below. Best-effort and non-blocking.
+    let matchedGateEventId: string | null = null;
+    if (type === 'CONTAINER_GATED_OUT_ORIGIN' || type === 'CONTAINER_GATED_IN_DESTINATION') {
+      try {
+        const expectedEventType = type === 'CONTAINER_GATED_OUT_ORIGIN' ? 'GATE_OUT_ORIGIN' : 'GATE_IN_DESTINATION';
+        const gateEvents = await dbStore.getPortGateEventsForShipment(shipment.id);
+        const match = gateEvents.find(ev =>
+          ev.eventType === expectedEventType &&
+          !ev.matchedMilestoneEventId &&
+          (!evidenceRef?.trim() || ev.containerNumber === evidenceRef.trim())
+        );
+        if (match) {
+          milestone.evidenceSource = 'SYSTEM_VERIFIED';
+          milestone.evidenceRef = milestone.evidenceRef || match.containerNumber;
+          milestone.verified = true;
+          matchedGateEventId = match.id;
+        }
+      } catch (err) {
+        console.warn('[milestones] Port-gate auto-match lookup failed, continuing:', err);
+      }
+    }
+
     await dbStore.saveMilestone(milestone);
+
+    if (matchedGateEventId) {
+      try {
+        await dbStore.markPortGateEventMatched(matchedGateEventId, milestone.id);
+      } catch (err) {
+        console.warn('[milestones] Failed to mark port-gate event matched, continuing:', err);
+      }
+    }
 
     // Phase 3 — IoT sensor ingestion: attach any sensor readings that
     // arrived in a ±6h window around this milestone and haven't been linked

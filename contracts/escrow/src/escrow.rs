@@ -14,9 +14,13 @@
 //! | `raise_dispute`           | importer            | Escalate IN_TRANSIT cancellation to platform        |
 //! | `resolve_dispute`         | platform            | Split funds between importer and exporter           |
 //! | `advance_stage`           | platform            | Update cancellation stage as shipment progresses    |
+//! | `stake_performance_bond`  | logistics user      | Deposit required bond (Phase 5)                     |
+//! | `forfeit_bond`            | platform            | Forfeit a staked bond to importer (Phase 5)          |
 //! | `get_escrow`              | anyone              | Read full escrow record                             |
 //! | `get_milestones_status`   | anyone              | Check which priority milestones are still pending   |
 //! | `can_release`             | anyone              | Returns true if all priority milestones confirmed   |
+//! | `get_milestone_bonuses`   | anyone              | Read configured milestone bonuses (Phase 5)          |
+//! | `get_performance_bond`    | anyone              | Read performance bond configuration/state (Phase 5) |
 
 #![no_std]
 
@@ -29,7 +33,8 @@ use crate::{
     events,
     storage,
     types::{
-        CancellationStage, EscrowRecord, EscrowStatus, MilestoneConfirmation, MilestoneType,
+        CancellationStage, EscrowRecord, EscrowStatus, MilestoneBonus, MilestoneConfirmation,
+        MilestoneType, PerformanceBond,
     },
 };
 
@@ -96,10 +101,21 @@ impl MariTradeEscrowContract {
     /// * `amount`              — USDC amount in strobes (totalValueUSD * 10_000_000)
     /// * `required_milestones` — Priority milestones the importer selects in Step 3
     /// * `partial_refund_bps`  — Refund % if cancelled pre-departure (0–10_000 bps)
+    /// * `milestone_bonuses`   — Optional per-milestone speed bonuses (Phase 5). Each
+    ///   entry's `milestone_type` must be in `required_milestones`, `bonus_amount` > 0,
+    ///   and `sla_ledgers` > 0. Pass an empty Vec for no bonuses. The `paid` field on
+    ///   each entry is ignored — the contract always stores it as `false`.
+    /// * `bond_logistics_user` — Address required to stake the performance bond.
+    ///   Ignored when `bond_amount == 0`; pass the importer's own address as a
+    ///   harmless placeholder in that case.
+    /// * `bond_amount`         — USDC performance bond in strobes. `0` means no bond
+    ///   is required for this shipment (Phase 5).
     ///
     /// # Errors
     /// * `AlreadyInitialized`  — Escrow with this reference code already exists
     /// * `InvalidInitParams`   — Empty milestones, zero amount, or invalid bps
+    /// * `InvalidBonusParams`  — A bonus references a non-required milestone, or has
+    ///   a non-positive `bonus_amount` / `sla_ledgers`
     pub fn create_escrow(
         env: Env,
         reference_code: String,
@@ -108,6 +124,9 @@ impl MariTradeEscrowContract {
         amount: i128,
         required_milestones: Vec<MilestoneType>,
         partial_refund_bps: u32,
+        milestone_bonuses: Vec<MilestoneBonus>,
+        bond_logistics_user: Address,
+        bond_amount: i128,
     ) -> Result<(), EscrowError> {
         // Only the importer can create their own escrow.
         importer.require_auth();
@@ -121,6 +140,30 @@ impl MariTradeEscrowContract {
         }
         if partial_refund_bps > BPS_DIVISOR {
             return Err(EscrowError::InvalidBps);
+        }
+        if bond_amount < 0 {
+            return Err(EscrowError::InvalidBonusParams);
+        }
+
+        // Validate + normalize milestone bonuses, and total the reserve.
+        let mut bonus_reserve_total: i128 = 0;
+        let mut normalized_bonuses: Vec<MilestoneBonus> = soroban_sdk::vec![&env];
+        for bonus in milestone_bonuses.iter() {
+            if bonus.bonus_amount <= 0 || bonus.sla_ledgers == 0 {
+                return Err(EscrowError::InvalidBonusParams);
+            }
+            if !required_milestones.contains(&bonus.milestone_type) {
+                return Err(EscrowError::InvalidBonusParams);
+            }
+            bonus_reserve_total = bonus_reserve_total
+                .checked_add(bonus.bonus_amount)
+                .ok_or(EscrowError::ArithmeticError)?;
+            normalized_bonuses.push_back(MilestoneBonus {
+                milestone_type: bonus.milestone_type.clone(),
+                bonus_amount: bonus.bonus_amount,
+                sla_ledgers: bonus.sla_ledgers,
+                paid: false,
+            });
         }
 
         // Prevent duplicate escrows for the same reference code.
@@ -142,6 +185,14 @@ impl MariTradeEscrowContract {
             partial_refund_bps,
             required_milestones,
             confirmed_milestones: soroban_sdk::vec![&env],
+            milestone_bonuses: normalized_bonuses,
+            bonus_reserve_remaining: bonus_reserve_total,
+            performance_bond: PerformanceBond {
+                logistics_user: bond_logistics_user,
+                bond_amount,
+                staked: false,
+                resolved: false,
+            },
             status: EscrowStatus::Unfunded,
             cancellation_stage: CancellationStage::Unfunded,
             created_at_ledger: current_ledger,
@@ -233,11 +284,17 @@ impl MariTradeEscrowContract {
         }
 
         // Transfer USDC from importer → this contract (escrow vault).
+        // Pulls `amount` plus any milestone-bonus reserve in a single transfer so
+        // bonuses are fully pre-funded alongside the base escrow amount.
+        let total_to_pull = record
+            .amount
+            .checked_add(record.bonus_reserve_remaining)
+            .ok_or(EscrowError::ArithmeticError)?;
         let token = TokenClient::new(&env, &record.usdc_token);
         token.transfer(
             &importer,
             &env.current_contract_address(),
-            &record.amount,
+            &total_to_pull,
         );
 
         // Update state.
@@ -314,14 +371,51 @@ impl MariTradeEscrowContract {
         }
 
         // Record the confirmation.
+        let confirmed_at_ledger = env.ledger().sequence();
         let confirmation = MilestoneConfirmation {
             milestone_type: milestone_type.clone(),
             confirmed_by: confirmer.clone(),
-            confirmed_at_ledger: env.ledger().sequence(),
+            confirmed_at_ledger,
             evidence_uri: evidence_uri.clone(),
         };
 
         record.confirmed_milestones.push_back(confirmation);
+
+        // ── Speed bonus payout (Phase 5) ──────────────────────────────────
+        // If this milestone has a configured bonus and is confirmed within its
+        // SLA window (measured from `funded_at_ledger`), pay it out to the
+        // confirming logistics user immediately.
+        let mut updated_bonuses: Vec<MilestoneBonus> = soroban_sdk::vec![&env];
+        let mut bonus_to_pay: i128 = 0;
+        for bonus in record.milestone_bonuses.iter() {
+            if !bonus.paid
+                && bonus.milestone_type == milestone_type
+                && confirmed_at_ledger <= record.funded_at_ledger.saturating_add(bonus.sla_ledgers)
+            {
+                bonus_to_pay = bonus.bonus_amount;
+                updated_bonuses.push_back(MilestoneBonus {
+                    milestone_type: bonus.milestone_type.clone(),
+                    bonus_amount: bonus.bonus_amount,
+                    sla_ledgers: bonus.sla_ledgers,
+                    paid: true,
+                });
+            } else {
+                updated_bonuses.push_back(bonus.clone());
+            }
+        }
+        record.milestone_bonuses = updated_bonuses;
+
+        if bonus_to_pay > 0 {
+            let token = TokenClient::new(&env, &record.usdc_token);
+            token.transfer(&env.current_contract_address(), &confirmer, &bonus_to_pay);
+            record.bonus_reserve_remaining = record
+                .bonus_reserve_remaining
+                .checked_sub(bonus_to_pay)
+                .ok_or(EscrowError::ArithmeticError)?;
+
+            events::emit_bonus_paid(&env, &reference_code, &milestone_type, &confirmer, bonus_to_pay);
+        }
+
         storage::set_escrow(&env, &reference_code, &record);
 
         events::emit_milestone_confirmed(
@@ -371,13 +465,31 @@ impl MariTradeEscrowContract {
         // Enforce the milestone gate — all priority milestones must be confirmed.
         Self::assert_all_milestones_confirmed(&record)?;
 
-        // Transfer USDC from contract → exporter.
         let token = TokenClient::new(&env, &record.usdc_token);
+
+        // Transfer USDC from contract → exporter.
         token.transfer(
             &env.current_contract_address(),
             &record.exporter,
             &record.amount,
         );
+
+        // ── Return any unclaimed bonus reserve (missed SLA windows) ────────
+        if record.bonus_reserve_remaining > 0 {
+            let unclaimed = record.bonus_reserve_remaining;
+            token.transfer(&env.current_contract_address(), &record.importer, &unclaimed);
+            record.bonus_reserve_remaining = 0;
+            events::emit_bonus_reserve_returned(&env, &reference_code, &record.importer, unclaimed);
+        }
+
+        // ── Redeem the performance bond on clean delivery ──────────────────
+        if record.performance_bond.staked && !record.performance_bond.resolved {
+            let bond_amount = record.performance_bond.bond_amount;
+            let logistics_user = record.performance_bond.logistics_user.clone();
+            token.transfer(&env.current_contract_address(), &logistics_user, &bond_amount);
+            record.performance_bond.resolved = true;
+            events::emit_bond_redeemed(&env, &reference_code, &logistics_user, bond_amount);
+        }
 
         record.status = EscrowStatus::Released;
         storage::set_escrow(&env, &reference_code, &record);
@@ -480,6 +592,26 @@ impl MariTradeEscrowContract {
                 }
 
                 let mut r = record;
+
+                // Return any unclaimed bonus reserve to the importer — a cancelled
+                // shipment never progressed far enough for further bonuses to apply.
+                if r.bonus_reserve_remaining > 0 {
+                    let unclaimed = r.bonus_reserve_remaining;
+                    token.transfer(&env.current_contract_address(), &r.importer, &unclaimed);
+                    r.bonus_reserve_remaining = 0;
+                    events::emit_bonus_reserve_returned(&env, &reference_code, &r.importer, unclaimed);
+                }
+
+                // A neutral cancellation (no fault determined) returns any staked
+                // bond to the logistics user rather than forfeiting it.
+                if r.performance_bond.staked && !r.performance_bond.resolved {
+                    let bond_amount = r.performance_bond.bond_amount;
+                    let logistics_user = r.performance_bond.logistics_user.clone();
+                    token.transfer(&env.current_contract_address(), &logistics_user, &bond_amount);
+                    r.performance_bond.resolved = true;
+                    events::emit_bond_redeemed(&env, &reference_code, &logistics_user, bond_amount);
+                }
+
                 r.status = EscrowStatus::Refunded;
                 storage::set_escrow(&env, &reference_code, &r);
 
@@ -625,6 +757,25 @@ impl MariTradeEscrowContract {
         }
 
         let mut r = record;
+
+        // Return any unclaimed bonus reserve to the importer.
+        if r.bonus_reserve_remaining > 0 {
+            let unclaimed = r.bonus_reserve_remaining;
+            token.transfer(&env.current_contract_address(), &r.importer, &unclaimed);
+            r.bonus_reserve_remaining = 0;
+            events::emit_bonus_reserve_returned(&env, &reference_code, &r.importer, unclaimed);
+        }
+
+        // If the platform did not forfeit the bond via `forfeit_bond` before
+        // calling this, it is redeemed back to the logistics user by default.
+        if r.performance_bond.staked && !r.performance_bond.resolved {
+            let bond_amount = r.performance_bond.bond_amount;
+            let logistics_user = r.performance_bond.logistics_user.clone();
+            token.transfer(&env.current_contract_address(), &logistics_user, &bond_amount);
+            r.performance_bond.resolved = true;
+            events::emit_bond_redeemed(&env, &reference_code, &logistics_user, bond_amount);
+        }
+
         r.status = EscrowStatus::Refunded;
         storage::set_escrow(&env, &reference_code, &r);
 
@@ -676,6 +827,95 @@ impl MariTradeEscrowContract {
 
         record.cancellation_stage = new_stage;
         storage::set_escrow(&env, &reference_code, &record);
+
+        Ok(())
+    }
+
+    /// Deposit the required USDC performance bond for a high-value shipment.
+    /// Phase 5 — Escrow-as-Incentive.
+    ///
+    /// Only callable by the exact `logistics_user` address configured in
+    /// `create_escrow`. A shipment with no bond requirement (`bond_amount == 0`)
+    /// rejects this call.
+    ///
+    /// # Errors
+    /// * `BondNotRequired`      — This shipment has no bond requirement
+    /// * `NotBondLogisticsUser` — Caller isn't the assigned bond-holder
+    /// * `BondAlreadyStaked`    — Bond has already been deposited
+    pub fn stake_performance_bond(
+        env: Env,
+        reference_code: String,
+        logistics_user: Address,
+    ) -> Result<(), EscrowError> {
+        logistics_user.require_auth();
+
+        let mut record = storage::get_escrow(&env, &reference_code)?;
+
+        if record.performance_bond.bond_amount <= 0 {
+            return Err(EscrowError::BondNotRequired);
+        }
+        if record.performance_bond.logistics_user != logistics_user {
+            return Err(EscrowError::NotBondLogisticsUser);
+        }
+        if record.performance_bond.staked {
+            return Err(EscrowError::BondAlreadyStaked);
+        }
+
+        let token = TokenClient::new(&env, &record.usdc_token);
+        token.transfer(
+            &logistics_user,
+            &env.current_contract_address(),
+            &record.performance_bond.bond_amount,
+        );
+
+        record.performance_bond.staked = true;
+        let bond_amount = record.performance_bond.bond_amount;
+        storage::set_escrow(&env, &reference_code, &record);
+
+        events::emit_bond_staked(&env, &reference_code, &logistics_user, bond_amount);
+
+        Ok(())
+    }
+
+    /// Platform-only: forfeit a staked performance bond to the importer after
+    /// confirming damage or a dispute loss by the logistics user. Phase 5 —
+    /// Escrow-as-Incentive.
+    ///
+    /// Must be called **before** `resolve_dispute` — once `resolve_dispute` runs,
+    /// the escrow leaves the `Disputed` status and any still-staked bond is
+    /// redeemed back to the logistics user automatically (no-fault default).
+    ///
+    /// # Errors
+    /// * `NotPlatform`  — Caller is not the platform address
+    /// * `BondNotStaked` — No staked, unresolved bond exists for this escrow
+    /// * `OnlyPlatformCanResolveDispute` — Escrow is not currently `Disputed`
+    pub fn forfeit_bond(
+        env: Env,
+        reference_code: String,
+        platform: Address,
+    ) -> Result<(), EscrowError> {
+        platform.require_auth();
+
+        let mut record = storage::get_escrow(&env, &reference_code)?;
+
+        if record.platform != platform {
+            return Err(EscrowError::NotPlatform);
+        }
+        if record.status != EscrowStatus::Disputed {
+            return Err(EscrowError::OnlyPlatformCanResolveDispute);
+        }
+        if !record.performance_bond.staked || record.performance_bond.resolved {
+            return Err(EscrowError::BondNotStaked);
+        }
+
+        let token = TokenClient::new(&env, &record.usdc_token);
+        let bond_amount = record.performance_bond.bond_amount;
+        token.transfer(&env.current_contract_address(), &record.importer, &bond_amount);
+
+        record.performance_bond.resolved = true;
+        storage::set_escrow(&env, &reference_code, &record);
+
+        events::emit_bond_forfeited(&env, &reference_code, &record.importer, bond_amount);
 
         Ok(())
     }
@@ -734,6 +974,25 @@ impl MariTradeEscrowContract {
     ) -> Result<Vec<MilestoneConfirmation>, EscrowError> {
         let record = storage::get_escrow(&env, &reference_code)?;
         Ok(record.confirmed_milestones)
+    }
+
+    /// Return the configured milestone bonuses (Phase 5) and their paid status.
+    pub fn get_milestone_bonuses(
+        env: Env,
+        reference_code: String,
+    ) -> Result<Vec<MilestoneBonus>, EscrowError> {
+        let record = storage::get_escrow(&env, &reference_code)?;
+        Ok(record.milestone_bonuses)
+    }
+
+    /// Return the performance bond configuration/state for a shipment (Phase 5).
+    /// `bond_amount == 0` means no bond is required.
+    pub fn get_performance_bond(
+        env: Env,
+        reference_code: String,
+    ) -> Result<PerformanceBond, EscrowError> {
+        let record = storage::get_escrow(&env, &reference_code)?;
+        Ok(record.performance_bond)
     }
 
     // ══════════════════════════════════════════════════════════════════════════

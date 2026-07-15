@@ -10,22 +10,65 @@ priority milestones are confirmed by the logistics chain.
 
 ```
 Importer
-  │  create_escrow()   ← registers vault, selects milestones
-  │  fund()            ← deposits USDC via SAC transfer
-  │  release()         ← sends USDC to exporter (after all milestones)
-  │  cancel()          ← refund per stage policy
+  │  create_escrow()   ← registers vault, selects milestones, configures
+  │                       optional Phase 5 milestone bonuses + bond requirement
+  │  fund()            ← deposits USDC via SAC transfer (base amount + bonus reserve)
+  │  release()         ← sends USDC to exporter (after all milestones); returns
+  │                       unclaimed bonus reserve + redeems any staked bond
+  │  cancel()          ← refund per stage policy (+ bonus/bond reversal)
   │  raise_dispute()   ← IN_TRANSIT → platform arbitration
   ▼
 [MariTrade Escrow Contract]
   │
   ├── Logistics Users
-  │     confirm_milestone()  ← with evidence URI (IPFS / HTTPS)
+  │     confirm_milestone()       ← with evidence URI (IPFS / HTTPS); pays a
+  │                                  speed bonus immediately if within SLA
+  │     stake_performance_bond()  ← deposit required bond (Phase 5, if any)
   │
   └── MariTrade Platform
         advance_stage()      ← PRE_DEPARTURE → IN_TRANSIT → DELIVERED
         cancel()             ← co-sign for PRE_DEPARTURE refunds
         resolve_dispute()    ← split funds in arbitration
+        forfeit_bond()       ← forfeit a staked bond to importer (call BEFORE
+                                resolve_dispute; otherwise the bond redeems to
+                                the logistics user by default)
 ```
+
+---
+
+## Escrow-as-Incentive (Phase 5)
+
+Two optional incentive mechanisms, configured at `create_escrow` time:
+
+### Milestone speed bonuses
+
+`milestone_bonuses: Vec<MilestoneBonus>` — each entry ties a bonus USDC amount
+to one of the escrow's `required_milestones`, with an SLA window (in ledgers)
+measured from `funded_at_ledger`. The total bonus reserve is pulled into the
+vault alongside the base `amount` at `fund()` time. When a logistics user
+confirms a bonused milestone within its SLA window, the bonus is paid to them
+immediately in `confirm_milestone`. Any bonus reserve left unclaimed (missed
+SLA windows) is returned to the importer when the escrow is finally settled
+(`release`, `cancel`, or `resolve_dispute`).
+
+Pass an empty `Vec` for no bonuses.
+
+### Performance bond
+
+`bond_logistics_user` + `bond_amount` — requires the named logistics user to
+stake a USDC bond via `stake_performance_bond` before (or any time before)
+release. `bond_amount == 0` means no bond is required, and all bond
+entrypoints reject with `BondNotRequired` / are simply not needed.
+
+| Outcome                          | Trigger                                             | Bond goes to     |
+|-----------------------------------|------------------------------------------------------|------------------|
+| Redeemed (clean delivery)         | `release()` succeeds                                 | Logistics user   |
+| Redeemed (neutral cancellation)   | `cancel()` in PRE_DEPARTURE stage                     | Logistics user   |
+| Redeemed (no fault found)         | `resolve_dispute()` without a prior `forfeit_bond()`  | Logistics user   |
+| Forfeited (confirmed fault)       | Platform calls `forfeit_bond()` while `Disputed`      | Importer         |
+
+`forfeit_bond` must be called **before** `resolve_dispute` — once
+`resolve_dispute` runs the escrow leaves the `Disputed` status.
 
 ---
 
@@ -159,6 +202,15 @@ const xdrEnvelope = await client.createEscrow({
     MilestoneType.DeliveredAndSignedOff,
   ],
   partialRefundPercent: 80,               // 80% refund if pre-departure cancel
+  milestoneBonuses: [                     // optional (Phase 5)
+    {
+      milestoneType: MilestoneType.VesselDepartedOrigin,
+      bonusAmountUsd: 200,                // paid to the confirming logistics user
+      slaLedgers: 17_280,                 // ≈ 1 day at 5s/ledger
+    },
+  ],
+  bondLogisticsUser: logisticsUserWallet, // optional (Phase 5); omit for no bond
+  bondAmountUsd: 1_000,                   // 0 / omitted means no bond required
 });
 
 // 2. Sign via Freighter / Stellar Wallets Kit
@@ -227,6 +279,11 @@ const events = await rpc.getEvents({
 | `disputed`   | Dispute raised by importer                     |
 | `resolved`   | Platform resolved dispute                      |
 | `status`     | Any status change (general state machine hook) |
+| `bonuspaid`  | Milestone speed bonus paid to logistics user (Phase 5) |
+| `bonusret`   | Unclaimed bonus reserve returned to importer (Phase 5) |
+| `bondstake`  | Logistics user staked their performance bond (Phase 5) |
+| `bondredm`   | Performance bond redeemed to logistics user (Phase 5)  |
+| `bondforf`   | Performance bond forfeited to importer (Phase 5)       |
 
 ---
 

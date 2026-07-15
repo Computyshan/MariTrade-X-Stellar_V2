@@ -7,6 +7,25 @@
  * All XDR encoding / enum handling is done by the generated client —
  * no manual scvVec/scvSymbol needed.
  *
+ * ── Phase 5 (Escrow-as-Incentive) ──────────────────────────────────────────
+ * The on-chain contract in `contracts/escrow` now accepts three additional
+ * `create_escrow` params (`milestone_bonuses`, `bond_logistics_user`,
+ * `bond_amount`) and exposes two new entrypoints (`stake_performance_bond`,
+ * `forfeit_bond`). After rebuilding the contract wasm, regenerate the
+ * bindings so `MilestoneBonus` / `PerformanceBond` types + these methods show
+ * up in `./escrow-bindings`:
+ *
+ *   cd contracts/escrow
+ *   cargo build --release --target wasm32v1-none
+ *   stellar contract bindings typescript \
+ *     --wasm target/wasm32v1-none/release/maritrade_escrow.wasm \
+ *     --output-dir ../../lib/stellar/escrow-bindings \
+ *     --overwrite
+ *
+ * Until that's run locally, `MilestoneBonus` / `PerformanceBond` below are
+ * hand-written mirrors of the Rust types so the rest of the app can build
+ * against them — swap to the generated exports once bindings are refreshed.
+ *
  * Usage:
  * ```ts
  * const client = getMariTradeEscrowClient("testnet", walletAddress);
@@ -36,6 +55,29 @@ export {
   CancellationStage,
   EscrowError,
 } from "./escrow-bindings/dist/index.js";
+
+// ─── Phase 5 types (mirror contracts/escrow/src/types.rs) ──────────────────
+// TODO: replace with the generated equivalents once bindings are regenerated
+// (see module comment above).
+
+/** Mirrors the on-chain `MilestoneBonus` struct. */
+export interface MilestoneBonus {
+  milestoneType: MilestoneType;
+  /** USDC strobes (1 USDC = 10_000_000 strobes). */
+  bonusAmount: bigint;
+  /** Ledger window from `funded_at_ledger` within which confirmation must land. */
+  slaLedgers: number;
+  paid: boolean;
+}
+
+/** Mirrors the on-chain `PerformanceBond` struct. `bondAmount === 0n` means no bond required. */
+export interface PerformanceBond {
+  logisticsUser: string;
+  /** USDC strobes. */
+  bondAmount: bigint;
+  staked: boolean;
+  resolved: boolean;
+}
 
 // ─── Network presets ────────────────────────────────────────────────────────
 

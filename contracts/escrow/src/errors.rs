@@ -75,4 +75,17 @@ pub enum EscrowError {
     NotFound = 25,
     /// Partial refund basis points must be between 0 and 10_000.
     InvalidBps = 26,
+
+    // ── Escrow-as-incentive (Phase 5) ───────────────────────
+    /// A milestone bonus references a milestone that isn't in the escrow's
+    /// required milestones, or has a non-positive amount / SLA window.
+    InvalidBonusParams = 27,
+    /// This shipment does not require a performance bond (bond_amount == 0).
+    BondNotRequired = 28,
+    /// The performance bond has already been staked.
+    BondAlreadyStaked = 29,
+    /// Caller is not the logistics user assigned to stake this bond.
+    NotBondLogisticsUser = 30,
+    /// The performance bond has not been staked yet (or is already resolved).
+    BondNotStaked = 31,
 }

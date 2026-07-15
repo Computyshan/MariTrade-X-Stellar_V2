@@ -107,7 +107,44 @@
                   "u32": 8000
                 },
                 {
-                  "vec": []
+                  "vec": [
+                    {
+                      "map": [
+                        {
+                          "key": {
+                            "symbol": "bonus_amount"
+                          },
+                          "val": {
+                            "i128": "2000000000"
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "milestone_type"
+                          },
+                          "val": {
+                            "u32": 6
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "paid"
+                          },
+                          "val": {
+                            "bool": false
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "sla_ledgers"
+                          },
+                          "val": {
+                            "u32": 5
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
@@ -183,7 +220,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
                     },
                     {
-                      "i128": "100000000000"
+                      "i128": "102000000000"
                     }
                   ]
                 }
@@ -194,6 +231,7 @@
         }
       ]
     ],
+    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
@@ -222,6 +260,8 @@
         }
       ]
     ],
+    [],
+    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
@@ -278,6 +318,7 @@
         }
       ]
     ],
+    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
@@ -300,11 +341,12 @@
         }
       ]
     ],
+    [],
     []
   ],
   "ledger": {
     "protocol_version": 25,
-    "sequence_number": 0,
+    "sequence_number": 1000,
     "timestamp": 0,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 0,
@@ -411,7 +453,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 6311999
+        "live_until": 6312999
       },
       {
         "entry": {
@@ -491,7 +533,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 6311999
+        "live_until": 6312999
       },
       {
         "entry": {
@@ -511,7 +553,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 6311999
+        "live_until": 6312999
       },
       {
         "entry": {
@@ -531,7 +573,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 6311999
+        "live_until": 6312999
       },
       {
         "entry": {
@@ -590,7 +632,7 @@
                                 "symbol": "confirmed_at_ledger"
                               },
                               "val": {
-                                "u32": 0
+                                "u32": 1000
                               }
                             },
                             {
@@ -626,7 +668,7 @@
                                 "symbol": "confirmed_at_ledger"
                               },
                               "val": {
-                                "u32": 0
+                                "u32": 1000
                               }
                             },
                             {
@@ -662,7 +704,7 @@
                                 "symbol": "confirmed_at_ledger"
                               },
                               "val": {
-                                "u32": 0
+                                "u32": 1000
                               }
                             },
                             {
@@ -731,7 +773,44 @@
                       "symbol": "milestone_bonuses"
                     },
                     "val": {
-                      "vec": []
+                      "vec": [
+                        {
+                          "map": [
+                            {
+                              "key": {
+                                "symbol": "bonus_amount"
+                              },
+                              "val": {
+                                "i128": "2000000000"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "milestone_type"
+                              },
+                              "val": {
+                                "u32": 6
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "paid"
+                              },
+                              "val": {
+                                "bool": false
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "sla_ledgers"
+                              },
+                              "val": {
+                                "u32": 5
+                              }
+                            }
+                          ]
+                        }
+                      ]
                     }
                   },
                   {
@@ -1074,7 +1153,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 518400
+        "live_until": 519400
       },
       {
         "entry": {

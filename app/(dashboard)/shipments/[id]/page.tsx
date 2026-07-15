@@ -51,6 +51,7 @@ import { signXdrWithFreighter } from '@/lib/stellar/freighter';
 import PphpWalletPanel from '@/components/PphpWalletPanel';
 import VesselPositionCard from '@/components/VesselPositionCard';
 import IoTReadingsPanel from '@/components/IoTReadingsPanel';
+import Phase5IntegrationsPanel from '@/components/Phase5IntegrationsPanel';
 import SignaturePad, { SignaturePadHandle } from '@/components/SignaturePad';
 
 type PageParams = { id: string };
@@ -1227,6 +1228,15 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
                             <span className="text-amber">#</span>{me.evidenceRef}
                           </span>
                         ) : null}
+                        {/* Phase 5 · provenance badge — distinguishes a system-verified
+                            reference (BOC e2m / carrier API / port-gate webhook) from a
+                            self-typed one. Absent entirely for MANUAL evidence so it
+                            never implies unearned confidence on the common case. */}
+                        {me.evidenceSource === 'SYSTEM_VERIFIED' && (
+                          <span className="flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wide text-teal bg-teal-light border border-steel-light px-1.5 py-0.5 rounded shrink-0">
+                            <ShieldCheck className="w-2.5 h-2.5" /> System Verified
+                          </span>
+                        )}
                       </div>
 
                       {/* Phase 3 · Digital signature capture at delivery */}
@@ -1269,6 +1279,10 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
             currentUserId={currentUser.id}
             canRegisterDevice={canRegisterIoTDevice}
           />
+
+          {/* Phase 5 · Direct System Integrations (carrier booking, BOC e2m,
+              duty pre-funding, trade finance) — sections self-hide by role */}
+          <Phase5IntegrationsPanel shipment={shipment} currentUser={currentUser} />
 
           {/* Phase 3 · Recipient-side confirmation flow */}
           {(isImporter || currentUser.userType === 'LOGISTICS_CHAIN') && (

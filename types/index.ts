@@ -637,6 +637,13 @@ export interface MilestoneEvent {
    *  Undefined for every other milestone type, and undefined here too if the
    *  check was never attempted (e.g. AIS integration not configured). */
   aisVerification?: AisVerificationResult;
+  /** Phase 5 — Direct System Integration. Whether this milestone's evidence
+   *  came from a self-typed reference/photo (MANUAL, the default — every
+   *  integration in this phase degrades to this if unavailable) or was
+   *  populated automatically from a verified external system (BOC e2m, a
+   *  carrier booking API, or a port/terminal gate webhook). `undefined` is
+   *  equivalent to 'MANUAL' for every milestone logged before this phase. */
+  evidenceSource?: MilestoneEvidenceSource;
 }
 
 export interface ShipmentDocument {
@@ -815,6 +822,166 @@ export interface ShipmentDelayAlert {
   notifiedLogisticsAt?: string;
   /** Set once the importer has been notified for this alert (proactive disclosure). */
   notifiedImporterAt?: string;
+}
+
+// ─── Phase 5 · Direct System Integration ──────────────────────────────────
+// Turns "log what happened elsewhere" into "the filing/booking/payment
+// happens through MariTrade." Every mechanism below degrades gracefully to
+// today's manual flow (typed reference number / uploaded document) if the
+// underlying government/carrier/bank integration is unavailable or simply
+// never configured for a given deployment — see lib/integrations/*.ts, each
+// of which returns `{ ok: false, reason: 'not_configured' }` rather than
+// throwing when its provider credentials aren't set, mirroring the existing
+// `AisVerificationStatus: 'UNVERIFIABLE'` / `not_configured` pattern used by
+// the Phase 3 AIS cross-check and vessel-tracking helper.
+
+/**
+ * Where a milestone's evidence actually came from.
+ *   MANUAL           — self-typed reference number / uploaded document /
+ *                        photo, exactly like every milestone before Phase 5.
+ *                        This is the default: `undefined` on a MilestoneEvent
+ *                        means MANUAL, for legacy records and for any
+ *                        deployment that hasn't configured an integration.
+ *   SYSTEM_VERIFIED  — populated automatically from a verified external
+ *                        system's own confirmation (BOC e2m, a carrier
+ *                        booking API, or a port/terminal gate webhook) —
+ *                        MariTrade received the system's own record, not a
+ *                        self-report of it.
+ */
+export type MilestoneEvidenceSource = 'MANUAL' | 'SYSTEM_VERIFIED';
+
+// ── BOC e2m / customs EDI integration ───────────────────────────────────────
+// Backs BOC_ENTRY_FILED and DUTIES_AND_TAXES_PAID. A Customs Broker files
+// directly through MariTrade instead of pasting a reference number after
+// filing elsewhere on the government's own e2m portal.
+export type BocFilingStatus = 'NOT_FILED' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED';
+
+export interface BocEntryFiling {
+  id: string;
+  shipmentId: string;
+  filedByUserId: string;
+  status: BocFilingStatus;
+  /** BOC's own entry series number. Only ever set from a CONFIRMED e2m
+   *  response — never from user-typed input (that's still available as the
+   *  ordinary MANUAL fallback on the BOC_ENTRY_FILED milestone itself if
+   *  e2m isn't configured for this deployment). */
+  entrySeriesNumber?: string;
+  dutiesAssessedUSD?: number;
+  officialReceiptNumber?: string;
+  submittedAt?: string;
+  confirmedAt?: string;
+  rejectedReason?: string;
+  /** Raw last response body from the e2m gateway, kept for audit/debugging. */
+  rawResponse?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Carrier booking API integration ─────────────────────────────────────────
+// Backs BOOKING_CONFIRMED and SPACE_ON_VESSEL_SECURED. A Freight Forwarder
+// books vessel/container space through a carrier API from inside the app, so
+// the booking reference is system-verified rather than typed in.
+export type CarrierBookingStatus = 'NOT_REQUESTED' | 'REQUESTED' | 'CONFIRMED' | 'FAILED';
+
+export interface CarrierBookingRequest {
+  id: string;
+  shipmentId: string;
+  requestedByUserId: string;
+  /** e.g. 'MAERSK', 'MSC', 'ONE' — see lib/integrations/carrier-booking.ts
+   *  SUPPORTED_CARRIERS for the deployment's currently-wired carriers. */
+  carrierCode: string;
+  containerType?: string; // e.g. '40HC', '20GP'
+  status: CarrierBookingStatus;
+  bookingReference?: string;
+  vesselName?: string;
+  voyageNumber?: string;
+  requestedAt: string;
+  confirmedAt?: string;
+  failureReason?: string;
+  rawResponse?: string;
+}
+
+// ── Port/terminal gate system webhook ───────────────────────────────────────
+// Auto-populates CONTAINER_GATED_OUT_ORIGIN / CONTAINER_GATED_IN_DESTINATION
+// from terminal operating system events instead of manual entry.
+export type PortGateEventType = 'GATE_OUT_ORIGIN' | 'GATE_IN_DESTINATION';
+
+export interface PortGateEvent {
+  id: string;
+  shipmentId: string;
+  /** Which terminal operating system posted this — free text per deployment
+   *  (e.g. 'ICTSI_MANILA'), not a closed enum, since new terminals can be
+   *  onboarded without a code change. */
+  terminalCode: string;
+  eventType: PortGateEventType;
+  containerNumber: string;
+  /** The terminal's own event timestamp — may differ from `receivedAt` if
+   *  the webhook was delayed or replayed. */
+  occurredAt: string;
+  receivedAt: string;
+  /** Set once this event has auto-populated a milestone for the matching
+   *  container — see lib/integrations/port-gate.ts#matchPortGateEventToMilestoneType. */
+  matchedMilestoneEventId?: string;
+  rawPayload?: string;
+}
+
+// ── Bank/wallet integration for duty pre-funding ────────────────────────────
+// Importers pre-authorize duty payment through MariTrade's wallet rails so
+// the Customs Broker doesn't need a separate payment channel outside the
+// platform.
+export type DutyPreFundingStatus = 'NOT_REQUESTED' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'CANCELLED';
+
+export interface DutyPreFundingAuthorization {
+  id: string;
+  shipmentId: string;
+  importerId: string;
+  estimatedDutyAmountUSD: number;
+  status: DutyPreFundingStatus;
+  authorizedAt?: string;
+  /** Set once the assigned Customs Broker draws on the pre-authorized funds
+   *  to actually pay BOC — the money moved through MariTrade's own rails
+   *  rather than a separate outside payment channel. */
+  capturedAt?: string;
+  capturedByUserId?: string;
+  capturedAmountUSD?: number;
+  cancelledAt?: string;
+  /** Wallet/bank rail used. MARITRADE_WALLET reuses the existing Stellar
+   *  USDC rails already wired up for escrow; BANK_PARTNER is a placeholder
+   *  for a future direct bank integration, not implemented yet. */
+  provider: 'MARITRADE_WALLET' | 'BANK_PARTNER';
+  rawReference?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Letter of credit / trade finance hooks ──────────────────────────────────
+// For larger shipments, lets importers link an LC or financing product that
+// itself references the MariTrade escrow status — deepening the platform's
+// role beyond a single payment rail. MariTrade doesn't call out to a bank's
+// LC system here; it records the link and snapshots its own escrow status so
+// the financing provider's process can reference it.
+export type TradeFinanceInstrumentType = 'LETTER_OF_CREDIT' | 'INVOICE_FINANCING' | 'SUPPLY_CHAIN_FINANCE';
+export type TradeFinanceStatus = 'LINKED' | 'ISSUED' | 'DRAWN' | 'SETTLED' | 'EXPIRED' | 'CANCELLED';
+
+export interface TradeFinanceLink {
+  id: string;
+  shipmentId: string;
+  importerId: string;
+  instrumentType: TradeFinanceInstrumentType;
+  /** Issuing bank / financing provider name — free text, not a closed enum. */
+  providerName: string;
+  referenceNumber: string;
+  faceValueUSD: number;
+  status: TradeFinanceStatus;
+  /** The escrow status captured at the moment this instrument was linked —
+   *  lets the financing provider's own process reference where MariTrade's
+   *  escrow stood when the instrument was issued, without needing a live
+   *  API call back into MariTrade. */
+  escrowStatusAtLink: EscrowStatus;
+  linkedByUserId: string;
+  linkedAt: string;
+  lastSyncedAt?: string;
+  notes?: string;
 }
 
 // ─── Saved Shipment List Views ─────────────────────────────────────────────
