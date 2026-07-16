@@ -119,7 +119,7 @@ function CarrierBookingSection({ shipment, currentUser }: { shipment: Shipment; 
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [shipment.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [shipment.id]);
 
   const confirmed = bookings.find(b => b.status === 'CONFIRMED');
 
@@ -230,7 +230,7 @@ function BocFilingSection({ shipment, currentUser }: { shipment: Shipment; curre
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [shipment.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [shipment.id]);
 
   const runAction = async (action: 'FILE_ENTRY' | 'PAY_DUTY') => {
     setWorking(action);
@@ -327,7 +327,7 @@ function DutyPreFundingSection({
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [shipment.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [shipment.id]);
 
   const runAction = async (action: 'AUTHORIZE' | 'CAPTURE' | 'CANCEL') => {
     setWorking(true);
@@ -446,7 +446,7 @@ function TradeFinanceSection({ shipment, currentUser }: { shipment: Shipment; cu
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [shipment.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [shipment.id]);
 
   const openModal = () => {
     setInstrumentType('LETTER_OF_CREDIT');

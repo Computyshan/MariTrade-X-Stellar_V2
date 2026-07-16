@@ -1,58 +1,50 @@
 'use client';
 
 import React, { useEffect, useState, use, useRef } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUserSession, authFetch } from '@/hooks/use-user-session';
 import { useFreighter } from '@/hooks/use-freighter';
+import { useCancelFlow } from '@/hooks/use-cancel-flow';
+import { formatEtaCountdown } from '@/lib/eta';
 import {
-  Ship,
-  MapPin,
   Clock,
-  Coins,
   FileText,
   Lock,
-  Unlock,
   ChevronLeft,
-  Upload,
-  Download,
   AlertTriangle,
-  HelpCircle,
   ExternalLink,
   CheckCircle2,
-  Trash2,
   AlertCircle,
   FolderLock,
   Eye,
-  RefreshCw,
-  Wallet,
-  XCircle,
-  Scale,
   ShieldAlert,
   Link2,
   Copy,
-  Bot,
-  TrendingUp,
-  PenTool,
   UserCheck,
   Send,
-  ShieldCheck,
 } from 'lucide-react';
 import {
-  Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE, MILESTONE_EVIDENCE_MODE, userHasJobRole,
+  Shipment, MilestoneEvent, PriorityMilestone, ShipmentDocument, PHASE_MILESTONE_SEQUENCE, userHasJobRole,
   DeliverySignature, SignerRelation, RecipientConfirmation,
 } from '@/types';
-import { formatAsset } from '@/lib/stellar/assets';
-import { getUsdToPhpRate } from '@/lib/stellar/fx';
+import Link from 'next/link';
 import { canAccessBOCDocuments } from '@/lib/permissions/documents';
 import { getMariTradeEscrowClient, NETWORKS } from '@/lib/stellar/escrow-contract';
 import { signXdrWithFreighter } from '@/lib/stellar/freighter';
-import PphpWalletPanel from '@/components/PphpWalletPanel';
 import VesselPositionCard from '@/components/VesselPositionCard';
 import IoTReadingsPanel from '@/components/IoTReadingsPanel';
 import Phase5IntegrationsPanel from '@/components/Phase5IntegrationsPanel';
-import SignaturePad, { SignaturePadHandle } from '@/components/SignaturePad';
+import PphpWalletPanel from '@/components/PphpWalletPanel';
+import { SignaturePadHandle } from '@/components/SignaturePad';
+import { DelayRiskPanel, RateBenchmarkPanel, DelayRisk, RateBenchmark } from '@/components/ShipmentAIInsightPanels';
+import ShipmentMilestoneTimeline from '@/components/ShipmentMilestoneTimeline';
+import ShipmentEscrowLedger from '@/components/ShipmentEscrowLedger';
+import ShipmentCancelModal from '@/components/ShipmentCancelModal';
+import { BocAuthDeniedModal, BocUploadModal } from '@/components/BocDocumentModals';
+import EscrowReleaseModal from '@/components/EscrowReleaseModal';
+import DeliverySignatureModal from '@/components/DeliverySignatureModal';
+import RecipientConfirmModal from '@/components/RecipientConfirmModal';
 
 type PageParams = { id: string };
 
@@ -61,60 +53,6 @@ interface ShipmentDetailProps {
 }
 
 const STELLAR_NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as 'testnet' | 'mainnet';
-
-// ─── Phase 4 · ETA countdown formatting ──────────────────────────────────
-type EtaCountdown = { label: string; overdue: boolean };
-
-function formatEtaCountdown(estimatedArrival: string, nowMs: number): EtaCountdown {
-  const targetMs = new Date(estimatedArrival).getTime();
-  const diffMs = targetMs - nowMs;
-  const overdue = diffMs < 0;
-  const abs = Math.abs(diffMs);
-  const days = Math.floor(abs / (24 * 60 * 60 * 1000));
-  const hours = Math.floor((abs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-  const minutes = Math.floor((abs % (60 * 60 * 1000)) / (60 * 1000));
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (days > 0 || hours > 0) parts.push(`${hours}h`);
-  if (days === 0) parts.push(`${minutes}m`);
-  const duration = parts.join(' ');
-  return {
-    label: overdue ? `${duration} past ETA` : `${duration} until ETA`,
-    overdue,
-  };
-}
-
-// ─── Cancel modal state ──────────────────────────────────────────────────────
-type CancelStep =
-  | 'idle'
-  | 'preparing'       // fetching stage + building XDR
-  | 'awaiting_sign'   // waiting for Freighter signing popup
-  | 'submitting'      // broadcasting to Stellar
-  | 'confirming_db'   // writing result to DB
-  | 'done'
-  | 'error';
-
-interface CancelState {
-  step: CancelStep;
-  stage: string;       // UNFUNDED | PRE_DEPARTURE | IN_TRANSIT | DELIVERED
-  refundBps: number;
-  refundAmount: number;
-  requiresDispute: boolean;
-  dbOnly: boolean;
-  txHash: string;
-  error: string;
-}
-
-const CANCEL_INITIAL: CancelState = {
-  step: 'idle',
-  stage: '',
-  refundBps: 0,
-  refundAmount: 0,
-  requiresDispute: false,
-  dbOnly: false,
-  txHash: '',
-  error: '',
-};
 
 export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const resolvedParams = use(params);
@@ -150,9 +88,6 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const [uploadError,   setUploadError]   = useState('');
   const bocFileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Cancel modal ────────────────────────────────────────────────────────────
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelState, setCancelState] = useState<CancelState>(CANCEL_INITIAL);
   const [linkCopied, setLinkCopied] = useState(false);
 
   // ── Phase 4 · SLA / ETA countdown surfacing ─────────────────────
@@ -168,26 +103,13 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     const t = setInterval(() => setEtaTick(Date.now()), 60_000);
     return () => clearInterval(t);
   }, []);
-  // Importer's stated reason for a dispute — feeds the AI dispute-evidence
-  // summarizer shown on the Admin Dispute Panel.
-  const [disputeReasonInput, setDisputeReasonInput] = useState('');
 
   // ── Phase 2 · AI Delay-Risk Prediction (Logistics Chain only) ───────────
-  const [delayRisk, setDelayRisk] = useState<{
-    riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
-    reasoning: string;
-    recommendedActions: string[];
-    historicalStats: { sampleSize: number; holdRate: number | null; disputeRate: number | null; avgClearanceHours: number | null };
-  } | null>(null);
+  const [delayRisk, setDelayRisk] = useState<DelayRisk | null>(null);
   const [delayRiskLoading, setDelayRiskLoading] = useState(false);
 
   // ── Phase 2 · AI Rate Benchmarking (Freight Forwarders only) ──────────
-  const [rateBenchmark, setRateBenchmark] = useState<{
-    suggestedFloorUSD: number | null;
-    confidence: 'HIGH' | 'MEDIUM' | 'LOW';
-    reasoning: string;
-    stats: { sampleSize: number; avgFreightCostUSD: number | null; minFreightCostUSD: number | null; maxFreightCostUSD: number | null };
-  } | null>(null);
+  const [rateBenchmark, setRateBenchmark] = useState<RateBenchmark | null>(null);
   const [rateBenchmarkLoading, setRateBenchmarkLoading] = useState(false);
 
   // ── Phase 3 · Digital signature capture at delivery ─────────────────────
@@ -213,24 +135,6 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const [rcError, setRcError] = useState('');
   const [rcJustSentUrl, setRcJustSentUrl] = useState('');
 
-  const handleCopyTrackingLink = async () => {
-    if (!shipment) return;
-    const url = `${window.location.origin}/track/${shipment.referenceCode}`;
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      // Fallback for browsers without clipboard API permission
-      const ta = document.createElement('textarea');
-      ta.value = url;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
-
   const fetchDetails = async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent ?? false;
     try {
@@ -253,7 +157,38 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     }
   };
 
+  // ── Cancel / dispute flow (escrow-cancel) ───────────────────────────────
+  const {
+    cancelOpen, setCancelOpen, cancelState, setCancelState,
+    disputeReasonInput, setDisputeReasonInput,
+    openCancelModal, handlePrepareCancel, handleRaiseDispute,
+  } = useCancelFlow({
+    shipmentId: data?.shipment?.id,
+    networkKey: STELLAR_NETWORK,
+    freighter,
+    onSettled: fetchDetails,
+  });
+
+  const handleCopyTrackingLink = async () => {
+    if (!shipment) return;
+    const url = `${window.location.origin}/track/${shipment.referenceCode}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Fallback for browsers without clipboard API permission
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetchDetails triggers the initial load; loading state is intentional here
     if (shipmentId) fetchDetails();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipmentId]);
@@ -265,6 +200,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   // surface risk proactively rather than wait for someone to ask.
   useEffect(() => {
     if (!data?.shipment || currentUser?.userType !== 'LOGISTICS_CHAIN') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicks off the AI fetch; loading flag is intentional
     setDelayRiskLoading(true);
     authFetch('/api/gemini/delay-risk', {
       method: 'POST',
@@ -288,6 +224,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   useEffect(() => {
     if (!data?.shipment || !currentUser) return;
     if (!userHasJobRole(currentUser, 'FREIGHT_FORWARDER')) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicks off the AI fetch; loading flag is intentional
     setRateBenchmarkLoading(true);
     authFetch('/api/gemini/rate-benchmark', {
       method: 'POST',
@@ -305,6 +242,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   // has already been logged) ──────────────────────────────────────────────
   useEffect(() => {
     const deliveredMilestone = data?.milestones?.find(m => m.type === 'DELIVERED_AND_SIGNED_OFF');
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets stale signature when the milestone disappears (e.g. shipment switch)
     if (!deliveredMilestone) { setDeliverySignature(null); return; }
     authFetch(`/api/shipments/${shipmentId}/delivery-signature?milestoneEventId=${deliveredMilestone.id}`)
       .then(r => r.json())
@@ -357,6 +295,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       ?? '';
     if (!walletKey) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicks off the on-chain check; loading flag is intentional
     setCheckingRelease(true);
     const client = getMariTradeEscrowClient(STELLAR_NETWORK, walletKey);
     client.can_release({ reference_code: data.shipment.referenceCode })
@@ -514,229 +453,6 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  CANCEL FLOW
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  const openCancelModal = () => {
-    setCancelState(CANCEL_INITIAL);
-    setDisputeReasonInput('');
-    setCancelOpen(true);
-  };
-
-  /** Step 1: call prepare_cancel to learn the stage and get the XDR. */
-  const handlePrepareCancel = async () => {
-    if (!data) return;
-
-    let importerAddress = freighter.publicKey;
-    if (!importerAddress) {
-      setCancelState(s => ({ ...s, step: 'preparing', error: '' }));
-      try { importerAddress = await freighter.connect(); }
-      catch (err) {
-        setCancelState(s => ({
-          ...s, step: 'error',
-          error: `Wallet connection failed: ${err instanceof Error ? err.message : String(err)}`,
-        }));
-        return;
-      }
-    }
-
-    setCancelState(s => ({ ...s, step: 'preparing', error: '' }));
-
-    try {
-      const res = await authFetch(`/api/shipments/${data.shipment.id}/escrow-cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'prepare_cancel', importerAddress }),
-      });
-      const json = await res.json();
-      if (!json.success) {
-        setCancelState(s => ({ ...s, step: 'error', error: json.error || 'Preparation failed.' }));
-        return;
-      }
-
-      const { cancelXdr, stage, refundBps, refundAmount, requiresDispute, dbOnly } = json.data;
-
-      if (requiresDispute) {
-        // IN_TRANSIT: redirect to dispute flow inside the modal
-        setCancelState(s => ({ ...s, step: 'idle', stage, requiresDispute: true, refundBps: 0, refundAmount: 0 }));
-        return;
-      }
-
-      if (dbOnly) {
-        // No Stellar config or chain unreachable — confirm immediately in DB
-        setCancelState(s => ({ ...s, step: 'confirming_db', stage, refundBps, refundAmount, dbOnly: true }));
-        await handleConfirmCancelDB(data.shipment.id, undefined);
-        return;
-      }
-
-      // Have XDR — need Freighter signature
-      setCancelState(s => ({ ...s, step: 'awaiting_sign', stage, refundBps, refundAmount, dbOnly: false }));
-
-      // Sign with Freighter
-      let cancelSignedXdr: string;
-      try {
-        setCancelState(s => ({ ...s, step: 'awaiting_sign' }));
-        cancelSignedXdr = await signXdrWithFreighter(
-          cancelXdr,
-          NETWORKS[STELLAR_NETWORK].networkPassphrase,
-        );
-      } catch (signErr) {
-        const msg = signErr instanceof Error ? signErr.message : String(signErr);
-        if (msg.toLowerCase().includes('cancel') || msg.toLowerCase().includes('reject')) {
-          setCancelState(s => ({ ...s, step: 'idle', error: '' })); // user dismissed
-        } else {
-          setCancelState(s => ({ ...s, step: 'error', error: `Signing failed: ${msg}` }));
-        }
-        return;
-      }
-
-      // Submit signed XDR to server
-      setCancelState(s => ({ ...s, step: 'submitting' }));
-      const submitRes = await authFetch(`/api/shipments/${data.shipment.id}/escrow-cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'submit_cancel', cancelSignedXdr }),
-      });
-      const submitJson = await submitRes.json();
-      if (!submitJson.success) {
-        setCancelState(s => ({ ...s, step: 'error', error: submitJson.error || 'Submission failed.' }));
-        return;
-      }
-
-      const confirmedHash = submitJson.data.txHash;
-      await handleConfirmCancelDB(data.shipment.id, confirmedHash);
-
-    } catch (err: any) {
-      setCancelState(s => ({
-        ...s, step: 'error',
-        error: err?.message ?? 'An unexpected error occurred during cancellation.',
-      }));
-    }
-  };
-
-  /** Sync DB after on-chain cancel is confirmed. */
-  const handleConfirmCancelDB = async (shipId: string, confirmedHash: string | undefined) => {
-    setCancelState(s => ({ ...s, step: 'confirming_db' }));
-    try {
-      const res = await authFetch(`/api/shipments/${shipId}/escrow-cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'confirm_cancel', txHash: confirmedHash }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setCancelState(s => ({ ...s, step: 'done', txHash: confirmedHash ?? '' }));
-        fetchDetails();
-      } else {
-        setCancelState(s => ({ ...s, step: 'error', error: json.error || 'DB update failed.' }));
-      }
-    } catch (err: any) {
-      setCancelState(s => ({ ...s, step: 'error', error: err?.message ?? 'Failed to update shipment record.' }));
-    }
-  };
-
-  /** Raise dispute (IN_TRANSIT path). Mirrors the cancel flow: prepare → sign → submit → confirm. */
-  const handleRaiseDispute = async () => {
-    if (!data) return;
-
-    let importerAddress = freighter.publicKey;
-    if (!importerAddress) {
-      setCancelState(s => ({ ...s, step: 'preparing', error: '' }));
-      try { importerAddress = await freighter.connect(); }
-      catch (err) {
-        setCancelState(s => ({
-          ...s, step: 'error',
-          error: `Wallet connection failed: ${err instanceof Error ? err.message : String(err)}`,
-        }));
-        return;
-      }
-    }
-
-    setCancelState(s => ({ ...s, step: 'preparing', error: '' }));
-
-    try {
-      // Step 1: prepare — get the raise_dispute() XDR (or a dbOnly fallback)
-      const res = await authFetch(`/api/shipments/${data.shipment.id}/escrow-cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'raise_dispute', importerAddress }),
-      });
-      const json = await res.json();
-      if (!json.success) {
-        setCancelState(s => ({ ...s, step: 'error', error: json.error || 'Failed to raise dispute.' }));
-        return;
-      }
-
-      const { disputeXdr, dbOnly } = json.data;
-
-      if (dbOnly) {
-        setCancelState(s => ({ ...s, step: 'confirming_db' }));
-        await handleConfirmRaiseDisputeDB(data.shipment.id, undefined);
-        return;
-      }
-
-      // Step 2: sign with Freighter (importer-only — no platform co-sign needed)
-      setCancelState(s => ({ ...s, step: 'awaiting_sign' }));
-      let disputeSignedXdr: string;
-      try {
-        disputeSignedXdr = await signXdrWithFreighter(
-          disputeXdr,
-          NETWORKS[STELLAR_NETWORK].networkPassphrase,
-        );
-      } catch (signErr) {
-        const msg = signErr instanceof Error ? signErr.message : String(signErr);
-        if (msg.toLowerCase().includes('cancel') || msg.toLowerCase().includes('reject')) {
-          setCancelState(s => ({ ...s, step: 'idle', error: '' })); // user dismissed
-        } else {
-          setCancelState(s => ({ ...s, step: 'error', error: `Signing failed: ${msg}` }));
-        }
-        return;
-      }
-
-      // Step 3: submit the signed XDR
-      setCancelState(s => ({ ...s, step: 'submitting' }));
-      const submitRes = await authFetch(`/api/shipments/${data.shipment.id}/escrow-cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'submit_raise_dispute', disputeSignedXdr }),
-      });
-      const submitJson = await submitRes.json();
-      if (!submitJson.success) {
-        setCancelState(s => ({ ...s, step: 'error', error: submitJson.error || 'Submission failed.' }));
-        return;
-      }
-
-      // Step 4: confirm — sync DB + notify
-      const confirmedHash = submitJson.data.txHash;
-      await handleConfirmRaiseDisputeDB(data.shipment.id, confirmedHash);
-
-    } catch (err: any) {
-      setCancelState(s => ({ ...s, step: 'error', error: err?.message ?? 'Failed to raise dispute.' }));
-    }
-  };
-
-  /** Sync DB after on-chain raise_dispute is confirmed (or for DB-only). */
-  const handleConfirmRaiseDisputeDB = async (shipId: string, confirmedHash: string | undefined) => {
-    setCancelState(s => ({ ...s, step: 'confirming_db' }));
-    try {
-      const res = await authFetch(`/api/shipments/${shipId}/escrow-cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'confirm_raise_dispute', txHash: confirmedHash, disputeReason: disputeReasonInput }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setCancelState(s => ({ ...s, step: 'done', txHash: confirmedHash ?? '' }));
-        fetchDetails();
-      } else {
-        setCancelState(s => ({ ...s, step: 'error', error: json.error || 'DB update failed.' }));
-      }
-    } catch (err: any) {
-      setCancelState(s => ({ ...s, step: 'error', error: err?.message ?? 'Failed to update shipment record.' }));
-    }
-  };
-
   // ── Upload document handlers ─────────────────────────────────────────────
   const handleUploadBOCClick = () => {
     if (!currentUser) return;
@@ -748,6 +464,18 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   const handleOpenVaultFolder = () => {
     if (data?.vaultFolderId) router.push(`/documents/${data.vaultFolderId}`);
     else router.push('/documents');
+  };
+
+  const closeUploadModal = () => {
+    setUploadOpen(false);
+    setUploadError('');
+    setUploadFile(null);
+    if (bocFileInputRef.current) bocFileInputRef.current.value = '';
+  };
+
+  const handleUploadFileChange = (file: File | null) => {
+    setUploadFile(file);
+    setUploadError('');
   };
 
   const handleUploadDocument = async (e: React.FormEvent) => {
@@ -797,6 +525,11 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
     setSignatureError('');
     signaturePadRef.current?.clear();
     setSignatureOpen(true);
+  };
+
+  const handleSignerContactChange = (v: string) => {
+    setSignerContact(v);
+    setOtpSent(false);
   };
 
   const handleSendSignatureOtp = async () => {
@@ -964,13 +697,7 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
   // sensor tag against this shipment.
   const canRegisterIoTDevice = isImporter || assignments.some((a: any) => a.userId === currentUser.id);
 
-  // Stage label for the cancel banner — uses the shipment's actual escrow asset
   const escrowAsset = (shipment.escrowAsset ?? 'USDC') as 'USDC' | 'PPHP';
-  const cancelStageLabel: Record<string, string> = {
-    UNFUNDED: 'Full refund — escrow not yet funded',
-    PRE_DEPARTURE: `Partial refund (${cancelState.refundBps / 100}% = ${formatAsset(cancelState.refundAmount, escrowAsset)})`,
-    IN_TRANSIT: 'Disputed — arbitration required',
-  };
 
   return (
     <DashboardLayout>
@@ -1067,77 +794,13 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       )}
 
       {/* Phase 2 · AI Delay-Risk Prediction — Logistics Chain only */}
-      {currentUser.userType === 'LOGISTICS_CHAIN' && (delayRiskLoading || delayRisk) && (
-        <div className={`border rounded-xl p-4 flex items-start gap-3 ${
-          delayRisk?.riskLevel === 'HIGH' ? 'bg-wine-light border-wine/20' :
-          delayRisk?.riskLevel === 'MEDIUM' ? 'bg-amber-light border-amber/30' :
-          'bg-teal-light border-steel-light'
-        }`}>
-          <Bot className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-            delayRisk?.riskLevel === 'HIGH' ? 'text-wine' : delayRisk?.riskLevel === 'MEDIUM' ? 'text-amber' : 'text-steel'
-          }`} />
-          <div className="space-y-1.5 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-bold text-ink-soft flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5" /> AI Delay-Risk Prediction
-              </p>
-              {delayRisk && (
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide ${
-                  delayRisk.riskLevel === 'HIGH' ? 'bg-wine text-white' : delayRisk.riskLevel === 'MEDIUM' ? 'bg-amber text-white' : 'bg-teal text-ink'
-                }`}>{delayRisk.riskLevel} RISK</span>
-              )}
-            </div>
-            {delayRiskLoading ? (
-              <p className="text-xs text-ink-faint italic flex items-center gap-1.5"><RefreshCw className="w-3 h-3 animate-spin" /> Checking route history and customs risk…</p>
-            ) : delayRisk ? (
-              <>
-                <p className="text-xs text-ink-faint leading-relaxed">{delayRisk.reasoning}</p>
-                {delayRisk.recommendedActions.length > 0 && (
-                  <ul className="text-[11px] text-ink-faint space-y-0.5 pl-4 list-disc">
-                    {delayRisk.recommendedActions.map((a, i) => <li key={i}>{a}</li>)}
-                  </ul>
-                )}
-                <p className="text-[9px] text-ink-faint/70">
-                  Based on {delayRisk.historicalStats.sampleSize} prior MariTrade shipment{delayRisk.historicalStats.sampleSize === 1 ? '' : 's'} on this exact route.
-                </p>
-              </>
-            ) : null}
-          </div>
-        </div>
+      {currentUser.userType === 'LOGISTICS_CHAIN' && (
+        <DelayRiskPanel loading={delayRiskLoading} data={delayRisk} />
       )}
 
       {/* Phase 2 · AI Rate Benchmarking — Freight Forwarders only */}
-      {currentUser && userHasJobRole(currentUser, 'FREIGHT_FORWARDER') && (rateBenchmarkLoading || rateBenchmark) && (
-        <div className="border rounded-xl p-4 flex items-start gap-3 bg-steel-light border-steel-light">
-          <Bot className="w-5 h-5 flex-shrink-0 mt-0.5 text-steel" />
-          <div className="space-y-1.5 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-bold text-ink-soft flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5" /> AI Rate Benchmark
-              </p>
-              {rateBenchmark && (
-                <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide bg-steel text-white">
-                  {rateBenchmark.confidence} CONFIDENCE
-                </span>
-              )}
-            </div>
-            {rateBenchmarkLoading ? (
-              <p className="text-xs text-ink-faint italic flex items-center gap-1.5"><RefreshCw className="w-3 h-3 animate-spin" /> Checking route freight history and market rates…</p>
-            ) : rateBenchmark ? (
-              <>
-                {rateBenchmark.suggestedFloorUSD != null && (
-                  <p className="text-lg font-black text-ink font-sans">
-                    ${rateBenchmark.suggestedFloorUSD.toLocaleString()} <span className="text-xs font-bold text-ink-faint">suggested negotiating floor</span>
-                  </p>
-                )}
-                <p className="text-xs text-ink-faint leading-relaxed">{rateBenchmark.reasoning}</p>
-                <p className="text-[9px] text-ink-faint/70">
-                  Based on {rateBenchmark.stats.sampleSize} prior MariTrade shipment{rateBenchmark.stats.sampleSize === 1 ? '' : 's'} with a recorded freight cost on this exact route.
-                </p>
-              </>
-            ) : null}
-          </div>
-        </div>
+      {currentUser && userHasJobRole(currentUser, 'FREIGHT_FORWARDER') && (
+        <RateBenchmarkPanel loading={rateBenchmarkLoading} data={rateBenchmark} />
       )}
 
       {/* Main Grid */}
@@ -1151,127 +814,17 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
             <VesselPositionCard mmsi={shipment.vesselMmsi} vesselName={shipment.vesselName} />
           )}
 
-          <div className="bg-white border border-mist p-6 rounded-2xl shadow-sm space-y-6">
-            <h3 className="font-extrabold text-sm text-ink tracking-tight flex items-center gap-2">
-              <Ship className="w-5 h-5 text-amber" /><span>Milestone Tracking &amp; Signoffs</span>
-            </h3>
-
-            <div className="bg-mist-light p-4 rounded-xl border border-mist space-y-3">
-              <h4 className="text-xs font-bold text-ink-faint uppercase tracking-wider font-sans">Escrow Release Requirements</h4>
-              <div className="space-y-2">
-                {priorityMilestones.map((pm) => (
-                  <div key={pm.id} className="flex items-center gap-2.5 text-xs text-ink-faint">
-                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${pm.isCompleted ? 'bg-teal text-ink' : 'bg-amber-light text-amber animate-pulse'}`}>
-                      {pm.isCompleted ? '✓' : '●'}
-                    </span>
-                    <span className="font-bold uppercase tracking-tight">{pm.type.replace(/_/g, ' ')}</span>
-                    <span className="text-ink-faint">({pm.isCompleted ? 'CONFIRMED' : 'AWAITING SIGNOFF'})</span>
-                  </div>
-                ))}
-              </div>
-              {checkingRelease && (
-                <div className="flex items-center gap-1.5 text-[10px] text-steel pt-1">
-                  <RefreshCw className="w-3 h-3 animate-spin" /> Checking on-chain release status…
-                </div>
-              )}
-              {hasRealEscrowId && chainCanRelease !== null && !checkingRelease && (
-                <div className={`text-[10px] font-bold pt-1 flex items-center gap-1 ${allPriorityCompleted || chainCanRelease ? 'text-steel' : 'text-wine'}`}>
-                  {allPriorityCompleted || chainCanRelease
-                    ? '✓ All priority milestones confirmed — payout unlocked'
-                    : '⊘ On-chain gate: pending milestone confirmations'}
-                </div>
-              )}
-              {!hasRealEscrowId && !checkingRelease && (
-                <div className={`text-[10px] font-bold pt-1 flex items-center gap-1 ${allPriorityCompleted ? 'text-steel' : 'text-wine'}`}>
-                  {allPriorityCompleted ? '✓ All priority milestones confirmed — payout unlocked' : '⊘ Awaiting milestone confirmations — payout locked'}
-                </div>
-              )}
-            </div>
-
-            {milestones.length === 0 ? (
-              <div className="text-center py-12 text-ink-faint text-xs font-sans">AWAITING INITIAL FORWARDING AND BOOKING MILESTONES.</div>
-            ) : (
-              <div className="relative pl-6 space-y-8 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-mist">
-                {milestones.map((me) => {
-                  const isPriority = priorityMilestones.some(pm => pm.type === me.type);
-                  return (
-                    <div key={me.id} className="relative space-y-1 text-xs">
-                      <span className={`absolute -left-[22.5px] top-1 w-4 h-4 rounded-full border-2 border-white ring-4 inline-block ${isPriority ? 'bg-teal ring-teal-light' : 'bg-mist ring-mist-light'}`} />
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                        <strong className="font-bold text-ink text-xs font-sans uppercase">{me.type.replace(/_/g, ' ')}</strong>
-                        <span className="text-[10px] text-ink-faint font-sans">{new Date(me.occurredAt).toLocaleString()}</span>
-                      </div>
-                      <p className="text-ink-faint leading-normal pl-1">{me.description || 'No custom notes logged.'}</p>
-                      {me.aisVerification && (
-                        <div className={`flex items-start gap-1.5 pl-1 text-[10px] rounded-lg px-2 py-1.5 border ${
-                          me.aisVerification.status === 'VERIFIED' ? 'bg-teal-light border-steel-light text-steel' :
-                          me.aisVerification.status === 'MISMATCH' ? 'bg-wine-light border-wine/20 text-wine' :
-                          'bg-mist-light border-mist text-ink-faint'
-                        }`}>
-                          <ShieldAlert className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                          <span>
-                            <strong className="font-black uppercase tracking-wide">AIS {me.aisVerification.status}</strong>
-                            {me.aisVerification.vesselName && <> — {me.aisVerification.vesselName}</>}
-                            {me.aisVerification.note && <span className="block text-[9px] mt-0.5 opacity-80">{me.aisVerification.note}</span>}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-3 pt-1 text-[10px] pl-1 text-ink-faint font-medium">
-                        <span>Logged by user ID: <strong className="text-ink-faint">{me.loggedById}</strong></span>
-                        <span>•</span>
-                        {me.evidenceUrl ? (
-                          <a href={me.evidenceUrl} target="_blank" rel="noreferrer" className="text-steel hover:underline flex items-center gap-0.5 font-bold cursor-pointer">
-                            <Download className="w-3 h-3 text-teal" /><span>View Evidence</span>
-                          </a>
-                        ) : me.evidenceRef ? (
-                          <span className="flex items-center gap-1 font-sans text-ink-soft bg-amber-light border border-amber-light px-2 py-0.5 rounded">
-                            <span className="text-amber">#</span>{me.evidenceRef}
-                          </span>
-                        ) : null}
-                        {/* Phase 5 · provenance badge — distinguishes a system-verified
-                            reference (BOC e2m / carrier API / port-gate webhook) from a
-                            self-typed one. Absent entirely for MANUAL evidence so it
-                            never implies unearned confidence on the common case. */}
-                        {me.evidenceSource === 'SYSTEM_VERIFIED' && (
-                          <span className="flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wide text-teal bg-teal-light border border-steel-light px-1.5 py-0.5 rounded shrink-0">
-                            <ShieldCheck className="w-2.5 h-2.5" /> System Verified
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Phase 3 · Digital signature capture at delivery */}
-                      {me.type === 'DELIVERED_AND_SIGNED_OFF' && (
-                        <div className="pl-1 pt-1.5">
-                          {deliverySignature && deliverySignature.milestoneEventId === me.id ? (
-                            <div className="flex items-start gap-2 text-[10px] rounded-lg px-2 py-1.5 border bg-teal-light border-steel-light text-steel">
-                              <ShieldCheck className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                              <span>
-                                <strong className="font-black uppercase tracking-wide">SIGNATURE ON FILE</strong>
-                                {' — '}{deliverySignature.signerName} ({deliverySignature.signerRelation.replace(/_/g, ' ').toLowerCase()})
-                                {deliverySignature.otpVerified && (
-                                  <span className="block text-[9px] mt-0.5 opacity-80">
-                                    Identity verified via OTP{deliverySignature.otpVerifiedContactMasked ? ` to ${deliverySignature.otpVerifiedContactMasked}` : ''}.
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          ) : currentUser.userType === 'LOGISTICS_CHAIN' ? (
-                            <button
-                              type="button"
-                              onClick={openSignatureModal}
-                              className="flex items-center gap-1.5 text-[10px] font-bold text-steel hover:text-teal border border-steel-light hover:border-teal-light bg-steel-light/40 hover:bg-teal-light px-2.5 py-1.5 rounded-lg transition-all"
-                            >
-                              <PenTool className="w-3 h-3" /> Capture Delivery Signature
-                            </button>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <ShipmentMilestoneTimeline
+            priorityMilestones={priorityMilestones}
+            milestones={milestones}
+            checkingRelease={checkingRelease}
+            hasRealEscrowId={hasRealEscrowId}
+            chainCanRelease={chainCanRelease}
+            allPriorityCompleted={allPriorityCompleted}
+            deliverySignature={deliverySignature}
+            isLogisticsChainUser={currentUser.userType === 'LOGISTICS_CHAIN'}
+            onOpenSignatureModal={openSignatureModal}
+          />
 
           {/* Phase 3 · IoT sensor readings (temperature/humidity/shock/GPS/door) */}
           <IoTReadingsPanel
@@ -1336,167 +889,25 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
 
         {/* Escrow Ledger Column */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-mist p-6 rounded-2xl shadow-sm space-y-4">
-            <h3 className="font-extrabold text-sm text-ink flex items-center gap-2 border-b border-mist-light pb-3">
-              <Coins className="w-5 h-5 text-teal" /><span>Multi-Signature Escrow Locker</span>
-            </h3>
-
-            <div className="text-center py-4 bg-mist-light rounded-xl border border-mist space-y-1">
-              <span className="text-[10px] text-ink-faint font-sans font-bold block uppercase tracking-wide">SECURED FUNDS</span>
-              <strong className="text-3xl text-ink font-black font-sans block">{formatAsset(shipment.totalValueUSD ?? 0, 'USDC')}</strong>
-              {shipment.shipmentScope === 'NATIONWIDE' && (
-                <PhpEquivLabel usdcAmount={shipment.totalValueUSD ?? 0} />
-              )}
-            </div>
-
-            {stellarWorking && stellarStep && (
-              <div className="bg-amber-light border border-amber-light rounded-xl p-3 flex items-center gap-2.5">
-                <RefreshCw className="w-4 h-4 text-amber animate-spin flex-shrink-0" />
-                <p className="text-[11px] text-ink-soft leading-snug">{stellarStep}</p>
-              </div>
-            )}
-
-            {stellarHash && stellarHash.length > 20 && (
-              <a href={`https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${stellarHash}`}
-                target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-[10px] text-steel font-sans hover:underline break-all">
-                <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                {stellarHash.substring(0, 16)}…{stellarHash.substring(stellarHash.length - 8)}
-              </a>
-            )}
-
-            <div className="text-xs space-y-4">
-              <div className="flex justify-between items-center bg-mist-light p-2.5 rounded border border-mist font-sans text-[11px]">
-                <span className="text-ink-faint">LEDGER STATUS:</span>
-                <strong className={`font-bold ${
-                  shipment.escrowStatus === 'RELEASED'  ? 'text-teal' :
-                  shipment.escrowStatus === 'REFUNDED'  ? 'text-steel' :
-                  shipment.escrowStatus === 'DISPUTED'  ? 'text-wine' :
-                  'text-ink'
-                }`}>
-                  {shipment.escrowStatus}
-                </strong>
-              </div>
-
-              {/* UNFUNDED */}
-              {shipment.escrowStatus === 'UNFUNDED' && (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-ink-faint leading-normal">
-                    The exporter has counter-signed terms. Authorize the funds transfer from your Stellar account to open container assignments.
-                  </p>
-                  <button onClick={handleFundEscrow} disabled={stellarWorking}
-                    className="w-full bg-amber hover:bg-ink text-white font-bold py-2.5 rounded-lg text-xs leading-none cursor-pointer uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-1.5">
-                    <Unlock className="w-4 h-4" />
-                    <span>{stellarWorking ? 'Locking multisig hashes...' : 'Authorize Escrow Lock'}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* FUNDED */}
-              {shipment.escrowStatus === 'FUNDED' && (
-                <div className="space-y-4">
-                  <div className="bg-teal-light border border-steel-light text-steel p-3 rounded-lg leading-normal flex items-start gap-1.5 text-[11px]">
-                    <Lock className="w-4 h-4 text-teal flex-shrink-0 mt-0.5" />
-                    <span>USDC stablecoin is securely locked on the public Stellar ledger under Multi-sign custody.</span>
-                  </div>
-
-                  {!freighter.publicKey && (
-                    <button onClick={freighter.connect} disabled={freighter.connecting}
-                      className="w-full flex items-center justify-center gap-1.5 border border-amber/30 bg-amber-light hover:bg-amber-light/70 text-ink font-bold py-2 rounded-lg text-xs transition-all">
-                      <Wallet className="w-3.5 h-3.5" />
-                      {freighter.connecting ? 'Connecting…' : 'Connect Freighter to Release Funds'}
-                    </button>
-                  )}
-
-                  <div className="pt-2">
-                    {releaseEligible ? (
-                      <div className="space-y-2">
-                        <div className="p-3 bg-teal-light border border-steel-light rounded text-steel font-bold block text-center text-xs">
-                          ✓ All Priority Milestone Signoffs Met!
-                        </div>
-                        <button onClick={() => setReleaseOpen(true)} disabled={stellarWorking}
-                          className="w-full bg-steel hover:bg-teal text-white font-black py-2.5 rounded-lg text-xs cursor-pointer shadow-sm uppercase tracking-widest transition-all disabled:opacity-50">
-                          Execute Escrow Payout
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-1 text-center bg-mist-light p-3 rounded border border-mist">
-                        <Clock className="w-4 h-4 text-wine mx-auto mb-1 animate-pulse" />
-                        <span className="font-semibold block text-[11px] text-ink-faint">payout lock active</span>
-                        <span className="text-[10px] text-ink-faint block leading-normal">Release button triggers once all priority milestones are verified.</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Cancel / Request Refund button — importer only */}
-                  {isImporter && (
-                    <div className="pt-2 border-t border-mist-light">
-                      <button
-                        onClick={openCancelModal}
-                        className="w-full flex items-center justify-center gap-1.5 border border-mist-dark hover:border-wine text-ink-faint hover:text-wine py-1.5 rounded text-center font-bold text-[10px] uppercase transition-all"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        Request Refund / Cancel Shipment
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* DISPUTED */}
-              {shipment.escrowStatus === 'DISPUTED' && (
-                <div className="bg-wine-light border border-wine/20 text-wine p-4 rounded-xl space-y-2 text-xs">
-                  <ShieldAlert className="w-5 h-5 text-wine" />
-                  <p className="font-bold">Escrow Under Arbitration</p>
-                  <p className="leading-normal">MariTrade is reviewing this dispute. Funds remain locked until a resolution is issued. You will be notified by email once resolved.</p>
-                  <Link href="/admin/disputes" className="text-[10px] underline font-bold text-wine flex items-center gap-1">
-                    <Scale className="w-3 h-3" /> View Admin Dispute Panel
-                  </Link>
-                </div>
-              )}
-
-              {/* RELEASED */}
-              {shipment.escrowStatus === 'RELEASED' && (
-                <div className="bg-teal-light border border-teal-light text-teal p-4 rounded-xl space-y-2 text-xs">
-                  <CheckCircle2 className="w-5 h-5 text-teal" />
-                  <p className="font-bold">Stellar Multi-sign Escrow Finalized!</p>
-                  <p>The contract has completed successfully. {formatAsset(shipment.totalValueUSD ?? 0, escrowAsset)} has been routed to the Exporter’s wallet.</p>
-                  {stellarHash && stellarHash.length > 20 && (
-                    <a href={`https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${stellarHash}`}
-                      target="_blank" rel="noreferrer"
-                      className="flex items-center gap-1 text-[10px] text-teal font-sans hover:underline">
-                      <ExternalLink className="w-3 h-3" /> View on Stellar Explorer
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {/* REFUNDED */}
-              {shipment.escrowStatus === 'REFUNDED' && (
-                <div className="bg-steel-light border border-steel-light text-steel-hover p-4 rounded-xl space-y-2 text-xs">
-                  <CheckCircle2 className="w-5 h-5 text-steel" />
-                  <p className="font-bold">Escrow Refunded</p>
-                  <p className="leading-normal">The cancellation has been processed and {escrowAsset === 'PPHP' ? 'PPHP (PHP-denominated funds)' : 'USDC'} has been returned to the importer per the agreed refund policy.</p>
-                  {shipment.stellarEscrowId && hasRealEscrowId && (
-                    <a href={`https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${shipment.stellarEscrowId}`}
-                      target="_blank" rel="noreferrer"
-                      className="flex items-center gap-1 text-[10px] text-steel font-sans hover:underline">
-                      <ExternalLink className="w-3 h-3" /> View on Stellar Explorer
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <ShipmentEscrowLedger
+            shipment={shipment}
+            network={STELLAR_NETWORK}
+            stellarWorking={stellarWorking}
+            stellarStep={stellarStep}
+            stellarHash={stellarHash}
+            freighter={freighter}
+            releaseEligible={releaseEligible}
+            isImporter={isImporter}
+            onFundEscrow={handleFundEscrow}
+            onOpenReleaseModal={() => setReleaseOpen(true)}
+            onOpenCancelModal={openCancelModal}
+          />
         </div>
       </div>
 
       {/* PPHP Wallet Panel — importers only, collapsible */}
       {isImporter && (
-        <PphpWalletPanel
-          publicKey={freighter.publicKey}
-          onConnect={freighter.connect}
-        />
+        <PphpWalletPanel publicKey={freighter.publicKey} onConnect={freighter.connect} />
       )}
 
       {/* BOC Vault Documents Centre */}
@@ -1560,560 +971,90 @@ export default function ShipmentDetail({ params }: ShipmentDetailProps) {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  CANCEL / REFUND MODAL                                             */}
+      {/*  MODALS                                                             */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {cancelOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-mist rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            {/* Header */}
-            <div className="flex items-center gap-3 border-b border-mist-light pb-3">
-              <div className="w-10 h-10 bg-wine-light rounded-xl flex items-center justify-center shrink-0">
-                <XCircle className="w-5 h-5 text-wine" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm text-ink">Cancel Shipment &amp; Request Refund</h3>
-                <p className="text-[10px] text-ink-faint font-sans">{shipment.referenceCode}</p>
-              </div>
-              <button
-                onClick={() => setCancelOpen(false)}
-                className="ml-auto text-ink-faint hover:text-ink text-lg leading-none"
-                disabled={cancelState.step === 'preparing' || cancelState.step === 'submitting' || cancelState.step === 'confirming_db'}
-              >✕</button>
-            </div>
 
-            {/* ── IDLE / pre-action ──────────────────────────────────────── */}
-            {(cancelState.step === 'idle' && !cancelState.requiresDispute) && (
-              <div className="space-y-4">
-                <div className="bg-amber-light border border-amber/30 rounded-xl p-4 text-xs text-amber space-y-2">
-                  <p className="font-bold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Cancellation Policy</p>
-                  <ul className="space-y-1.5 pl-2 text-[11px] leading-relaxed">
-                    <li><strong>Unfunded:</strong> Full refund — escrow has no USDC deposited yet.</li>
-                    <li><strong>Pre-Departure:</strong> Partial refund per agreed terms; platform fee applies.</li>
-                    <li><strong>In-Transit:</strong> Requires dispute arbitration — MariTrade reviews and splits funds.</li>
-                    <li><strong>Delivered:</strong> No cancellation allowed after delivery confirmation.</li>
-                  </ul>
-                </div>
+      <ShipmentCancelModal
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        referenceCode={shipment.referenceCode}
+        escrowAsset={escrowAsset}
+        network={STELLAR_NETWORK}
+        freighter={freighter}
+        cancelState={cancelState}
+        setCancelState={setCancelState}
+        disputeReasonInput={disputeReasonInput}
+        setDisputeReasonInput={setDisputeReasonInput}
+        onPrepareCancel={handlePrepareCancel}
+        onRaiseDispute={handleRaiseDispute}
+      />
 
-                {!freighter.publicKey ? (
-                  <button
-                    onClick={freighter.connect}
-                    disabled={freighter.connecting}
-                    className="w-full flex items-center justify-center gap-1.5 border border-amber/30 bg-amber-light hover:bg-amber-light/70 text-ink font-bold py-2 rounded-lg text-xs"
-                  >
-                    <Wallet className="w-3.5 h-3.5" />
-                    {freighter.connecting ? 'Connecting…' : 'Connect Freighter Wallet First'}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2 bg-teal-light border border-steel-light rounded-lg px-3 py-2">
-                    <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
-                    <span className="font-sans text-[10px] text-ink truncate">{freighter.publicKey}</span>
-                  </div>
-                )}
+      <BocAuthDeniedModal
+        open={bocAuthOpen}
+        onClose={() => setBocAuthOpen(false)}
+        jobRole={currentUser.jobRole}
+      />
 
-                <p className="text-[10px] text-ink-faint leading-relaxed">
-                  Clicking <strong>Proceed with Cancellation</strong> will check the current escrow stage on Stellar,
-                  then open a Freighter signing popup. The platform co-signature for PRE_DEPARTURE cancellations
-                  is added server-side automatically.
-                </p>
+      <EscrowReleaseModal
+        open={releaseOpen}
+        onClose={() => { setReleaseOpen(false); setStellarError(''); }}
+        freighter={freighter}
+        stellarError={stellarError}
+        stellarWorking={stellarWorking}
+        stellarStep={stellarStep}
+        releaseProofUrl={releaseProofUrl}
+        setReleaseProofUrl={setReleaseProofUrl}
+        onSubmit={handleEscrowReleaseSubmit}
+      />
 
-                <div className="flex gap-2 justify-end pt-2">
-                  <button onClick={() => setCancelOpen(false)} className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold text-xs">
-                    Keep Shipment
-                  </button>
-                  <button
-                    onClick={handlePrepareCancel}
-                    className="px-4 py-1.5 bg-wine hover:bg-wine/85 text-white rounded-lg font-black text-xs"
-                  >
-                    Proceed with Cancellation
-                  </button>
-                </div>
-              </div>
-            )}
+      <BocUploadModal
+        open={uploadOpen}
+        onClose={closeUploadModal}
+        referenceCode={shipment.referenceCode}
+        uploadFile={uploadFile}
+        uploading={uploading}
+        uploadError={uploadError}
+        fileInputRef={bocFileInputRef}
+        onFileChange={handleUploadFileChange}
+        onSubmit={handleUploadDocument}
+      />
 
-            {/* ── IN_TRANSIT → dispute required ─────────────────────────── */}
-            {cancelState.requiresDispute && cancelState.step === 'idle' && (
-              <div className="space-y-4">
-                <div className="bg-wine-light border border-wine/20 rounded-xl p-4 text-xs text-ink-soft space-y-2">
-                  <p className="font-bold flex items-center gap-1.5"><ShieldAlert className="w-4 h-4" /> In-Transit — Dispute Required</p>
-                  <p className="text-[11px] leading-relaxed">
-                    Your shipment is currently <strong>In Transit</strong>. Direct cancellation is not permitted once
-                    the vessel has departed. You must raise a formal dispute which MariTrade will arbitrate.
-                    Funds remain locked until a resolution is issued.
-                  </p>
-                  <p className="text-[10px] text-wine">Resolution typically takes 3–5 business days.</p>
-                </div>
+      <DeliverySignatureModal
+        open={signatureOpen}
+        onClose={() => setSignatureOpen(false)}
+        referenceCode={shipment.referenceCode}
+        signatureError={signatureError}
+        signatureSubmitting={signatureSubmitting}
+        signerName={signerName}
+        setSignerName={setSignerName}
+        signerRelation={signerRelation}
+        setSignerRelation={setSignerRelation}
+        signerContact={signerContact}
+        setSignerContact={setSignerContact}
+        onContactChange={handleSignerContactChange}
+        otpSent={otpSent}
+        otpSending={otpSending}
+        otpExpiresAt={otpExpiresAt}
+        otpCode={otpCode}
+        setOtpCode={setOtpCode}
+        onSendOtp={handleSendSignatureOtp}
+        signaturePadRef={signaturePadRef}
+        onSubmit={handleSubmitSignature}
+      />
 
-                {!freighter.publicKey ? (
-                  <button onClick={freighter.connect} disabled={freighter.connecting}
-                    className="w-full flex items-center justify-center gap-1.5 border border-amber/30 bg-amber-light hover:bg-amber-light/70 text-ink font-bold py-2 rounded-lg text-xs">
-                    <Wallet className="w-3.5 h-3.5" />{freighter.connecting ? 'Connecting…' : 'Connect Freighter Wallet'}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2 bg-teal-light border border-steel-light rounded-lg px-3 py-2">
-                    <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
-                    <span className="font-sans text-[10px] text-ink truncate">{freighter.publicKey}</span>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold text-ink-faint uppercase tracking-wide">
-                    Reason for dispute (optional, but helps arbitration)
-                  </label>
-                  <textarea
-                    value={disputeReasonInput}
-                    onChange={e => setDisputeReasonInput(e.target.value)}
-                    rows={3}
-                    placeholder="e.g. Cargo arrived with visible water damage on 3 pallets; photos attached to Delivered milestone."
-                    className="w-full border border-mist rounded-lg p-2.5 text-xs outline-none font-sans resize-none"
-                  />
-                  <p className="text-[9px] text-ink-faint">
-                    This is shown to MariTrade&apos;s arbitrators and summarized by AI alongside the milestone log — it doesn&apos;t affect the outcome on its own.
-                  </p>
-                </div>
-
-                <div className="flex gap-2 justify-end pt-2">
-                  <button onClick={() => setCancelOpen(false)} className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold text-xs">
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleRaiseDispute}
-                    className="px-4 py-1.5 bg-wine hover:bg-wine/85 text-white rounded-lg font-black text-xs flex items-center gap-1.5"
-                  >
-                    <Scale className="w-3.5 h-3.5" /> File Dispute with MariTrade
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── In-progress steps ──────────────────────────────────────── */}
-            {(cancelState.step === 'preparing' || cancelState.step === 'awaiting_sign' || cancelState.step === 'submitting' || cancelState.step === 'confirming_db') && (
-              <div className="space-y-4 py-2">
-                <div className="space-y-3">
-                  {[
-                    { key: 'preparing',    label: 'Checking escrow stage on Stellar…' },
-                    { key: 'awaiting_sign', label: 'Waiting for Freighter signature…' },
-                    { key: 'submitting',   label: 'Broadcasting cancellation to Stellar…' },
-                    { key: 'confirming_db', label: 'Updating shipment record…' },
-                  ].map(({ key, label }) => {
-                    const steps = ['preparing', 'awaiting_sign', 'submitting', 'confirming_db'];
-                    const currentIdx = steps.indexOf(cancelState.step);
-                    const thisIdx    = steps.indexOf(key);
-                    const isDone    = thisIdx < currentIdx;
-                    const isCurrent = thisIdx === currentIdx;
-                    return (
-                      <div key={key} className={`flex items-center gap-3 text-xs ${isDone ? 'text-steel' : isCurrent ? 'text-ink' : 'text-mist-dark'}`}>
-                        <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] flex-shrink-0 ${
-                          isDone    ? 'border-teal bg-teal text-white' :
-                          isCurrent ? 'border-amber bg-amber-light' :
-                          'border-mist bg-white'
-                        }`}>
-                          {isDone ? '✓' : isCurrent ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : '·'}
-                        </span>
-                        <span className={`font-medium ${isCurrent ? 'font-bold' : ''}`}>{label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {cancelState.stage && (
-                  <div className="bg-mist-light border border-mist rounded-lg p-3 text-[11px]">
-                    <span className="text-ink-faint">Stage: </span>
-                    <strong className="text-ink">{cancelState.stage}</strong>
-                    {cancelStageLabel[cancelState.stage] && (
-                      <span className="text-ink-faint block mt-0.5">{cancelStageLabel[cancelState.stage]}</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Done ──────────────────────────────────────────────────── */}
-            {cancelState.step === 'done' && (
-              <div className="space-y-4">
-                <div className="bg-steel-light border border-steel-light rounded-xl p-5 text-center space-y-3">
-                  <CheckCircle2 className="w-10 h-10 text-steel mx-auto" />
-                  <p className="font-extrabold text-sm text-ink">
-                    {cancelState.requiresDispute ? 'Dispute Filed Successfully' : 'Cancellation Complete'}
-                  </p>
-                  <p className="text-xs text-ink-faint leading-relaxed">
-                    {cancelState.requiresDispute
-                      ? 'Your dispute has been submitted. MariTrade will review the case and notify you within 3–5 business days.'
-                      : `Your ${escrowAsset === 'PPHP' ? 'PPHP' : 'USDC'} refund has been processed on the Stellar ledger. ${cancelState.stage === 'PRE_DEPARTURE' ? `${formatAsset(cancelState.refundAmount, escrowAsset)} has been returned to your wallet.` : 'Full refund confirmed.'}`
-                    }
-                  </p>
-                  {cancelState.txHash && cancelState.txHash.length === 64 && (
-                    <a
-                      href={`https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${cancelState.txHash}`}
-                      target="_blank" rel="noreferrer"
-                      className="flex items-center justify-center gap-1 text-[10px] text-steel font-sans hover:underline"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      {cancelState.txHash.substring(0, 16)}…{cancelState.txHash.substring(cancelState.txHash.length - 8)}
-                    </a>
-                  )}
-                </div>
-                <button onClick={() => setCancelOpen(false)} className="w-full px-4 py-2 bg-amber hover:bg-ink text-white rounded-lg font-black text-xs">
-                  Close
-                </button>
-              </div>
-            )}
-
-            {/* ── Error ─────────────────────────────────────────────────── */}
-            {cancelState.step === 'error' && (
-              <div className="space-y-4">
-                <div className="bg-wine-light border border-wine/20 rounded-xl p-4 flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-wine flex-shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold text-xs text-wine">Cancellation Failed</p>
-                    <p className="text-[11px] text-wine leading-relaxed">{cancelState.error}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button onClick={() => setCancelOpen(false)} className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold text-xs">
-                    Close
-                  </button>
-                  <button
-                    onClick={() => setCancelState(s => ({ ...s, step: 'idle', error: '' }))}
-                    className="px-4 py-1.5 bg-wine hover:bg-wine/85 text-white rounded-lg font-black text-xs"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  BOC AUTHORIZATION GATE MODAL                                      */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {bocAuthOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-mist rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-wine-light rounded-xl flex items-center justify-center shrink-0"><Lock className="w-5 h-5 text-wine" /></div>
-              <div>
-                <h3 className="font-extrabold text-sm text-ink">BOC Vault Access Denied</h3>
-                <p className="text-[10px] text-ink-faint font-sans uppercase">{currentUser.jobRole}</p>
-              </div>
-            </div>
-            <p className="text-xs text-ink-faint leading-relaxed">
-              Your current role (<strong className="uppercase text-ink">{currentUser.jobRole}</strong>) does not have clearance to access the Bureau of Customs Document Vault. Only Trade Party members and Customs Brokers may upload or view vault documents.
-            </p>
-            <div className="flex justify-end pt-1">
-              <button onClick={() => setBocAuthOpen(false)} className="px-4 py-2 bg-amber hover:bg-ink text-white rounded-lg font-bold text-xs transition-all">Understood</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  ESCROW RELEASE MODAL                                               */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {releaseOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-mist rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="font-extrabold text-sm text-ink uppercase tracking-tight">Stellar Escrow Release Consent</h3>
-            <p className="text-[11px] text-ink-faint leading-normal">
-              You are authorizing the immediate release of locked USDC via the Soroban escrow contract. Freighter will prompt you to sign the release transaction. Upload a signed handoff receipt first.
-            </p>
-
-            {freighter.publicKey ? (
-              <div className="flex items-center gap-2 bg-teal-light border border-steel-light rounded-lg px-3 py-2">
-                <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
-                <span className="font-sans text-[10px] text-ink truncate">{freighter.publicKey}</span>
-              </div>
-            ) : (
-              <button onClick={freighter.connect} disabled={freighter.connecting}
-                className="w-full flex items-center justify-center gap-1.5 bg-amber-light border border-amber/30 text-ink font-bold py-2 rounded-lg text-xs">
-                <Wallet className="w-3.5 h-3.5" />{freighter.connecting ? 'Connecting…' : 'Connect Freighter'}
-              </button>
-            )}
-
-            {stellarError && (
-              <div className="bg-wine-light border border-wine/20 text-wine text-xs p-2.5 rounded-lg">{stellarError}</div>
-            )}
-            {stellarWorking && stellarStep && (
-              <div className="flex items-center gap-2 text-[11px] text-ink-soft bg-amber-light border border-amber-light rounded-lg p-2.5">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber" />{stellarStep}
-              </div>
-            )}
-
-            <form onSubmit={handleEscrowReleaseSubmit} className="space-y-4 text-xs">
-              <div className="space-y-2">
-                <label className="block font-bold text-ink-faint">Signed Handoff Receipt (URL)</label>
-                <input type="text" required placeholder="https://signoffs.ph/receipt.png"
-                  className="w-full border border-mist rounded p-2 text-xs outline-none font-sans"
-                  value={releaseProofUrl} onChange={(e) => setReleaseProofUrl(e.target.value)} />
-                <button type="button" onClick={() => setReleaseProofUrl('https://picsum.photos/seed/release_sc/800/600')}
-                  className="text-[10px] text-steel underline block">
-                  Quick attach handoff photo proof
-                </button>
-              </div>
-
-              <div className="flex gap-2 justify-end pt-2 text-xs">
-                <button type="button" className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint"
-                  onClick={() => { setReleaseOpen(false); setStellarError(''); }}>
-                  Close
-                </button>
-                <button type="submit" disabled={stellarWorking || !releaseProofUrl}
-                  className="px-4 py-1.5 bg-steel hover:bg-teal text-white rounded-lg font-black disabled:opacity-50">
-                  {stellarWorking ? 'Processing…' : 'Sign & Authorize Release'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  UPLOAD DOCUMENT MODAL                                              */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {uploadOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-mist rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-light rounded-xl flex items-center justify-center shrink-0">
-                <Upload className="w-5 h-5 text-amber" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm text-ink">Upload BOC Document</h3>
-                <p className="text-[10px] text-ink-faint font-sans uppercase">{shipment.referenceCode}</p>
-              </div>
-            </div>
-
-            {uploadError && (
-              <div className="bg-wine-light border border-wine/20 text-wine text-xs p-2.5 rounded-lg flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />{uploadError}
-              </div>
-            )}
-
-            <form onSubmit={handleUploadDocument} className="space-y-4 text-xs">
-              <div
-                onClick={() => bocFileInputRef.current?.click()}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => {
-                  e.preventDefault();
-                  const f = e.dataTransfer.files[0];
-                  if (f) { setUploadFile(f); setUploadError(''); }
-                }}
-                className="border-2 border-dashed border-mist-dark hover:border-amber-light hover:bg-amber-light/30 rounded-xl p-6 text-center cursor-pointer transition-colors space-y-2"
-              >
-                <FileText className="w-8 h-8 text-mist-dark mx-auto" />
-                <p className="text-xs font-semibold text-ink-faint">
-                  {uploadFile ? uploadFile.name : 'Click or drag & drop a file here'}
-                </p>
-                {uploadFile && <p className="text-[10px] text-ink-faint">{(uploadFile.size / 1024).toFixed(1)} KB</p>}
-                <p className="text-[10px] text-ink-faint">PDF, JPG or PNG · Max 50MB</p>
-              </div>
-              <input
-                ref={bocFileInputRef}
-                type="file"
-                className="hidden"
-                onChange={e => { setUploadFile(e.target.files?.[0] ?? null); setUploadError(''); }}
-              />
-              <div className="flex gap-2 justify-end pt-2">
-                <button type="button" className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold"
-                  onClick={() => { setUploadOpen(false); setUploadError(''); setUploadFile(null); if (bocFileInputRef.current) bocFileInputRef.current.value = ''; }}>
-                  Cancel
-                </button>
-                <button type="submit" disabled={uploading || !uploadFile}
-                  className="px-4 py-1.5 bg-amber hover:bg-ink text-white rounded-lg font-black disabled:opacity-50 flex items-center gap-1.5">
-                  {uploading ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Uploading…</> : <><Upload className="w-3.5 h-3.5" /> Upload</>}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Phase 3 · Delivery Signature Modal */}
-      {signatureOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-mist rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-steel-light rounded-xl flex items-center justify-center shrink-0">
-                <PenTool className="w-5 h-5 text-steel" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm text-ink">Capture Delivery Signature</h3>
-                <p className="text-[10px] text-ink-faint font-sans uppercase">{shipment.referenceCode}</p>
-              </div>
-              <button
-                onClick={() => setSignatureOpen(false)}
-                className="ml-auto text-ink-faint hover:text-ink text-lg leading-none"
-                disabled={signatureSubmitting}
-              >✕</button>
-            </div>
-
-            {signatureError && (
-              <div className="bg-wine-light border border-wine/20 text-wine text-xs p-2.5 rounded-lg flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />{signatureError}
-              </div>
-            )}
-
-            <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Signer Name <span className="text-wine">*</span></label>
-                  <input type="text" value={signerName} onChange={e => setSignerName(e.target.value)}
-                    placeholder="Full name of the person signing"
-                    className="w-full border border-mist rounded-lg p-2 text-xs outline-none focus:border-teal" />
-                </div>
-                <div className="space-y-1">
-                  <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Relation to Consignee</label>
-                  <select value={signerRelation} onChange={e => setSignerRelation(e.target.value as SignerRelation)}
-                    className="w-full border border-mist rounded-lg p-2 text-xs outline-none focus:border-teal bg-white">
-                    <option value="CONSIGNEE">Consignee</option>
-                    <option value="AUTHORIZED_REPRESENTATIVE">Authorized Representative</option>
-                    <option value="OTHER">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1.5 border-t border-mist-light pt-3">
-                <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">
-                  Identity Verification <span className="text-ink-faint font-normal normal-case">— optional but recommended</span>
-                </label>
-                <p className="text-[10px] text-ink-faint leading-relaxed">
-                  Send a one-time code to the signer&apos;s own phone or email to tie this signature to their verified identity.
-                </p>
-                <div className="flex gap-1.5">
-                  <input type="text" value={signerContact} onChange={e => { setSignerContact(e.target.value); setOtpSent(false); }}
-                    placeholder="Phone or email"
-                    className="w-full border border-mist rounded-lg p-2 text-xs outline-none focus:border-teal" />
-                  <button type="button" onClick={handleSendSignatureOtp}
-                    disabled={!signerContact.trim() || otpSending}
-                    className="shrink-0 flex items-center gap-1 border border-mist hover:border-teal disabled:opacity-40 disabled:cursor-not-allowed text-ink-faint hover:text-teal font-bold text-[10px] px-3 rounded-lg transition-colors">
-                    {otpSending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Send Code'}
-                  </button>
-                </div>
-                {otpSent && (
-                  <div className="space-y-1 pt-1">
-                    <p className="text-[10px] text-teal font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Code sent — valid until {new Date(otpExpiresAt).toLocaleTimeString()}.
-                    </p>
-                    <input type="text" value={otpCode} onChange={e => setOtpCode(e.target.value)}
-                      placeholder="6-digit code" maxLength={6} inputMode="numeric"
-                      className="w-full border border-mist rounded-lg p-2 text-xs font-mono outline-none focus:border-teal" />
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1.5 border-t border-mist-light pt-3">
-                <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Signature <span className="text-wine">*</span></label>
-                <SignaturePad ref={signaturePadRef} height={150} />
-                <button type="button" onClick={() => signaturePadRef.current?.clear()}
-                  className="text-[10px] text-ink-faint hover:text-wine font-bold">Clear</button>
-              </div>
-            </div>
-
-            <div className="flex gap-2 justify-end pt-2 text-xs">
-              <button type="button" className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold"
-                onClick={() => setSignatureOpen(false)} disabled={signatureSubmitting}>
-                Cancel
-              </button>
-              <button type="button" onClick={handleSubmitSignature} disabled={signatureSubmitting}
-                className="px-4 py-1.5 bg-steel hover:bg-teal text-white rounded-lg font-black disabled:opacity-50 flex items-center gap-1.5">
-                {signatureSubmitting ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving…</> : <><PenTool className="w-3.5 h-3.5" /> Save Signature</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Phase 3 · Recipient Confirmation Request Modal */}
-      {recipientConfirmOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-mist rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-light rounded-xl flex items-center justify-center shrink-0">
-                <UserCheck className="w-5 h-5 text-amber" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm text-ink">Request Delivery Confirmation</h3>
-                <p className="text-[10px] text-ink-faint font-sans uppercase">{shipment.referenceCode}</p>
-              </div>
-              <button
-                onClick={() => setRecipientConfirmOpen(false)}
-                className="ml-auto text-ink-faint hover:text-ink text-lg leading-none"
-                disabled={rcSubmitting}
-              >✕</button>
-            </div>
-
-            {rcError && (
-              <div className="bg-wine-light border border-wine/20 text-wine text-xs p-2.5 rounded-lg flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />{rcError}
-              </div>
-            )}
-
-            {rcJustSentUrl ? (
-              <div className="space-y-3">
-                <div className="bg-teal-light border border-steel-light text-steel p-3 rounded-lg text-xs flex items-start gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>Confirmation request sent. No SMS/email provider is configured yet — share this link with the consignee directly:</span>
-                </div>
-                <div className="flex items-center gap-2 bg-mist-light border border-mist rounded-lg px-3 py-2">
-                  <span className="font-mono text-[10px] text-ink truncate flex-1">{rcJustSentUrl}</span>
-                  <button type="button" onClick={() => navigator.clipboard?.writeText(rcJustSentUrl)}
-                    className="shrink-0 text-ink-faint hover:text-teal"><Copy className="w-3.5 h-3.5" /></button>
-                </div>
-                <div className="flex justify-end pt-1">
-                  <button onClick={() => setRecipientConfirmOpen(false)} className="px-4 py-2 bg-amber hover:bg-ink text-white rounded-lg font-bold text-xs transition-all">Done</button>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleRequestRecipientConfirmation} className="space-y-4 text-xs">
-                <div className="space-y-1.5">
-                  <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Consignee Contact <span className="text-wine">*</span></label>
-                  <input type="text" required value={consigneeContact} onChange={e => setConsigneeContact(e.target.value)}
-                    placeholder="Phone or email"
-                    className="w-full border border-mist rounded-lg p-2.5 text-xs outline-none focus:border-teal" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block font-bold text-ink-faint text-[10px] uppercase tracking-wide">Consignee Name</label>
-                  <input type="text" value={consigneeName} onChange={e => setConsigneeName(e.target.value)}
-                    placeholder="Optional"
-                    className="w-full border border-mist rounded-lg p-2.5 text-xs outline-none focus:border-teal" />
-                </div>
-                <p className="text-[10px] text-ink-faint leading-relaxed">
-                  A one-time link will be generated for the consignee to confirm or dispute receipt independently of the logistics chain.
-                </p>
-                <div className="flex gap-2 justify-end pt-2">
-                  <button type="button" className="px-3 py-1.5 border border-mist rounded-lg text-ink-faint font-bold"
-                    onClick={() => setRecipientConfirmOpen(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={rcSubmitting || !consigneeContact.trim()}
-                    className="px-4 py-1.5 bg-amber hover:bg-ink text-white rounded-lg font-black disabled:opacity-50 flex items-center gap-1.5">
-                    {rcSubmitting ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <><Send className="w-3.5 h-3.5" /> Send Request</>}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      <RecipientConfirmModal
+        open={recipientConfirmOpen}
+        onClose={() => setRecipientConfirmOpen(false)}
+        referenceCode={shipment.referenceCode}
+        rcError={rcError}
+        rcJustSentUrl={rcJustSentUrl}
+        rcSubmitting={rcSubmitting}
+        consigneeContact={consigneeContact}
+        setConsigneeContact={setConsigneeContact}
+        consigneeName={consigneeName}
+        setConsigneeName={setConsigneeName}
+        onSubmit={handleRequestRecipientConfirmation}
+      />
     </DashboardLayout>
-  );
-}
-
-// ─── PhpEquivLabel (async PHP equivalent using live FX rate) ─────────────────
-
-function PhpEquivLabel({ usdcAmount }: { usdcAmount: number }) {
-  const [label, setLabel] = React.useState<string | null>(null);
-  const [live, setLive] = React.useState(false);
-  React.useEffect(() => {
-    getUsdToPhpRate().then(({ rate, isLive }) => {
-      setLabel((usdcAmount * rate).toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
-      setLive(isLive);
-    });
-  }, [usdcAmount]);
-  if (!label) return null;
-  return (
-    <span className="text-[10px] text-steel block italic font-medium">
-      ₱{label} PHP{!live && ' (est.)'}
-    </span>
   );
 }
